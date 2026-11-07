@@ -20,12 +20,6 @@ export default function Home() {
                 Shop
               </Link>
               <Link 
-                href="/shop/admin"
-                className="text-gray-700 hover:text-blue-600 font-medium transition-colors"
-              >
-                Admin
-              </Link>
-              <Link 
                 href="/shop"
                 className="bg-blue-600 text-white px-6 py-2.5 rounded-lg font-semibold hover:bg-blue-700 transition-all hover:shadow-lg"
               >
@@ -231,7 +225,6 @@ export default function Home() {
               <h3 className="text-white font-bold text-lg mb-4">Quick Links</h3>
               <div className="space-y-2">
                 <Link href="/shop" className="block hover:text-white transition-colors">Shop</Link>
-                <Link href="/shop/admin" className="block hover:text-white transition-colors">Admin</Link>
               </div>
             </div>
             <div>

@@ -12,6 +12,7 @@ export default function ShopAdminPage() {
   const [showAddProduct, setShowAddProduct] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [adminEmail, setAdminEmail] = useState('');
   const [adminPassword, setAdminPassword] = useState('');
   const [loginError, setLoginError] = useState('');
   
@@ -29,7 +30,19 @@ export default function ShopAdminPage() {
   // Check if already logged in
   useEffect(() => {
     const adminAuth = sessionStorage.getItem('admin_authenticated');
-    if (adminAuth === 'true') {
+    const redirectEmail = sessionStorage.getItem('admin_redirect_email');
+    const redirectPassword = sessionStorage.getItem('admin_redirect_password');
+    
+    // Check if redirected with credentials
+    if (redirectEmail && redirectPassword) {
+      if (redirectEmail === 'shiki@gmail.com' && redirectPassword === 'shiki1234') {
+        setIsAuthenticated(true);
+        sessionStorage.setItem('admin_authenticated', 'true');
+        // Clear the redirect credentials
+        sessionStorage.removeItem('admin_redirect_email');
+        sessionStorage.removeItem('admin_redirect_password');
+      }
+    } else if (adminAuth === 'true') {
       setIsAuthenticated(true);
     }
   }, []);
@@ -42,12 +55,13 @@ export default function ShopAdminPage() {
 
   const handleLogin = (e) => {
     e.preventDefault();
-    if (adminPassword === 'admin123') {
+    // Check admin credentials
+    if (adminEmail === 'shiki@gmail.com' && adminPassword === 'shiki1234') {
       setIsAuthenticated(true);
       sessionStorage.setItem('admin_authenticated', 'true');
       setLoginError('');
     } else {
-      setLoginError('Invalid password');
+      setLoginError('Invalid email or password');
     }
   };
 
@@ -88,13 +102,29 @@ export default function ShopAdminPage() {
     setLoading(true);
     
     try {
+      // Validate price and stock
+      const price = parseFloat(newProduct.price);
+      const stock = parseInt(newProduct.stock);
+      
+      if (price <= 0) {
+        alert('Price must be greater than 0');
+        setLoading(false);
+        return;
+      }
+      
+      if (stock < 0) {
+        alert('Stock cannot be negative');
+        setLoading(false);
+        return;
+      }
+      
       const { error } = await supabase
         .from('shop_products')
         .insert([{
           name: newProduct.name,
           description: newProduct.description,
-          price: parseFloat(newProduct.price),
-          stock: parseInt(newProduct.stock),
+          price: price,
+          stock: stock,
           category: newProduct.category,
           image_url: newProduct.image_url || null,
           artisan_name: newProduct.artisan_name || null,
@@ -189,7 +219,21 @@ export default function ShopAdminPage() {
             <form onSubmit={handleLogin} className="space-y-6">
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Admin Password
+                  Email Address
+                </label>
+                <input
+                  type="email"
+                  value={adminEmail}
+                  onChange={(e) => setAdminEmail(e.target.value)}
+                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+                  placeholder="Enter admin email"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Password
                 </label>
                 <input
                   type="password"
@@ -222,12 +266,6 @@ export default function ShopAdminPage() {
                 </Link>
               </div>
             </form>
-
-            <div className="mt-6 p-4 bg-blue-50 rounded-xl">
-              <p className="text-xs text-gray-600 text-center">
-                <span className="font-semibold">Demo Password:</span> admin123
-              </p>
-            </div>
           </div>
         </div>
       </div>
@@ -562,6 +600,7 @@ export default function ShopAdminPage() {
                   <input
                     type="number"
                     step="0.01"
+                    min="0.01"
                     value={newProduct.price}
                     onChange={(e) => setNewProduct({ ...newProduct, price: e.target.value })}
                     className="w-full px-4 py-3 border-2 rounded-xl focus:ring-2 focus:ring-blue-500"
@@ -573,6 +612,7 @@ export default function ShopAdminPage() {
                   <label className="block text-sm font-semibold mb-2">Stock *</label>
                   <input
                     type="number"
+                    min="0"
                     value={newProduct.stock}
                     onChange={(e) => setNewProduct({ ...newProduct, stock: e.target.value })}
                     className="w-full px-4 py-3 border-2 rounded-xl focus:ring-2 focus:ring-blue-500"

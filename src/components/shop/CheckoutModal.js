@@ -24,8 +24,27 @@ export default function CheckoutModal({ cart, total, onClose, onSuccess }) {
   const handleSubmitOrder = async () => {
     setLoading(true);
     try {
-      // Get current user (you'll need to implement auth)
+      // Get current user
       const { data: { user } } = await supabase.auth.getUser();
+      
+      // Validate all cart items have sufficient stock before proceeding
+      const stockCheckPromises = cart.map(async (item) => {
+        const { data: product, error } = await supabase
+          .from('shop_products')
+          .select('stock, name')
+          .eq('id', item.id)
+          .single();
+
+        if (error) throw error;
+
+        if (product.stock < item.quantity) {
+          throw new Error(`${product.name} has insufficient stock. Available: ${product.stock}, Requested: ${item.quantity}`);
+        }
+
+        return product;
+      });
+
+      await Promise.all(stockCheckPromises);
       
       // Create order
       const { data: order, error: orderError } = await supabase
@@ -61,15 +80,34 @@ export default function CheckoutModal({ cart, total, onClose, onSuccess }) {
 
       if (itemsError) throw itemsError;
 
-      // Update product stock
-      for (const item of cart) {
+      // Update product stock with optimistic concurrency control
+      const stockUpdatePromises = cart.map(async (item) => {
+        // First, get current stock to verify availability
+        const { data: currentProduct, error: fetchError } = await supabase
+          .from('shop_products')
+          .select('stock')
+          .eq('id', item.id)
+          .single();
+
+        if (fetchError) throw fetchError;
+
+        // Check if there's enough stock
+        if (currentProduct.stock < item.quantity) {
+          throw new Error(`Insufficient stock for ${item.name}. Available: ${currentProduct.stock}, Requested: ${item.quantity}`);
+        }
+
+        // Update stock
         const { error: stockError } = await supabase
           .from('shop_products')
-          .update({ stock: item.stock - item.quantity })
-          .eq('id', item.id);
+          .update({ stock: currentProduct.stock - item.quantity })
+          .eq('id', item.id)
+          .eq('stock', currentProduct.stock); // Optimistic locking
 
-        if (stockError) console.error('Error updating stock:', stockError);
-      }
+        if (stockError) throw stockError;
+      });
+
+      // Wait for all stock updates to complete
+      await Promise.all(stockUpdatePromises);
 
       // Award points for purchase (10 points per 100 pesos spent)
       if (user?.id) {

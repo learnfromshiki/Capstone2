@@ -1,13 +1,20 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/lib/supabaseClient';
 
 export default function AuthModal({ isOpen, onClose, mode: initialMode = 'login' }) {
+  const router = useRouter();
   const [mode, setMode] = useState(initialMode); // 'login' or 'signup'
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
+  const [accountType, setAccountType] = useState('customer'); // 'customer' or 'seller'
+  const [businessName, setBusinessName] = useState('');
+  const [contactPhone, setContactPhone] = useState('');
+  const [address, setAddress] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const { signIn, signUp } = useAuth();
@@ -20,18 +27,53 @@ export default function AuthModal({ isOpen, onClose, mode: initialMode = 'login'
     setLoading(true);
 
     try {
+      // Check if admin credentials - redirect to admin panel
+      if (mode === 'login' && email === 'shiki@gmail.com' && password === 'shiki1234') {
+        // Store admin credentials for redirect
+        sessionStorage.setItem('admin_redirect_email', email);
+        sessionStorage.setItem('admin_redirect_password', password);
+        // Redirect to admin panel using Next.js router
+        router.push('/shop/admin');
+        return;
+      }
+
       if (mode === 'login') {
         const { error } = await signIn(email, password);
         if (error) throw error;
         onClose();
       } else {
-        const { error } = await signUp(email, password, fullName);
+        // Sign up user
+        const { data, error } = await signUp(email, password, fullName);
         if (error) throw error;
-        setError('Check your email to confirm your account!');
+
+        // If signing up as seller, create seller record
+        if (accountType === 'seller' && data?.user) {
+          const { error: sellerError } = await supabase
+            .from('shop_sellers')
+            .insert([{
+              user_id: data.user.id,
+              business_name: businessName,
+              contact_email: email,
+              contact_phone: contactPhone || null,
+              address: address || null,
+              is_approved: false, // Requires admin approval
+              is_active: true
+            }]);
+
+          if (sellerError) {
+            console.error('Error creating seller account:', sellerError);
+            setError('Account created but seller profile failed. Please contact support.');
+          } else {
+            setError('✅ Seller account created! Awaiting admin approval. Check your email to confirm.');
+          }
+        } else {
+          setError('Check your email to confirm your account!');
+        }
+
         setTimeout(() => {
           setMode('login');
           setError('');
-        }, 3000);
+        }, 4000);
       }
     } catch (err) {
       // Handle specific error messages
@@ -80,19 +122,116 @@ export default function AuthModal({ isOpen, onClose, mode: initialMode = 'login'
 
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
           {mode === 'signup' && (
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">
-                Full Name
-              </label>
-              <input
-                type="text"
-                value={fullName}
-                onChange={(e) => setFullName(e.target.value)}
-                className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                placeholder="Juan Dela Cruz"
-                required
-              />
-            </div>
+            <>
+              {/* Account Type Selector */}
+              <div className="mb-6">
+                <label className="block text-sm font-semibold text-gray-700 mb-3">
+                  I want to sign up as:
+                </label>
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setAccountType('customer')}
+                    className={`p-4 border-2 rounded-xl transition-all ${
+                      accountType === 'customer'
+                        ? 'border-blue-600 bg-blue-50 text-blue-900'
+                        : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300'
+                    }`}
+                  >
+                    <div className="text-center">
+                      <div className="text-2xl mb-2">🛍️</div>
+                      <div className="font-bold">Customer</div>
+                      <div className="text-xs mt-1">Shop & Buy</div>
+                    </div>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAccountType('seller')}
+                    className={`p-4 border-2 rounded-xl transition-all ${
+                      accountType === 'seller'
+                        ? 'border-blue-600 bg-blue-50 text-blue-900'
+                        : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300'
+                    }`}
+                  >
+                    <div className="text-center">
+                      <div className="text-2xl mb-2">🏪</div>
+                      <div className="font-bold">Seller</div>
+                      <div className="text-xs mt-1">Sell Products</div>
+                    </div>
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  {accountType === 'seller' ? 'Contact Name *' : 'Full Name *'}
+                </label>
+                <input
+                  type="text"
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  placeholder={accountType === 'seller' ? 'Your full name' : 'Juan Dela Cruz'}
+                  required
+                />
+              </div>
+
+              {/* Seller-specific fields */}
+              {accountType === 'seller' && (
+                <>
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">
+                      Business Name *
+                    </label>
+                    <input
+                      type="text"
+                      value={businessName}
+                      onChange={(e) => setBusinessName(e.target.value)}
+                      className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      placeholder="Your Shop or Business Name"
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">
+                      Contact Phone
+                    </label>
+                    <input
+                      type="tel"
+                      value={contactPhone}
+                      onChange={(e) => setContactPhone(e.target.value)}
+                      className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      placeholder="09XX XXX XXXX"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">
+                      Business Address
+                    </label>
+                    <textarea
+                      value={address}
+                      onChange={(e) => setAddress(e.target.value)}
+                      rows="2"
+                      className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      placeholder="Street, Barangay, City"
+                    />
+                  </div>
+
+                  <div className="bg-yellow-50 border-2 border-yellow-200 rounded-xl p-4">
+                    <div className="flex items-start gap-2">
+                      <svg className="w-5 h-5 text-yellow-600 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                      </svg>
+                      <p className="text-sm text-yellow-800">
+                        <strong>Note:</strong> Seller accounts require admin approval before you can start selling.
+                      </p>
+                    </div>
+                  </div>
+                </>
+              )}
+            </>
           )}
 
           <div>
