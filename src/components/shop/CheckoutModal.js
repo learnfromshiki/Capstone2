@@ -21,6 +21,31 @@ export default function CheckoutModal({ cart, total, onClose, onSuccess }) {
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
+  // The Continue button is not a form submit, so nothing validates the fields otherwise
+  const detailsAreValid = () => {
+    if (!formData.fullName.trim()) {
+      alert('Please enter your full name.');
+      return false;
+    }
+
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(formData.email.trim())) {
+      alert('Please enter a valid email address, for example name@example.com.');
+      return false;
+    }
+
+    if (formData.phone.replace(/\D/g, '').length < 7) {
+      alert('Please enter a valid phone number.');
+      return false;
+    }
+
+    if (!formData.address.trim()) {
+      alert('Please enter your delivery address.');
+      return false;
+    }
+
+    return true;
+  };
+
   const handleSubmitOrder = async () => {
     setLoading(true);
     let createdOrderId = null;
@@ -53,14 +78,14 @@ export default function CheckoutModal({ cart, total, onClose, onSuccess }) {
         .from('shop_orders')
         .insert({
           user_id: user?.id || null,
-          customer_name: formData.fullName,
-          customer_email: formData.email,
-          customer_phone: formData.phone,
-          delivery_address: formData.address,
+          customer_name: formData.fullName.trim(),
+          customer_email: formData.email.trim(),
+          customer_phone: formData.phone.trim(),
+          delivery_address: formData.address.trim(),
           payment_method: formData.paymentMethod,
           total_amount: total,
           status: 'pending',
-          notes: formData.notes,
+          notes: formData.notes.trim(),
         })
         .select()
         .single();
@@ -238,8 +263,9 @@ export default function CheckoutModal({ cart, total, onClose, onSuccess }) {
             </div>
 
             <button
-              onClick={() => setStep(2)}
-              disabled={!formData.fullName || !formData.email || !formData.phone || !formData.address}
+              onClick={() => {
+                if (detailsAreValid()) setStep(2);
+              }}
               className="w-full mt-6 bg-blue-600 text-white py-4 rounded-full font-bold text-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
             >
               Continue to Payment

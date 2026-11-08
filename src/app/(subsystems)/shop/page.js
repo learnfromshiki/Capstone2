@@ -49,6 +49,7 @@ export default function ShopPage() {
 
   useEffect(() => {
     fetchProducts();
+    fetchCategories();
   }, []);
 
   const fetchProducts = async () => {
@@ -181,7 +182,7 @@ export default function ShopPage() {
     setCart([]);
   };
 
-  const categories = [
+  const defaultCategories = [
     { value: 'all', label: 'All Products', icon: '🏪' },
     { value: 'handicrafts', label: 'Handicrafts', icon: '🧺' },
     { value: 'food', label: 'Food', icon: '🍽️' },
@@ -189,6 +190,35 @@ export default function ShopPage() {
     { value: 'weavings', label: 'Weavings', icon: '🧵' },
     { value: 'art', label: 'Art', icon: '🎨' }
   ];
+
+  // Tabs come from shop_categories, so a category added by a seller or the admin
+  // shows up here immediately. The built-in list is only the fallback.
+  const [categories, setCategories] = useState(defaultCategories);
+
+  const fetchCategories = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('shop_categories')
+        .select('name, slug, icon')
+        .eq('is_active', true)
+        .order('display_order', { ascending: true });
+
+      if (error) {
+        console.warn('Category tabs fall back to the built-in list:', error.message);
+        return;
+      }
+
+      const rows = (data || []).filter((cat) => cat.slug && cat.slug !== 'all');
+      if (rows.length === 0) return;
+
+      setCategories([
+        { value: 'all', label: 'All Products', icon: '🏪' },
+        ...rows.map((cat) => ({ value: cat.slug, label: cat.name, icon: cat.icon || '🏪' }))
+      ]);
+    } catch (error) {
+      console.error('Error fetching categories:', error);
+    }
+  };
   
   const filteredProducts = products.filter(p => {
     const matchesCategory = filter === 'all' || p.category === filter;
