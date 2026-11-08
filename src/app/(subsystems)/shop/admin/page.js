@@ -884,19 +884,19 @@ export default function ShopAdminPage() {
               <table className="w-full">
                 <thead className="bg-gray-50 border-b border-gray-200">
                   <tr>
-                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase">Business Name</th>
-                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase">Email</th>
-                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase">Phone</th>
-                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase">Status</th>
-                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase">Actions</th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wide">Business Name</th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wide">Email</th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wide">Phone</th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wide">Status</th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wide">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200">
                   {sellers.map((seller) => (
                     <tr key={seller.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 font-semibold">{seller.business_name}</td>
-                      <td className="px-6 py-4 text-sm text-gray-600">{seller.contact_email}</td>
-                      <td className="px-6 py-4 text-sm text-gray-600">{seller.contact_phone || '-'}</td>
+                      <td className="px-6 py-4 font-semibold text-gray-900">{seller.business_name}</td>
+                      <td className="px-6 py-4 text-sm text-gray-700">{seller.contact_email}</td>
+                      <td className="px-6 py-4 text-sm text-gray-700">{seller.contact_phone || '-'}</td>
                       <td className="px-6 py-4">
                         <span className={`px-3 py-1 text-xs font-semibold rounded-full ${
                           seller.is_approved && seller.is_active
@@ -944,19 +944,19 @@ export default function ShopAdminPage() {
               <table className="w-full">
                 <thead className="bg-gray-50 border-b border-gray-200">
                   <tr>
-                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase">Full Name</th>
-                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase">Email</th>
-                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase">Reward Points</th>
-                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase">Joined</th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wide">Full Name</th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wide">Email</th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wide">Reward Points</th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wide">Joined</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200">
                   {customers.map((customer) => (
                     <tr key={customer.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 font-semibold">{customer.full_name}</td>
-                      <td className="px-6 py-4 text-sm text-gray-600">{customer.email}</td>
+                      <td className="px-6 py-4 font-semibold text-gray-900">{customer.full_name}</td>
+                      <td className="px-6 py-4 text-sm text-gray-700">{customer.email}</td>
                       <td className="px-6 py-4 text-sm font-medium text-blue-600">{customer.reward_points || 0} pts</td>
-                      <td className="px-6 py-4 text-sm text-gray-600">{new Date(customer.created_at).toLocaleDateString()}</td>
+                      <td className="px-6 py-4 text-sm text-gray-700">{new Date(customer.created_at).toLocaleDateString()}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -990,12 +990,12 @@ export default function ShopAdminPage() {
               <table className="w-full">
                 <thead className="bg-gray-50 border-b border-gray-200">
                   <tr>
-                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase">Product</th>
-                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase">Category</th>
-                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase">Price</th>
-                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase">Stock</th>
-                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase">Status</th>
-                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase">Actions</th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wide">Product</th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wide">Category</th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wide">Price</th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wide">Stock</th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wide">Status</th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wide">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200">
@@ -1026,7 +1026,7 @@ export default function ShopAdminPage() {
                           </div>
                           <div>
                             <div className="font-semibold text-gray-900">{product.name}</div>
-                            <div className="text-sm text-gray-500">{product.artisan_name}</div>
+                            <div className="text-sm text-gray-600">{product.artisan_name}</div>
                           </div>
                         </div>
                       </td>
@@ -1035,7 +1035,7 @@ export default function ShopAdminPage() {
                           {product.category}
                         </span>
                       </td>
-                      <td className="px-6 py-4 font-semibold">₱{product.price}</td>
+                      <td className="px-6 py-4 font-semibold text-gray-900">₱{product.price}</td>
                       <td className="px-6 py-4">
                         <span className={`font-semibold ${product.stock > 5 ? 'text-green-600' : product.stock > 0 ? 'text-yellow-600' : 'text-red-600'}`}>
                           {product.stock}
@@ -1136,12 +1136,12 @@ export default function ShopAdminPage() {
               <table className="w-full">
                 <thead className="bg-gray-50 border-b border-gray-200">
                   <tr>
-                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase">Icon</th>
-                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase">Name</th>
-                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase">Slug</th>
-                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase">Description</th>
-                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase">Order</th>
-                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase">Status</th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wide">Icon</th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wide">Name</th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wide">Slug</th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wide">Description</th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wide">Order</th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wide">Status</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200">
