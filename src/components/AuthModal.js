@@ -201,40 +201,58 @@ export default function AuthModal({ isOpen, onClose, mode: initialMode = 'login'
                   type="text"
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}
-                  className="w-full px-4 py-3.5 bg-gray-50 border border-gray-200 rounded-full focus:ring-2 focus:ring-gray-900 focus:border-transparent transition-all text-gray-900 placeholder-gray-400"
+                  className="w-full px-5 py-3.5 bg-gray-50 border border-gray-200 rounded-full focus:ring-2 focus:ring-gray-900 focus:border-transparent transition-all text-gray-900 placeholder-gray-400"
                   placeholder="Enter your full name"
                   required
                 />
               </div>
+
+              {/* Email */}
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Email
+                </label>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="w-full px-5 py-3.5 bg-gray-50 border border-gray-200 rounded-full focus:ring-2 focus:ring-gray-900 focus:border-transparent transition-all text-gray-900 placeholder-gray-400"
+                  placeholder="Enter your email"
+                  required
+                />
+              </div>
+
+              {/* Shop Name - shown only for sellers */}
+              {accountType === 'seller' && (
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    Shop Name
+                  </label>
+                  <input
+                    type="text"
+                    value={businessName}
+                    onChange={(e) => setBusinessName(e.target.value)}
+                    className="w-full px-5 py-3.5 bg-gray-50 border border-gray-200 rounded-full focus:ring-2 focus:ring-gray-900 focus:border-transparent transition-all text-gray-900 placeholder-gray-400"
+                    placeholder="Enter your shop name"
+                    required
+                  />
+                </div>
+              )}
             </>
           )}
 
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-2">
-              Email
-            </label>
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="w-full px-5 py-3.5 bg-gray-50 border border-gray-200 rounded-full focus:ring-2 focus:ring-gray-900 focus:border-transparent transition-all text-gray-900 placeholder-gray-400"
-              placeholder="you@example.com"
-              required
-            />
-          </div>
-
-          {/* Shop Name for sellers in signup mode */}
-          {mode === 'signup' && accountType === 'seller' && (
+          {/* Email field for login mode */}
+          {mode === 'login' && (
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-2">
-                Shop Name
+                Email
               </label>
               <input
-                type="text"
-                value={businessName}
-                onChange={(e) => setBusinessName(e.target.value)}
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
                 className="w-full px-5 py-3.5 bg-gray-50 border border-gray-200 rounded-full focus:ring-2 focus:ring-gray-900 focus:border-transparent transition-all text-gray-900 placeholder-gray-400"
-                placeholder="Enter your shop name"
+                placeholder="Enter your email"
                 required
               />
             </div>
