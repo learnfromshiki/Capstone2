@@ -912,18 +912,18 @@ export default function ShopAdminPage() {
                             ? 'bg-yellow-100 text-yellow-700'
                             : 'bg-red-100 text-red-700'
                         }`}>
-                          {seller.is_approved && seller.is_active ? 'Approved' : !seller.is_approved ? 'Pending' : 'Suspended'}
+                          {seller.is_approved && seller.is_active ? 'Active' : !seller.is_approved ? 'Pending Approval' : 'Suspended'}
                         </span>
                       </td>
                       <td className="px-6 py-4">
                         <div className="flex gap-2">
-                          {!seller.is_approved && (
+                          {!seller.is_approved ? (
                             <button
                               onClick={async () => {
                                 try {
                                   const { error } = await supabase
                                     .from('shop_sellers')
-                                    .update({ is_approved: true, updated_at: new Date().toISOString() })
+                                    .update({ is_approved: true, is_active: true, updated_at: new Date().toISOString() })
                                     .eq('id', seller.id);
                                   
                                   if (error) {
@@ -932,22 +932,32 @@ export default function ShopAdminPage() {
                                     return;
                                   }
                                   
-                                  showToast('Seller approved successfully!', 'success');
+                                  showToast(`Seller "${seller.business_name}" approved successfully!`, 'success');
                                   fetchData();
                                 } catch (err) {
                                   console.error('Error:', err);
                                   showToast('Failed to approve seller', 'error');
                                 }
                               }}
-                              className="px-3 py-1.5 text-xs font-medium rounded-lg bg-green-100 text-green-700 hover:bg-green-200 transition-colors"
+                              className="px-4 py-2 text-sm font-medium rounded-lg bg-green-600 text-white hover:bg-green-700 transition-colors shadow-sm"
                             >
                               Approve
                             </button>
+                          ) : (
+                            <span className="px-4 py-2 text-sm font-medium text-gray-400 cursor-not-allowed">
+                              Approved ✓
+                            </span>
                           )}
                           <button
                             onClick={async () => {
                               try {
                                 const newStatus = !seller.is_active;
+                                const action = newStatus ? 'activate' : 'suspend';
+                                
+                                if (!confirm(`Are you sure you want to ${action} "${seller.business_name}"?`)) {
+                                  return;
+                                }
+                                
                                 const { error } = await supabase
                                   .from('shop_sellers')
                                   .update({ is_active: newStatus, updated_at: new Date().toISOString() })
@@ -966,7 +976,11 @@ export default function ShopAdminPage() {
                                 showToast('Failed to update seller status', 'error');
                               }
                             }}
-                            className="px-3 py-1.5 text-xs font-medium rounded-lg bg-orange-100 text-orange-700 hover:bg-orange-200 transition-colors"
+                            className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors shadow-sm ${
+                              seller.is_active
+                                ? 'bg-orange-600 text-white hover:bg-orange-700'
+                                : 'bg-gray-600 text-white hover:bg-gray-700'
+                            }`}
                           >
                             {seller.is_active ? 'Suspend' : 'Activate'}
                           </button>
