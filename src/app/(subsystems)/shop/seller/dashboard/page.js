@@ -55,6 +55,9 @@ export default function SellerDashboard() {
   });
   const [loading, setLoading] = useState(true);
   const [showAddProduct, setShowAddProduct] = useState(false);
+  const [showNewCategory, setShowNewCategory] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState('');
+  const [savingCategory, setSavingCategory] = useState(false);
   const [editingProductId, setEditingProductId] = useState(null);
   const [activeTab, setActiveTab] = useState('dashboard');
   const [uploadingImage, setUploadingImage] = useState(false);
@@ -313,6 +316,58 @@ export default function SellerDashboard() {
     }
   };
 
+  // Sellers can add a category while listing a product instead of waiting for an admin
+  const handleCreateCategory = async () => {
+    const name = newCategoryName.trim();
+    if (!name) return;
+
+    const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+    if (!slug) {
+      alert('Please use letters or numbers in the category name.');
+      return;
+    }
+
+    // Re-use the category if it is already there (name and slug are unique)
+    const existing = categories.find(
+      (cat) => cat.slug === slug || (cat.name || '').toLowerCase() === name.toLowerCase()
+    );
+
+    if (existing) {
+      setNewProduct((prev) => ({ ...prev, category: existing.slug }));
+      setShowNewCategory(false);
+      setNewCategoryName('');
+      alert(`"${existing.name}" already exists — it is selected now.`);
+      return;
+    }
+
+    setSavingCategory(true);
+    try {
+      const { data, error } = await supabase
+        .from('shop_categories')
+        .insert([{
+          name,
+          slug,
+          icon: '📦',
+          display_order: categories.length,
+        }])
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      setCategories((prev) => [...prev, data]);
+      setNewProduct((prev) => ({ ...prev, category: data.slug }));
+      setShowNewCategory(false);
+      setNewCategoryName('');
+      alert(`Category "${name}" created and selected.`);
+    } catch (error) {
+      console.error('Error creating category:', error);
+      alert('Failed to create category: ' + (error.message || 'unknown error'));
+    } finally {
+      setSavingCategory(false);
+    }
+  };
+
   const handleAddProduct = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -440,6 +495,8 @@ export default function SellerDashboard() {
     setShowAddProduct(false);
     setEditingProductId(null);
     setImagePreview('');
+    setShowNewCategory(false);
+    setNewCategoryName('');
     setNewProduct({
       name: '',
       description: '',
@@ -1448,6 +1505,45 @@ export default function SellerDashboard() {
                     </>
                   )}
                 </select>
+
+                {showNewCategory ? (
+                  <div className="mt-2 flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={newCategoryName}
+                      onChange={(e) => setNewCategoryName(e.target.value)}
+                      placeholder="New category name"
+                      maxLength={40}
+                      className="flex-1 px-4 py-2.5 border-2 rounded-xl focus:ring-2 focus:ring-blue-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleCreateCategory}
+                      disabled={savingCategory || !newCategoryName.trim()}
+                      className="px-4 py-2.5 rounded-xl bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                    >
+                      {savingCategory ? 'Adding…' : 'Add'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowNewCategory(false);
+                        setNewCategoryName('');
+                      }}
+                      className="px-3 py-2.5 rounded-xl bg-gray-100 text-gray-700 text-sm font-semibold hover:bg-gray-200 transition-colors"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setShowNewCategory(true)}
+                    className="mt-2 text-xs font-semibold text-blue-600 hover:text-blue-700"
+                  >
+                    + Add a new category
+                  </button>
+                )}
               </div>
 
               <div>
