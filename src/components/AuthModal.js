@@ -68,12 +68,13 @@ export default function AuthModal({ isOpen, onClose, mode: initialMode = 'login'
           }
         }
 
-        // Sellers always land on their dashboard, and a seller signup that could
-        // not write its shop profile (pending email confirmation) completes here
+        // Only an approved seller goes straight to the seller dashboard. A pending
+        // or rejected application must not stop the same account shopping as a buyer.
+        // A seller signup that could not write its shop profile still completes here.
         if (data?.user) {
           const sellerData = await ensureSellerProfile(data.user);
 
-          if (sellerData) {
+          if (sellerData?.is_approved) {
             setLoading(false);
             window.location.href = '/shop/seller/dashboard';
             return;

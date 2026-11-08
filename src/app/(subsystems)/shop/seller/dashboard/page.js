@@ -576,15 +576,30 @@ export default function SellerDashboard() {
             </svg>
           </div>
           <h2 className="text-2xl font-bold text-gray-900 mb-2">Pending Approval</h2>
-          <p className="text-gray-600 mb-6">
+          <p className="text-gray-600 mb-4">
             Your seller account is awaiting admin approval. You&apos;ll be able to access your dashboard once approved.
           </p>
+          <div className="bg-gray-50 border border-gray-200 rounded-lg px-4 py-3 mb-6">
+            <p className="text-xs text-gray-500">Signed in as</p>
+            <p className="text-sm font-semibold text-gray-800 break-words">
+              {user?.email || 'unknown account'}
+            </p>
+          </div>
+          <button
+            onClick={() => router.push('/shop')}
+            className="w-full bg-blue-600 text-white py-3 rounded-lg font-semibold hover:bg-blue-700 transition-colors"
+          >
+            Back to Shop
+          </button>
           <button
             onClick={handleLogout}
-            className="w-full bg-blue-600 text-white py-3 rounded-lg font-semibold hover:bg-blue-700"
+            className="w-full mt-2 bg-gray-100 text-gray-700 py-3 rounded-lg font-semibold hover:bg-gray-200 transition-colors"
           >
-            Back to Home
+            Log Out
           </button>
+          <p className="text-xs text-gray-500 mt-4">
+            Shopping as a buyer? Log out, then sign in with your buyer account.
+          </p>
         </div>
       </div>
     );
