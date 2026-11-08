@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import { uploadProductImage, deleteProductImage } from '@/lib/imageUpload';
 import Link from 'next/link';
+import Toast from '@/components/Toast';
 
 export default function ShopAdminPage() {
   const [products, setProducts] = useState([]);
@@ -28,7 +29,13 @@ export default function ShopAdminPage() {
   const [adminPassword, setAdminPassword] = useState('');
   const [loginError, setLoginError] = useState('');
   const [uploadingImage, setUploadingImage] = useState(false);
+  const [toast, setToast] = useState(null);
   const [imagePreview, setImagePreview] = useState('');
+  
+  // Helper function to show toast notifications
+  const showToast = (message, type = 'success') => {
+    setToast({ message, type });
+  };
   
   // Product form state
   const [newProduct, setNewProduct] = useState({
@@ -921,15 +928,15 @@ export default function ShopAdminPage() {
                                   
                                   if (error) {
                                     console.error('Error approving seller:', error);
-                                    alert('Failed to approve seller: ' + error.message);
+                                    showToast('Failed to approve seller: ' + error.message, 'error');
                                     return;
                                   }
                                   
-                                  alert('✅ Seller approved successfully!');
+                                  showToast('Seller approved successfully!', 'success');
                                   fetchData();
                                 } catch (err) {
                                   console.error('Error:', err);
-                                  alert('Failed to approve seller');
+                                  showToast('Failed to approve seller', 'error');
                                 }
                               }}
                               className="px-3 py-1.5 text-xs font-medium rounded-lg bg-green-100 text-green-700 hover:bg-green-200 transition-colors"
@@ -948,15 +955,15 @@ export default function ShopAdminPage() {
                                 
                                 if (error) {
                                   console.error('Error updating seller status:', error);
-                                  alert('Failed to update status: ' + error.message);
+                                  showToast('Failed to update status: ' + error.message, 'error');
                                   return;
                                 }
                                 
-                                alert(`✅ Seller ${newStatus ? 'activated' : 'suspended'} successfully!`);
+                                showToast(`Seller ${newStatus ? 'activated' : 'suspended'} successfully!`, 'success');
                                 fetchData();
                               } catch (err) {
                                 console.error('Error:', err);
-                                alert('Failed to update seller status');
+                                showToast('Failed to update seller status', 'error');
                               }
                             }}
                             className="px-3 py-1.5 text-xs font-medium rounded-lg bg-orange-100 text-orange-700 hover:bg-orange-200 transition-colors"
@@ -1857,6 +1864,15 @@ export default function ShopAdminPage() {
             </form>
           </div>
         </div>
+      )}
+      
+      {/* Toast Notification */}
+      {toast && (
+        <Toast
+          message={toast.message}
+          type={toast.type}
+          onClose={() => setToast(null)}
+        />
       )}
     </div>
   );
