@@ -7,8 +7,35 @@ import { supabase } from '@/lib/supabaseClient';
 import { uploadProductImage } from '@/lib/imageUpload';
 import Link from 'next/link';
 
+// Last 7 days of this seller's item totals, used by the dashboard chart
+const buildDailySales = (orders) => {
+  const days = [];
+
+  for (let offset = 6; offset >= 0; offset -= 1) {
+    const date = new Date();
+    date.setDate(date.getDate() - offset);
+
+    days.push({
+      key: date.toLocaleDateString('en-CA'),
+      label: date.toLocaleDateString('en-US', { weekday: 'short' }),
+      total: 0,
+    });
+  }
+
+  orders.forEach((order) => {
+    const key = new Date(order.created_at).toLocaleDateString('en-CA');
+    const day = days.find((entry) => entry.key === key);
+
+    if (day) {
+      day.total += order.my_total;
+    }
+  });
+
+  return days;
+};
+
 export default function SellerDashboard() {
-  const { user, seller, loading: authLoading, signOut } = useSellerAuth();
+  const { user, seller, loading: authLoading, signOut, updateSellerProfile } = useSellerAuth();
   const router = useRouter();
 
   const [products, setProducts] = useState([]);
@@ -16,15 +43,33 @@ export default function SellerDashboard() {
   const [categories, setCategories] = useState([]);
   const [stats, setStats] = useState({
     totalProducts: 0,
+    activeProducts: 0,
     totalOrders: 0,
+    toFulfill: 0,
     totalSales: 0,
+    commissionRate: 15,
+    platformFee: 0,
     earnings: 0,
+    pendingEarnings: null,
+    paidEarnings: null,
   });
   const [loading, setLoading] = useState(true);
   const [showAddProduct, setShowAddProduct] = useState(false);
+  const [editingProductId, setEditingProductId] = useState(null);
   const [activeTab, setActiveTab] = useState('dashboard');
   const [uploadingImage, setUploadingImage] = useState(false);
   const [imagePreview, setImagePreview] = useState('');
+  const [uploadingLogo, setUploadingLogo] = useState(false);
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [dailySales, setDailySales] = useState([]);
+  const [rating, setRating] = useState({ average: null, count: 0 });
+  const [profileForm, setProfileForm] = useState({
+    business_name: '',
+    contact_phone: '',
+    address: '',
+    description: '',
+    logo_url: '',
+  });
 
   const [newProduct, setNewProduct] = useState({
     name: '',
@@ -51,6 +96,19 @@ export default function SellerDashboard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, seller, authLoading, router, activeTab]);
 
+  // Seed the editable shop settings form from the seller record
+  useEffect(() => {
+    if (seller) {
+      setProfileForm({
+        business_name: seller.business_name || '',
+        contact_phone: seller.contact_phone || '',
+        address: seller.address || '',
+        description: seller.description || '',
+        logo_url: seller.logo_url || '',
+      });
+    }
+  }, [seller]);
+
   const fetchCategories = async () => {
     try {
       const { data, error } = await supabase
@@ -74,12 +132,13 @@ export default function SellerDashboard() {
     
     setLoading(true);
     try {
-      if (activeTab === 'dashboard') {
-        await Promise.all([fetchDashboardStats()]);
-      } else if (activeTab === 'products') {
+      if (activeTab === 'products') {
         await fetchProducts();
       } else if (activeTab === 'orders') {
         await fetchOrders();
+      } else {
+        // Dashboard, Sales & Earnings, Shop Settings and Profile all read these stats
+        await fetchDashboardStats();
       }
     } catch (error) {
       console.error('Error fetching data:', error);
@@ -88,20 +147,126 @@ export default function SellerDashboard() {
     }
   };
 
-  const fetchDashboardStats = async () => {
-    const [productsRes, ordersRes] = await Promise.all([
-      supabase.from('shop_products').select('id', { count: 'exact' }).eq('seller_id', seller.id),
-      supabase.from('shop_orders').select('total_amount, shop_order_items!inner(seller_id)', { count: 'exact' }).eq('shop_order_items.seller_id', seller.id)
-    ]);
+  // shop_order_items has no seller_id column: scope orders through the seller's products
+  const loadSellerOrders = async () => {
+    const { data: myProducts, error: productsError } = await supabase
+      .from('shop_products')
+      .select('id, available')
+      .eq('seller_id', seller.id);
 
-    const totalSales = ordersRes.data?.reduce((sum, order) => sum + (order.total_amount || 0), 0) || 0;
+    if (productsError) throw productsError;
 
-    setStats({
-      totalProducts: productsRes.count || 0,
-      totalOrders: ordersRes.count || 0,
-      totalSales: totalSales,
-      earnings: totalSales * 0.85, // 85% after 15% platform fee
+    const productIds = (myProducts || []).map((product) => product.id);
+    if (!productIds.length) {
+      return { orders: [], products: myProducts || [] };
+    }
+
+    const { data: myItems, error: itemsError } = await supabase
+      .from('shop_order_items')
+      .select('id, order_id, product_id, product_name, quantity, price')
+      .in('product_id', productIds);
+
+    if (itemsError) throw itemsError;
+
+    const orderIds = [...new Set((myItems || []).map((item) => item.order_id))];
+    if (!orderIds.length) {
+      return { orders: [], products: myProducts || [] };
+    }
+
+    const { data: orderRows, error: ordersError } = await supabase
+      .from('shop_orders')
+      .select('id, customer_name, customer_email, customer_phone, status, payment_method, created_at')
+      .in('id', orderIds)
+      .order('created_at', { ascending: false });
+
+    if (ordersError) throw ordersError;
+
+    const itemsByOrder = (myItems || []).reduce((acc, item) => {
+      acc[item.order_id] = acc[item.order_id] || [];
+      acc[item.order_id].push(item);
+      return acc;
+    }, {});
+
+    const orders = (orderRows || []).map((order) => {
+      const myItemsForOrder = itemsByOrder[order.id] || [];
+
+      return {
+        ...order,
+        my_items: myItemsForOrder,
+        my_total: myItemsForOrder.reduce(
+          (sum, item) => sum + (Number(item.price) || 0) * (Number(item.quantity) || 0),
+          0
+        ),
+      };
     });
+
+    return { orders, products: myProducts || [] };
+  };
+
+  const fetchRating = async (productIds) => {
+    if (!productIds.length) {
+      setRating({ average: null, count: 0 });
+      return;
+    }
+
+    const { data, error } = await supabase
+      .from('shop_reviews')
+      .select('rating')
+      .in('product_id', productIds);
+
+    if (error || !data?.length) {
+      setRating({ average: null, count: 0 });
+      return;
+    }
+
+    const total = data.reduce((sum, row) => sum + (Number(row.rating) || 0), 0);
+    setRating({ average: (total / data.length).toFixed(1), count: data.length });
+  };
+
+  const fetchDashboardStats = async () => {
+    try {
+      const { orders: orderRows, products: myProducts } = await loadSellerOrders();
+      const commissionRate = Number(seller?.commission_rate) || 15;
+
+      // Cancelled orders are refunds, not sales
+      const salesOrders = orderRows.filter((order) => order.status !== 'cancelled');
+      const totalSales = salesOrders.reduce((sum, order) => sum + order.my_total, 0);
+      const platformFee = totalSales * (commissionRate / 100);
+
+      // Real earnings rows are created by a DB trigger; fall back to the commission rate
+      const { data: earningRows } = await supabase
+        .from('shop_seller_earnings')
+        .select('seller_earning, status')
+        .eq('seller_id', seller.id);
+
+      const sumByStatus = (status) =>
+        (earningRows || [])
+          .filter((row) => row.status === status)
+          .reduce((sum, row) => sum + (Number(row.seller_earning) || 0), 0);
+
+      const pendingEarnings = earningRows?.length ? sumByStatus('pending') : null;
+      const paidEarnings = earningRows?.length ? sumByStatus('paid') : null;
+
+      setStats({
+        totalProducts: myProducts.length,
+        activeProducts: myProducts.filter((product) => product.available).length,
+        totalOrders: orderRows.length,
+        toFulfill: salesOrders.filter((order) => ['pending', 'confirmed', 'processing'].includes(order.status)).length,
+        totalSales,
+        commissionRate,
+        platformFee,
+        earnings:
+          pendingEarnings !== null ? pendingEarnings + paidEarnings : totalSales - platformFee,
+        pendingEarnings,
+        paidEarnings,
+      });
+
+      setOrders(orderRows);
+      setDailySales(buildDailySales(salesOrders));
+      await fetchRating(myProducts.map((product) => product.id));
+    } catch (error) {
+      console.error('Error loading seller stats:', error);
+    }
   };
 
   const fetchProducts = async () => {
@@ -119,32 +284,12 @@ export default function SellerDashboard() {
   };
 
   const fetchOrders = async () => {
-    const { data, error } = await supabase
-      .from('shop_orders')
-      .select(`
-        id,
-        customer_name,
-        customer_email,
-        customer_phone,
-        total_amount,
-        status,
-        payment_method,
-        created_at,
-        shop_order_items!inner(
-          product_name,
-          quantity,
-          price,
-          seller_id
-        )
-      `)
-      .eq('shop_order_items.seller_id', seller.id)
-      .order('created_at', { ascending: false });
-
-    if (error) {
+    try {
+      const { orders: orderRows } = await loadSellerOrders();
+      setOrders(orderRows);
+    } catch (error) {
       console.error('Error fetching orders:', error);
-      return;
     }
-    setOrders(data || []);
   };
 
   const handleImageUpload = async (e) => {
@@ -180,36 +325,35 @@ export default function SellerDashboard() {
         return;
       }
 
-      const { error } = await supabase
-        .from('shop_products')
-        .insert([{
-          name: newProduct.name,
-          description: newProduct.description,
-          price: price,
-          stock: stock,
-          category: newProduct.category,
-          image_url: newProduct.image_url || null,
-          artisan_name: newProduct.artisan_name,
-          seller_id: seller.id,
-          available: true,
-        }]);
+      const payload = {
+        name: newProduct.name,
+        description: newProduct.description,
+        price: price,
+        stock: stock,
+        category: newProduct.category,
+        image_url: newProduct.image_url || null,
+        artisan_name: newProduct.artisan_name || null,
+      };
 
-      if (error) throw error;
+      if (editingProductId) {
+        const { error } = await supabase
+          .from('shop_products')
+          .update({ ...payload, updated_at: new Date().toISOString() })
+          .eq('id', editingProductId)
+          .eq('seller_id', seller.id);
 
-      setNewProduct({
-        name: '',
-        description: '',
-        price: '',
-        stock: '',
-        category: 'handicrafts',
-        image_url: '',
-        artisan_name: '',
-        imageFile: null,
-      });
-      setImagePreview('');
-      setShowAddProduct(false);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from('shop_products')
+          .insert([{ ...payload, seller_id: seller.id, available: true }]);
+
+        if (error) throw error;
+      }
+
+      closeProductModal();
       fetchProducts();
-      alert('Product added successfully!');
+      alert(editingProductId ? 'Product updated successfully!' : 'Product added successfully!');
     } catch (error) {
       console.error('Error adding product:', error);
       alert('Failed to add product: ' + error.message);
@@ -254,6 +398,12 @@ export default function SellerDashboard() {
   };
 
   const updateOrderStatus = async (orderId, newStatus) => {
+    // Only orders that actually contain this seller's products can be updated
+    if (!orders.some((order) => order.id === orderId)) {
+      alert('You can only update orders that contain your products.');
+      return;
+    }
+
     try {
       const { error } = await supabase
         .from('shop_orders')
@@ -265,6 +415,77 @@ export default function SellerDashboard() {
     } catch (error) {
       console.error('Error updating order status:', error);
       alert('Failed to update order: ' + error.message);
+    }
+  };
+
+  const openEditProduct = (product) => {
+    setEditingProductId(product.id);
+    setNewProduct({
+      name: product.name || '',
+      description: product.description || '',
+      price: product.price ?? '',
+      stock: product.stock ?? '',
+      category: product.category || 'handicrafts',
+      image_url: product.image_url || '',
+      artisan_name: product.artisan_name || '',
+      imageFile: null,
+    });
+    setImagePreview(product.image_url || '');
+    setShowAddProduct(true);
+  };
+
+  const closeProductModal = () => {
+    setShowAddProduct(false);
+    setEditingProductId(null);
+    setImagePreview('');
+    setNewProduct({
+      name: '',
+      description: '',
+      price: '',
+      stock: '',
+      category: 'handicrafts',
+      image_url: '',
+      artisan_name: '',
+      imageFile: null,
+    });
+  };
+
+  const handleSaveShopProfile = async () => {
+    setSavingProfile(true);
+
+    try {
+      const { error } = await updateSellerProfile({
+        business_name: profileForm.business_name || seller.business_name,
+        contact_phone: profileForm.contact_phone || null,
+        address: profileForm.address || null,
+        description: profileForm.description || null,
+        logo_url: profileForm.logo_url || null,
+      });
+
+      if (error) throw error;
+      alert('Shop settings saved!');
+    } catch (error) {
+      console.error('Error saving shop settings:', error);
+      alert('Failed to save shop settings: ' + error.message);
+    } finally {
+      setSavingProfile(false);
+    }
+  };
+
+  const handleLogoUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploadingLogo(true);
+    try {
+      const { url, error } = await uploadProductImage(file, seller.id);
+      if (error) throw error;
+      setProfileForm((prev) => ({ ...prev, logo_url: url }));
+    } catch (error) {
+      console.error('Error uploading logo:', error);
+      alert('Failed to upload logo: ' + error.message);
+    } finally {
+      setUploadingLogo(false);
     }
   };
 
@@ -304,6 +525,8 @@ export default function SellerDashboard() {
       </div>
     );
   }
+
+  const ratingLabel = rating.count ? `${rating.average} ★ (${rating.count} reviews)` : 'No reviews yet';
 
   return (
     <div className="flex h-screen bg-gray-50">
@@ -502,7 +725,7 @@ export default function SellerDashboard() {
                   </div>
                   <p className="text-sm font-medium text-gray-600 mb-1">Total Products</p>
                   <h3 className="text-3xl font-bold text-gray-900 mb-1">{stats.totalProducts}</h3>
-                  <p className="text-xs text-green-600">+4 added this week</p>
+                  <p className="text-xs text-gray-600">{stats.activeProducts} active listings</p>
                 </div>
 
                 <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
@@ -515,7 +738,7 @@ export default function SellerDashboard() {
                   </div>
                   <p className="text-sm font-medium text-gray-600 mb-1">Total Orders</p>
                   <h3 className="text-3xl font-bold text-gray-900 mb-1">{stats.totalOrders}</h3>
-                  <p className="text-xs text-green-600">+12 from last week</p>
+                  <p className="text-xs text-gray-600">{stats.toFulfill} to fulfill</p>
                 </div>
 
                 <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
@@ -528,7 +751,7 @@ export default function SellerDashboard() {
                   </div>
                   <p className="text-sm font-medium text-gray-600 mb-1">Total Sales</p>
                   <h3 className="text-3xl font-bold text-gray-900 mb-1">₱{stats.totalSales.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</h3>
-                  <p className="text-xs text-green-600">+18% from last week</p>
+                  <p className="text-xs text-gray-600">From your products only</p>
                 </div>
 
                 <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
@@ -557,14 +780,27 @@ export default function SellerDashboard() {
                       <option>Last 90 Days</option>
                     </select>
                   </div>
-                  <div className="h-48 flex items-center justify-center bg-gradient-to-br from-purple-50 to-blue-50 rounded-lg">
-                    <div className="text-center">
-                      <svg className="w-16 h-16 text-purple-400 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z" />
-                      </svg>
-                      <p className="text-gray-600 font-medium">Sales Chart</p>
-                      <p className="text-xs text-gray-500 mt-1">Coming Soon</p>
-                    </div>
+                  <div className="h-48 flex items-end gap-2 bg-gradient-to-br from-purple-50 to-blue-50 rounded-lg p-4">
+                    {dailySales.map((day) => {
+                      const maxDaily = Math.max(...dailySales.map((entry) => entry.total), 1);
+                      const height = Math.round((day.total / maxDaily) * 100);
+
+                      return (
+                        <div key={day.key} className="flex-1 flex flex-col items-center justify-end h-full gap-1">
+                          <span className="text-[10px] font-semibold text-gray-700">
+                            {day.total > 0 ? `₱${Math.round(day.total).toLocaleString()}` : ''}
+                          </span>
+                          <div
+                            className="w-full bg-purple-500 rounded-t"
+                            style={{ height: `${Math.max(height, 2)}%` }}
+                          />
+                          <span className="text-[10px] text-gray-500">{day.label}</span>
+                        </div>
+                      );
+                    })}
+                    {dailySales.length === 0 && (
+                      <p className="w-full text-center text-sm text-gray-500">No sales in the last 7 days</p>
+                    )}
                   </div>
                 </div>
 
@@ -665,7 +901,7 @@ export default function SellerDashboard() {
                           <tr key={order.id} className="hover:bg-gray-50">
                             <td className="px-6 py-4 text-sm font-semibold text-blue-600">#{order.id.slice(0, 8).toUpperCase()}</td>
                             <td className="px-6 py-4 text-sm text-gray-900">{order.customer_name}</td>
-                            <td className="px-6 py-4 text-sm font-semibold text-gray-900">₱{order.total_amount?.toLocaleString()}</td>
+                            <td className="px-6 py-4 text-sm font-semibold text-gray-900">₱{order.my_total?.toLocaleString()}</td>
                             <td className="px-6 py-4">
                               <span className={`px-3 py-1 text-xs font-semibold rounded-full ${
                                 order.status === 'delivered' ? 'bg-green-100 text-green-700' :
@@ -747,11 +983,7 @@ export default function SellerDashboard() {
                           </svg>
                           <span>Shop Rating</span>
                         </div>
-                        <div className="flex items-center gap-1">
-                          <span className="font-bold text-gray-900">4.8</span>
-                          <span className="text-yellow-500">★</span>
-                          <span className="text-xs text-gray-500">(125 reviews)</span>
-                        </div>
+                        <span className="text-xs font-semibold text-gray-900">{ratingLabel}</span>
                       </div>
                     </div>
                   </div>
@@ -822,6 +1054,12 @@ export default function SellerDashboard() {
                       <td className="px-6 py-4">
                         <div className="flex gap-2">
                           <button
+                            onClick={() => openEditProduct(product)}
+                            className="px-3 py-1.5 text-xs font-medium rounded-lg bg-gray-100 text-gray-700 hover:bg-gray-200"
+                          >
+                            Edit
+                          </button>
+                          <button
                             onClick={() => handleToggleAvailability(product.id, product.available)}
                             className="px-3 py-1.5 text-xs font-medium rounded-lg bg-blue-100 text-blue-700 hover:bg-blue-200"
                           >
@@ -856,16 +1094,17 @@ export default function SellerDashboard() {
                       <p className="text-sm text-gray-600">{order.customer_phone}</p>
                     </div>
                     <div className="text-right">
-                      <div className="text-2xl font-bold text-blue-600">₱{order.total_amount}</div>
+                      <div className="text-2xl font-bold text-blue-600">₱{order.my_total.toLocaleString()}</div>
+                      <p className="text-xs text-gray-500">Your items in this order</p>
                       <div className="text-sm text-gray-500">{new Date(order.created_at).toLocaleDateString()}</div>
                     </div>
                   </div>
 
                   <div className="border-t pt-4 mb-4">
-                    <h4 className="font-semibold mb-2">Items:</h4>
-                    {order.shop_order_items?.map((item, idx) => (
-                      <div key={idx} className="text-sm text-gray-600">
-                        {item.product_name} x{item.quantity} - ₱{item.price * item.quantity}
+                    <h4 className="font-semibold mb-2">Your items:</h4>
+                    {order.my_items?.map((item) => (
+                      <div key={item.id} className="text-sm text-gray-600">
+                        {item.product_name} x{item.quantity} - ₱{(Number(item.price) * Number(item.quantity)).toLocaleString()}
                       </div>
                     ))}
                   </div>
@@ -900,18 +1139,35 @@ export default function SellerDashboard() {
                 <div>
                   <p className="text-sm text-gray-600 mb-1">Total Sales</p>
                   <p className="text-3xl font-bold text-gray-900">₱{stats.totalSales.toLocaleString()}</p>
+                  <p className="text-xs text-gray-500 mt-1">Your products only, cancelled orders excluded</p>
                 </div>
                 <div>
-                  <p className="text-sm text-gray-600 mb-1">Platform Fee (15%)</p>
-                  <p className="text-3xl font-bold text-red-600">-₱{(stats.totalSales * 0.15).toLocaleString()}</p>
+                  <p className="text-sm text-gray-600 mb-1">Platform Fee ({stats.commissionRate}%)</p>
+                  <p className="text-3xl font-bold text-red-600">-₱{stats.platformFee.toLocaleString()}</p>
                 </div>
                 <div>
                   <p className="text-sm text-gray-600 mb-1">Your Earnings</p>
                   <p className="text-3xl font-bold text-green-600">₱{stats.earnings.toLocaleString()}</p>
                 </div>
               </div>
+
+              {stats.pendingEarnings !== null && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6 pt-6 border-t">
+                  <div className="p-4 bg-yellow-50 rounded-lg">
+                    <p className="text-sm text-gray-600 mb-1">Pending Earnings</p>
+                    <p className="text-2xl font-bold text-yellow-700">₱{stats.pendingEarnings.toLocaleString()}</p>
+                    <p className="text-xs text-gray-500 mt-1">Released when the order is delivered</p>
+                  </div>
+                  <div className="p-4 bg-green-50 rounded-lg">
+                    <p className="text-sm text-gray-600 mb-1">Paid Earnings</p>
+                    <p className="text-2xl font-bold text-green-700">₱{stats.paidEarnings.toLocaleString()}</p>
+                    <p className="text-xs text-gray-500 mt-1">Already released to you</p>
+                  </div>
+                </div>
+              )}
+
               <p className="text-sm text-gray-600">
-                Monitor your shop revenue and earnings. Platform fee of 15% is deducted from each sale.
+                Monitor your shop revenue and earnings. A {stats.commissionRate}% platform fee is deducted from each sale.
               </p>
             </div>
           </div>
@@ -923,12 +1179,53 @@ export default function SellerDashboard() {
             <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
               <div className="space-y-4">
                 <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Shop Logo</label>
+                  <div className="flex items-center gap-4">
+                    {profileForm.logo_url ? (
+                      <img src={profileForm.logo_url} alt="Shop logo" className="w-16 h-16 rounded-xl object-cover border border-gray-200" />
+                    ) : (
+                      <div className="w-16 h-16 rounded-xl bg-purple-100 flex items-center justify-center text-purple-600 font-bold text-xl">
+                        {seller.business_name?.charAt(0) || 'S'}
+                      </div>
+                    )}
+                    <div>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={handleLogoUpload}
+                        className="text-sm text-gray-600"
+                      />
+                      {uploadingLogo && <p className="text-sm text-blue-600 mt-1">Uploading logo...</p>}
+                    </div>
+                  </div>
+                </div>
+
+                <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-2">Business Name</label>
                   <input
                     type="text"
-                    value={seller.business_name}
-                    disabled
-                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl bg-gray-50"
+                    value={profileForm.business_name}
+                    onChange={(e) => setProfileForm({ ...profileForm, business_name: e.target.value })}
+                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Shop Description</label>
+                  <textarea
+                    value={profileForm.description}
+                    onChange={(e) => setProfileForm({ ...profileForm, description: e.target.value })}
+                    rows="3"
+                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                    placeholder="Tell customers about your shop..."
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Business Address</label>
+                  <textarea
+                    value={profileForm.address}
+                    onChange={(e) => setProfileForm({ ...profileForm, address: e.target.value })}
+                    rows="2"
+                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
                   />
                 </div>
                 <div>
@@ -939,19 +1236,25 @@ export default function SellerDashboard() {
                     disabled
                     className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl bg-gray-50"
                   />
+                  <p className="text-xs text-gray-500 mt-1">Your login email cannot be changed here.</p>
                 </div>
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-2">Contact Phone</label>
                   <input
                     type="tel"
-                    value={seller.contact_phone || ''}
-                    disabled
-                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl bg-gray-50"
+                    value={profileForm.contact_phone}
+                    onChange={(e) => setProfileForm({ ...profileForm, contact_phone: e.target.value })}
+                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
                   />
                 </div>
-                <p className="text-sm text-gray-600 mt-4">
-                  To update your shop information, please contact the administrator.
-                </p>
+
+                <button
+                  onClick={handleSaveShopProfile}
+                  disabled={savingProfile || uploadingLogo}
+                  className="px-6 py-3 bg-purple-600 text-white font-semibold rounded-xl hover:bg-purple-700 transition-colors disabled:opacity-50"
+                >
+                  {savingProfile ? 'Saving...' : 'Save Shop Settings'}
+                </button>
               </div>
             </div>
           </div>
@@ -1001,9 +1304,10 @@ export default function SellerDashboard() {
                     <label className="block text-sm font-semibold text-gray-700 mb-2">Contact Phone</label>
                     <input
                       type="tel"
-                      value={seller.contact_phone || 'Not provided'}
-                      disabled
-                      className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl bg-gray-50"
+                      value={profileForm.contact_phone}
+                      onChange={(e) => setProfileForm({ ...profileForm, contact_phone: e.target.value })}
+                      placeholder="Not provided"
+                      className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
                     />
                   </div>
                   <div>
@@ -1033,15 +1337,26 @@ export default function SellerDashboard() {
                       <p className="text-sm text-gray-600 mt-1">Sales</p>
                     </div>
                     <div className="text-center p-4 bg-yellow-50 rounded-lg">
-                      <p className="text-2xl font-bold text-yellow-600">4.8</p>
-                      <p className="text-sm text-gray-600 mt-1">Rating</p>
+                      <p className="text-2xl font-bold text-yellow-600">{rating.average || '—'}</p>
+                      <p className="text-sm text-gray-600 mt-1">
+                        Rating{rating.count ? ` (${rating.count})` : ''}
+                      </p>
                     </div>
                   </div>
                 </div>
 
-                <p className="text-sm text-gray-600 bg-gray-50 p-4 rounded-lg">
-                  💡 <strong>Note:</strong> To update your seller information, please contact the administrator.
-                </p>
+                <div className="flex flex-wrap items-center gap-3 bg-gray-50 p-4 rounded-lg">
+                  <p className="text-sm text-gray-600 flex-1">
+                    💡 <strong>Note:</strong> Update your contact number here. Shop name, logo and description are in <strong>Shop Settings</strong>.
+                  </p>
+                  <button
+                    onClick={handleSaveShopProfile}
+                    disabled={savingProfile}
+                    className="px-6 py-2.5 bg-purple-600 text-white font-semibold rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50"
+                  >
+                    {savingProfile ? 'Saving...' : 'Save Contact Info'}
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -1055,8 +1370,8 @@ export default function SellerDashboard() {
           <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
             <div className="p-6 border-b">
               <div className="flex justify-between items-center">
-                <h2 className="text-2xl font-bold">Add New Product</h2>
-                <button onClick={() => setShowAddProduct(false)} className="text-gray-400 hover:text-gray-600">
+                <h2 className="text-2xl font-bold">{editingProductId ? 'Edit Product' : 'Add New Product'}</h2>
+                <button onClick={closeProductModal} className="text-gray-400 hover:text-gray-600">
                   <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                   </svg>
@@ -1163,11 +1478,11 @@ export default function SellerDashboard() {
                   disabled={loading || uploadingImage}
                   className="flex-1 bg-blue-600 text-white py-3 rounded-xl font-bold hover:bg-blue-700 disabled:opacity-50"
                 >
-                  {loading ? 'Adding...' : 'Add Product'}
+                  {loading ? 'Saving...' : editingProductId ? 'Save Changes' : 'Add Product'}
                 </button>
                 <button
                   type="button"
-                  onClick={() => setShowAddProduct(false)}
+                  onClick={closeProductModal}
                   className="px-6 py-3 border-2 border-gray-300 rounded-xl font-semibold hover:bg-gray-50"
                 >
                   Cancel
