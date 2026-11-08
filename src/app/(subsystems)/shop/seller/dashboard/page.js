@@ -34,6 +34,10 @@ const buildDailySales = (orders) => {
   return days;
 };
 
+// Set while logging out so the auth guard below does not race the redirect
+// and bounce the seller to the login page instead of the shop.
+let loggingOut = false;
+
 export default function SellerDashboard() {
   const { user, seller, loading: authLoading, signOut, updateSellerProfile } = useSellerAuth();
   const router = useRouter();
@@ -88,7 +92,7 @@ export default function SellerDashboard() {
   useEffect(() => {
     if (!authLoading) {
       if (!user || !seller) {
-        router.push('/shop/seller');
+        if (!loggingOut) router.push('/shop/seller');
       } else if (!seller.is_approved) {
         setLoading(false);
       } else {
@@ -549,8 +553,9 @@ export default function SellerDashboard() {
   };
 
   const handleLogout = async () => {
+    loggingOut = true;
     await signOut();
-    router.push('/shop');
+    window.location.href = '/shop';
   };
 
   if (authLoading || loading) {

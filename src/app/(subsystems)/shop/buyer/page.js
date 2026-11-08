@@ -152,7 +152,8 @@ export default function BuyerDashboard() {
 
   const handleLogout = async () => {
     await signOut();
-    router.push('/shop');
+    // Full navigation so the shop opens fresh instead of the dashboard lingering
+    window.location.href = '/shop';
   };
 
   const toggleWishlist = (productId) => {
@@ -312,7 +313,7 @@ export default function BuyerDashboard() {
           <button
             onClick={async () => {
               await supabase.auth.signOut();
-              router.push('/shop');
+              window.location.href = '/shop';
             }}
             className="w-full bg-blue-600 text-white py-3 rounded-lg font-semibold hover:bg-blue-700"
           >
