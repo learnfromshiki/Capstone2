@@ -3,6 +3,7 @@
 import { createContext, useContext, useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import { ensureSellerProfile } from '@/lib/sellerProfile';
+import { ensureProfileRow } from '@/lib/profile';
 
 const SellerAuthContext = createContext({});
 
@@ -138,6 +139,7 @@ export const SellerAuthProvider = ({ children }) => {
       if (error) throw error;
 
       if (data.user) {
+        await ensureProfileRow(data.user);
         await fetchSellerProfile(data.user.id);
       }
 

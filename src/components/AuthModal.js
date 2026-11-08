@@ -5,6 +5,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabaseClient';
 import { DEMO_ADMIN_EMAIL, DEMO_ADMIN_PASSWORD, getAccountRole } from '@/lib/roles';
 import { ensureSellerProfile } from '@/lib/sellerProfile';
+import { ensureProfileRow } from '@/lib/profile';
 
 export default function AuthModal({ isOpen, onClose, mode: initialMode = 'login' }) {
   const [mode, setMode] = useState(initialMode); // 'login' or 'signup'
@@ -50,6 +51,11 @@ export default function AuthModal({ isOpen, onClose, mode: initialMode = 'login'
           sessionStorage.setItem('admin_email', data.user.email || '');
           window.location.href = '/shop/admin';
           return;
+        }
+
+        // Restore a missing profiles row before anything reads it
+        if (data?.user) {
+          await ensureProfileRow(data.user);
         }
 
         // Suspended accounts are blocked before any dashboard opens
