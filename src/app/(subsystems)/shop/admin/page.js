@@ -615,7 +615,7 @@ export default function ShopAdminPage() {
               </table>
             </div>
           </div>
-        ) : (
+        ) : activeTab === 'orders' ? (
           <div>
             <div className="space-y-4">
               {orders.map((order) => (
@@ -710,7 +710,7 @@ export default function ShopAdminPage() {
               </table>
             </div>
           </div>
-        )}
+        ) : null}
       </div>
 
       {/* Add Product Modal */}
