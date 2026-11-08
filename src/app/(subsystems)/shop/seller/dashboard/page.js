@@ -533,7 +533,7 @@ export default function SellerDashboard() {
   return (
     <div className="flex h-screen bg-gray-50">
       {/* LEFT SIDEBAR */}
-      <aside className="w-64 bg-gradient-to-b from-blue-600 to-blue-800 text-white flex flex-col shadow-xl">
+      <aside className="w-64 bg-gradient-to-b from-blue-700 to-blue-900 text-white flex flex-col shadow-xl">
         {/* Logo */}
         <div className="p-6 border-b border-blue-800">
           <div className="flex items-center gap-3">
@@ -592,7 +592,7 @@ export default function SellerDashboard() {
             </svg>
             <span className="font-medium">Orders</span>
             {stats.totalOrders > 0 && (
-              <span className="ml-auto px-2 py-0.5 bg-purple-600 text-white text-xs font-bold rounded-full">
+              <span className="ml-auto px-2 py-0.5 bg-blue-600 text-white text-xs font-bold rounded-full">
                 {stats.totalOrders}
               </span>
             )}
@@ -642,10 +642,10 @@ export default function SellerDashboard() {
         </nav>
 
         {/* Logout Button */}
-        <div className="p-4 border-t border-purple-800">
+        <div className="p-4 border-t border-blue-800">
           <button
             onClick={handleLogout}
-            className="w-full flex items-center gap-3 px-4 py-3 text-left bg-purple-800 hover:bg-purple-700 rounded-lg transition-colors"
+            className="w-full flex items-center gap-3 px-4 py-3 text-left bg-blue-800 hover:bg-blue-700 rounded-lg transition-colors"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
@@ -664,7 +664,7 @@ export default function SellerDashboard() {
               <input
                 type="text"
                 placeholder="Search my products, orders..."
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               />
               <svg className="w-5 h-5 text-gray-400 absolute left-3 top-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
@@ -679,8 +679,8 @@ export default function SellerDashboard() {
               <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
             </button>
             <div className="flex items-center gap-2">
-              <div className="w-10 h-10 bg-purple-100 rounded-full flex items-center justify-center">
-                <svg className="w-6 h-6 text-purple-700" fill="currentColor" viewBox="0 0 20 20">
+              <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
+                <svg className="w-6 h-6 text-blue-700" fill="currentColor" viewBox="0 0 20 20">
                   <path d="M3 1a1 1 0 000 2h1.22l.305 1.222a.997.997 0 00.01.042l1.358 5.43-.893.892C3.74 11.846 4.632 14 6.414 14H15a1 1 0 000-2H6.414l1-1H14a1 1 0 00.894-.553l3-6A1 1 0 0017 3H6.28l-.31-1.243A1 1 0 005 1H3zM16 16.5a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0zM6.5 18a1.5 1.5 0 100-3 1.5 1.5 0 000 3z" />
                 </svg>
               </div>
@@ -719,8 +719,8 @@ export default function SellerDashboard() {
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
                 <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
                   <div className="flex items-center justify-between mb-3">
-                    <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
-                      <svg className="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
+                      <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
                       </svg>
                     </div>
@@ -782,7 +782,7 @@ export default function SellerDashboard() {
                       <option>Last 90 Days</option>
                     </select>
                   </div>
-                  <div className="h-48 flex items-end gap-2 bg-gradient-to-br from-purple-50 to-blue-50 rounded-lg p-4">
+                  <div className="h-48 flex items-end gap-2 bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg p-4">
                     {dailySales.map((day) => {
                       const maxDaily = Math.max(...dailySales.map((entry) => entry.total), 1);
                       const height = Math.round((day.total / maxDaily) * 100);
@@ -793,7 +793,7 @@ export default function SellerDashboard() {
                             {day.total > 0 ? `₱${Math.round(day.total).toLocaleString()}` : ''}
                           </span>
                           <div
-                            className="w-full bg-purple-500 rounded-t"
+                            className="w-full bg-blue-500 rounded-t"
                             style={{ height: `${Math.max(height, 2)}%` }}
                           />
                           <span className="text-[10px] text-gray-500">{day.label}</span>
@@ -812,10 +812,10 @@ export default function SellerDashboard() {
                   <div className="space-y-3">
                     <button
                       onClick={() => setActiveTab('products')}
-                      className="w-full flex items-center justify-between p-3 bg-purple-50 hover:bg-purple-100 rounded-lg transition-colors"
+                      className="w-full flex items-center justify-between p-3 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors"
                     >
                       <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 bg-purple-600 rounded-lg flex items-center justify-center">
+                        <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center">
                           <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                           </svg>
@@ -935,8 +935,8 @@ export default function SellerDashboard() {
                 <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
                   <h3 className="text-lg font-bold mb-4">Shop Information</h3>
                   <div className="space-y-4">
-                    <div className="flex items-center gap-3 p-3 bg-purple-50 rounded-lg">
-                      <div className="w-12 h-12 bg-purple-600 rounded-lg flex items-center justify-center">
+                    <div className="flex items-center gap-3 p-3 bg-blue-50 rounded-lg">
+                      <div className="w-12 h-12 bg-blue-600 rounded-lg flex items-center justify-center">
                         <svg className="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 20 20">
                           <path d="M3 1a1 1 0 000 2h1.22l.305 1.222a.997.997 0 00.01.042l1.358 5.43-.893.892C3.74 11.846 4.632 14 6.414 14H15a1 1 0 000-2H6.414l1-1H14a1 1 0 00.894-.553l3-6A1 1 0 0017 3H6.28l-.31-1.243A1 1 0 005 1H3zM16 16.5a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0zM6.5 18a1.5 1.5 0 100-3 1.5 1.5 0 000 3z" />
                         </svg>
@@ -1186,7 +1186,7 @@ export default function SellerDashboard() {
                     {profileForm.logo_url ? (
                       <img src={profileForm.logo_url} alt="Shop logo" className="w-16 h-16 rounded-xl object-cover border border-gray-200" />
                     ) : (
-                      <div className="w-16 h-16 rounded-xl bg-purple-100 flex items-center justify-center text-purple-600 font-bold text-xl">
+                      <div className="w-16 h-16 rounded-xl bg-blue-100 flex items-center justify-center text-blue-600 font-bold text-xl">
                         {seller.business_name?.charAt(0) || 'S'}
                       </div>
                     )}
@@ -1208,7 +1208,7 @@ export default function SellerDashboard() {
                     type="text"
                     value={profileForm.business_name}
                     onChange={(e) => setProfileForm({ ...profileForm, business_name: e.target.value })}
-                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   />
                 </div>
                 <div>
@@ -1217,7 +1217,7 @@ export default function SellerDashboard() {
                     value={profileForm.description}
                     onChange={(e) => setProfileForm({ ...profileForm, description: e.target.value })}
                     rows="3"
-                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     placeholder="Tell customers about your shop..."
                   />
                 </div>
@@ -1227,7 +1227,7 @@ export default function SellerDashboard() {
                     value={profileForm.address}
                     onChange={(e) => setProfileForm({ ...profileForm, address: e.target.value })}
                     rows="2"
-                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   />
                 </div>
                 <div>
@@ -1246,14 +1246,14 @@ export default function SellerDashboard() {
                     type="tel"
                     value={profileForm.contact_phone}
                     onChange={(e) => setProfileForm({ ...profileForm, contact_phone: e.target.value })}
-                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   />
                 </div>
 
                 <button
                   onClick={handleSaveShopProfile}
                   disabled={savingProfile || uploadingLogo}
-                  className="px-6 py-3 bg-purple-600 text-white font-semibold rounded-xl hover:bg-purple-700 transition-colors disabled:opacity-50"
+                  className="px-6 py-3 bg-blue-600 text-white font-semibold rounded-xl hover:bg-blue-700 transition-colors disabled:opacity-50"
                 >
                   {savingProfile ? 'Saving...' : 'Save Shop Settings'}
                 </button>
@@ -1268,8 +1268,8 @@ export default function SellerDashboard() {
             <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
               <div className="space-y-6">
                 <div className="flex items-center gap-6">
-                  <div className="w-24 h-24 bg-purple-100 rounded-full flex items-center justify-center">
-                    <svg className="w-12 h-12 text-purple-600" fill="currentColor" viewBox="0 0 20 20">
+                  <div className="w-24 h-24 bg-blue-100 rounded-full flex items-center justify-center">
+                    <svg className="w-12 h-12 text-blue-600" fill="currentColor" viewBox="0 0 20 20">
                       <path d="M3 1a1 1 0 000 2h1.22l.305 1.222a.997.997 0 00.01.042l1.358 5.43-.893.892C3.74 11.846 4.632 14 6.414 14H15a1 1 0 000-2H6.414l1-1H14a1 1 0 00.894-.553l3-6A1 1 0 0017 3H6.28l-.31-1.243A1 1 0 005 1H3zM16 16.5a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0zM6.5 18a1.5 1.5 0 100-3 1.5 1.5 0 000 3z" />
                     </svg>
                   </div>
@@ -1278,7 +1278,7 @@ export default function SellerDashboard() {
                     <p className="text-gray-600">{user.email}</p>
                     <div className="flex items-center gap-2 mt-2">
                       <span className="px-3 py-1 bg-green-100 text-green-700 text-xs font-semibold rounded-full">Active</span>
-                      <span className="px-3 py-1 bg-purple-100 text-purple-700 text-xs font-semibold rounded-full">Verified Seller</span>
+                      <span className="px-3 py-1 bg-blue-100 text-blue-700 text-xs font-semibold rounded-full">Verified Seller</span>
                     </div>
                   </div>
                 </div>
@@ -1309,7 +1309,7 @@ export default function SellerDashboard() {
                       value={profileForm.contact_phone}
                       onChange={(e) => setProfileForm({ ...profileForm, contact_phone: e.target.value })}
                       placeholder="Not provided"
-                      className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                      className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     />
                   </div>
                   <div>
@@ -1326,8 +1326,8 @@ export default function SellerDashboard() {
                 <div className="pt-6 border-t">
                   <h4 className="font-semibold text-gray-900 mb-4">Business Statistics</h4>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    <div className="text-center p-4 bg-purple-50 rounded-lg">
-                      <p className="text-2xl font-bold text-purple-600">{stats.totalProducts}</p>
+                    <div className="text-center p-4 bg-blue-50 rounded-lg">
+                      <p className="text-2xl font-bold text-blue-600">{stats.totalProducts}</p>
                       <p className="text-sm text-gray-600 mt-1">Products</p>
                     </div>
                     <div className="text-center p-4 bg-blue-50 rounded-lg">
@@ -1354,7 +1354,7 @@ export default function SellerDashboard() {
                   <button
                     onClick={handleSaveShopProfile}
                     disabled={savingProfile}
-                    className="px-6 py-2.5 bg-purple-600 text-white font-semibold rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50"
+                    className="px-6 py-2.5 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
                   >
                     {savingProfile ? 'Saving...' : 'Save Contact Info'}
                   </button>

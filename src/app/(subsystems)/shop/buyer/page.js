@@ -271,8 +271,8 @@ export default function BuyerDashboard() {
     const colors = {
       pending: 'bg-yellow-100 text-yellow-700',
       confirmed: 'bg-blue-100 text-blue-700',
-      processing: 'bg-purple-100 text-purple-700',
-      shipped: 'bg-indigo-100 text-indigo-700',
+      processing: 'bg-blue-100 text-blue-700',
+      shipped: 'bg-blue-100 text-blue-700',
       delivered: 'bg-green-100 text-green-700',
       cancelled: 'bg-red-100 text-red-700'
     };
@@ -339,7 +339,7 @@ export default function BuyerDashboard() {
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
-      <div className="bg-gradient-to-r from-purple-600 to-blue-600 text-white">
+      <div className="bg-gradient-to-r from-blue-600 to-blue-700 text-white">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center gap-4">
@@ -512,7 +512,7 @@ export default function BuyerDashboard() {
             {activeTab === 'home' && (
               <div className="space-y-6">
                 {/* Big Deals Banner */}
-                <div className="bg-gradient-to-r from-purple-500 to-blue-500 rounded-2xl p-8 text-white relative overflow-hidden">
+                <div className="bg-gradient-to-r from-blue-500 to-blue-600 rounded-2xl p-8 text-white relative overflow-hidden">
                   <div className="relative z-10">
                     <h2 className="text-3xl font-bold mb-2">Big Deals</h2>
                     <p className="text-xl mb-4">Up to 50% OFF</p>
@@ -654,7 +654,7 @@ export default function BuyerDashboard() {
                       </svg>
                       <h3 className="text-lg font-semibold text-gray-900 mb-2">No orders yet</h3>
                       <p className="text-gray-600 mb-4">Start shopping to see your orders here!</p>
-                      <Link href="/shop" className="inline-block px-6 py-3 bg-purple-600 text-white font-semibold rounded-lg hover:bg-purple-700">
+                      <Link href="/shop" className="inline-block px-6 py-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700">
                         Shop Now
                       </Link>
                     </div>

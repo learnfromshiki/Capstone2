@@ -902,11 +902,11 @@ export default function ShopAdminPage() {
 
   if (!isAuthenticated) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-blue-100 flex items-center justify-center p-4">
         <div className="max-w-md w-full">
           <div className="bg-white rounded-2xl shadow-2xl p-8">
             <div className="text-center mb-8">
-              <div className="w-20 h-20 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
+              <div className="w-20 h-20 bg-gradient-to-br from-blue-600 to-blue-700 rounded-2xl flex items-center justify-center mx-auto mb-4">
                 <svg className="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
                 </svg>
@@ -954,7 +954,7 @@ export default function ShopAdminPage() {
 
               <button
                 type="submit"
-                className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 text-white py-3.5 rounded-xl font-bold hover:from-blue-700 hover:to-indigo-700 transition-all shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
+                className="w-full bg-gradient-to-r from-blue-600 to-blue-700 text-white py-3.5 rounded-xl font-bold hover:from-blue-700 hover:to-blue-800 transition-all shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
               >
                 Access Admin Panel
               </button>
@@ -975,9 +975,9 @@ export default function ShopAdminPage() {
   return (
     <div className="flex h-screen bg-gray-50">
       {/* LEFT SIDEBAR */}
-      <aside className="w-64 bg-gradient-to-b from-purple-700 to-purple-900 text-white flex flex-col shadow-xl">
+      <aside className="w-64 bg-gradient-to-b from-blue-700 to-blue-900 text-white flex flex-col shadow-xl">
         {/* Logo */}
-        <div className="p-6 border-b border-purple-800">
+        <div className="p-6 border-b border-blue-800">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-white/10 rounded-lg flex items-center justify-center">
               <svg className="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 20 20">
@@ -997,8 +997,8 @@ export default function ShopAdminPage() {
             onClick={() => setActiveTab('dashboard')}
             className={`w-full flex items-center gap-3 px-6 py-3 text-left transition-colors ${
               activeTab === 'dashboard'
-                ? 'bg-purple-800 border-l-4 border-white font-semibold'
-                : 'hover:bg-purple-800/50'
+                ? 'bg-blue-800 border-l-4 border-white font-semibold'
+                : 'hover:bg-blue-800/50'
             }`}
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1011,8 +1011,8 @@ export default function ShopAdminPage() {
             onClick={() => setActiveTab('orders')}
             className={`w-full flex items-center gap-3 px-6 py-3 text-left transition-colors ${
               activeTab === 'orders'
-                ? 'bg-purple-800 border-l-4 border-white font-semibold'
-                : 'hover:bg-purple-800/50'
+                ? 'bg-blue-800 border-l-4 border-white font-semibold'
+                : 'hover:bg-blue-800/50'
             }`}
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1020,7 +1020,7 @@ export default function ShopAdminPage() {
             </svg>
             <span className="font-medium">Orders</span>
             {orders.length > 0 && (
-              <span className="ml-auto px-2 py-0.5 bg-purple-600 text-white text-xs font-bold rounded-full">
+              <span className="ml-auto px-2 py-0.5 bg-blue-600 text-white text-xs font-bold rounded-full">
                 {orders.length}
               </span>
             )}
@@ -1030,8 +1030,8 @@ export default function ShopAdminPage() {
             onClick={() => setActiveTab('products')}
             className={`w-full flex items-center gap-3 px-6 py-3 text-left transition-colors ${
               activeTab === 'products'
-                ? 'bg-purple-800 border-l-4 border-white font-semibold'
-                : 'hover:bg-purple-800/50'
+                ? 'bg-blue-800 border-l-4 border-white font-semibold'
+                : 'hover:bg-blue-800/50'
             }`}
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1044,8 +1044,8 @@ export default function ShopAdminPage() {
             onClick={() => setActiveTab('sellers')}
             className={`w-full flex items-center gap-3 px-6 py-3 text-left transition-colors ${
               activeTab === 'sellers'
-                ? 'bg-purple-800 border-l-4 border-white font-semibold'
-                : 'hover:bg-purple-800/50'
+                ? 'bg-blue-800 border-l-4 border-white font-semibold'
+                : 'hover:bg-blue-800/50'
             }`}
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1058,8 +1058,8 @@ export default function ShopAdminPage() {
             onClick={() => setActiveTab('customers')}
             className={`w-full flex items-center gap-3 px-6 py-3 text-left transition-colors ${
               activeTab === 'customers'
-                ? 'bg-purple-800 border-l-4 border-white font-semibold'
-                : 'hover:bg-purple-800/50'
+                ? 'bg-blue-800 border-l-4 border-white font-semibold'
+                : 'hover:bg-blue-800/50'
             }`}
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1072,8 +1072,8 @@ export default function ShopAdminPage() {
             onClick={() => setActiveTab('categories')}
             className={`w-full flex items-center gap-3 px-6 py-3 text-left transition-colors ${
               activeTab === 'categories'
-                ? 'bg-purple-800 border-l-4 border-white font-semibold'
-                : 'hover:bg-purple-800/50'
+                ? 'bg-blue-800 border-l-4 border-white font-semibold'
+                : 'hover:bg-blue-800/50'
             }`}
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1086,8 +1086,8 @@ export default function ShopAdminPage() {
             onClick={() => setActiveTab('transactions')}
             className={`w-full flex items-center gap-3 px-6 py-3 text-left transition-colors ${
               activeTab === 'transactions'
-                ? 'bg-purple-800 border-l-4 border-white font-semibold'
-                : 'hover:bg-purple-800/50'
+                ? 'bg-blue-800 border-l-4 border-white font-semibold'
+                : 'hover:bg-blue-800/50'
             }`}
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1100,8 +1100,8 @@ export default function ShopAdminPage() {
             onClick={() => setActiveTab('reports')}
             className={`w-full flex items-center gap-3 px-6 py-3 text-left transition-colors ${
               activeTab === 'reports'
-                ? 'bg-purple-800 border-l-4 border-white font-semibold'
-                : 'hover:bg-purple-800/50'
+                ? 'bg-blue-800 border-l-4 border-white font-semibold'
+                : 'hover:bg-blue-800/50'
             }`}
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1114,8 +1114,8 @@ export default function ShopAdminPage() {
             onClick={() => setActiveTab('settings')}
             className={`w-full flex items-center gap-3 px-6 py-3 text-left transition-colors ${
               activeTab === 'settings'
-                ? 'bg-purple-800 border-l-4 border-white font-semibold'
-                : 'hover:bg-purple-800/50'
+                ? 'bg-blue-800 border-l-4 border-white font-semibold'
+                : 'hover:bg-blue-800/50'
             }`}
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1127,10 +1127,10 @@ export default function ShopAdminPage() {
         </nav>
 
         {/* Logout Button */}
-        <div className="p-4 border-t border-purple-800">
+        <div className="p-4 border-t border-blue-800">
           <button
             onClick={handleLogout}
-            className="w-full flex items-center gap-3 px-4 py-3 text-left bg-purple-800 hover:bg-purple-700 rounded-lg transition-colors"
+            className="w-full flex items-center gap-3 px-4 py-3 text-left bg-blue-800 hover:bg-blue-700 rounded-lg transition-colors"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
@@ -1156,8 +1156,8 @@ export default function ShopAdminPage() {
               <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
             </button>
             <div className="flex items-center gap-2">
-              <div className="w-10 h-10 bg-purple-100 rounded-full flex items-center justify-center">
-                <span className="text-purple-700 font-bold">A</span>
+              <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
+                <span className="text-blue-700 font-bold">A</span>
               </div>
               <div className="text-right">
                 <p className="text-sm font-semibold text-gray-900">{adminName}</p>
@@ -1228,8 +1228,8 @@ export default function ShopAdminPage() {
                       <p className="text-xs text-orange-600 mt-1">{stats.pendingSellers} pending approval</p>
                     )}
                   </div>
-                  <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
-                    <svg className="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
+                    <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
                     </svg>
                   </div>
@@ -1288,10 +1288,10 @@ export default function ShopAdminPage() {
 
                 <button
                   onClick={() => setActiveTab('orders')}
-                  className="flex items-center justify-between p-4 bg-purple-50 hover:bg-purple-100 rounded-lg transition-colors group"
+                  className="flex items-center justify-between p-4 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors group"
                 >
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-purple-600 rounded-lg flex items-center justify-center">
+                    <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center">
                       <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
                       </svg>
@@ -1649,7 +1649,7 @@ export default function ShopAdminPage() {
               </div>
               <button
                 onClick={() => setShowAddProduct(true)}
-                className="ml-4 flex items-center gap-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-6 py-2.5 rounded-lg font-semibold hover:from-blue-700 hover:to-indigo-700 transition-all shadow-md hover:shadow-lg"
+                className="ml-4 flex items-center gap-2 bg-gradient-to-r from-blue-600 to-blue-700 text-white px-6 py-2.5 rounded-lg font-semibold hover:from-blue-700 hover:to-blue-800 transition-all shadow-md hover:shadow-lg"
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -1795,7 +1795,7 @@ export default function ShopAdminPage() {
               <h3 className="text-xl font-bold">Manage Categories</h3>
               <button
                 onClick={() => setShowAddCategory(true)}
-                className="flex items-center gap-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-6 py-2.5 rounded-lg font-semibold hover:from-blue-700 hover:to-indigo-700 transition-all shadow-md hover:shadow-lg"
+                className="flex items-center gap-2 bg-gradient-to-r from-blue-600 to-blue-700 text-white px-6 py-2.5 rounded-lg font-semibold hover:from-blue-700 hover:to-blue-800 transition-all shadow-md hover:shadow-lg"
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -1906,8 +1906,8 @@ export default function ShopAdminPage() {
 
               <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
                 <div className="flex items-center gap-3 mb-2">
-                  <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
-                    <svg className="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                    <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
                     </svg>
                   </div>
@@ -2030,8 +2030,8 @@ export default function ShopAdminPage() {
 
               <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
                 <div className="flex items-center gap-4 mb-4">
-                  <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
-                    <svg className="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
+                    <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
                     </svg>
                   </div>
@@ -2043,7 +2043,7 @@ export default function ShopAdminPage() {
                 <button
                   onClick={() => generateReport('customers')}
                   disabled={reportLoading !== ''}
-                  className="w-full py-2 px-4 bg-purple-50 hover:bg-purple-100 text-purple-700 font-semibold rounded-lg transition-colors disabled:opacity-50"
+                  className="w-full py-2 px-4 bg-blue-50 hover:bg-blue-100 text-blue-700 font-semibold rounded-lg transition-colors disabled:opacity-50"
                 >
                   {reportLoading === 'customers' ? 'Generating...' : 'Generate Report'}
                 </button>
@@ -2093,8 +2093,8 @@ export default function ShopAdminPage() {
 
               <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
                 <div className="flex items-center gap-4 mb-4">
-                  <div className="w-12 h-12 bg-indigo-100 rounded-lg flex items-center justify-center">
-                    <svg className="w-6 h-6 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
+                    <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
                   </div>
@@ -2106,7 +2106,7 @@ export default function ShopAdminPage() {
                 <button
                   onClick={() => generateReport('revenue')}
                   disabled={reportLoading !== ''}
-                  className="w-full py-2 px-4 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-semibold rounded-lg transition-colors disabled:opacity-50"
+                  className="w-full py-2 px-4 bg-blue-50 hover:bg-blue-100 text-blue-700 font-semibold rounded-lg transition-colors disabled:opacity-50"
                 >
                   {reportLoading === 'revenue' ? 'Generating...' : 'Generate Report'}
                 </button>
@@ -2522,7 +2522,7 @@ export default function ShopAdminPage() {
                 <button
                   type="submit"
                   disabled={loading}
-                  className="flex-1 px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl font-semibold hover:from-blue-700 hover:to-indigo-700 disabled:opacity-50"
+                  className="flex-1 px-6 py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-xl font-semibold hover:from-blue-700 hover:to-blue-800 disabled:opacity-50"
                 >
                   {loading ? 'Adding...' : 'Add Product'}
                 </button>
@@ -2596,7 +2596,7 @@ export default function ShopAdminPage() {
                 <button
                   type="submit"
                   disabled={loading}
-                  className="flex-1 px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl font-semibold hover:from-blue-700 hover:to-indigo-700 disabled:opacity-50"
+                  className="flex-1 px-6 py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-xl font-semibold hover:from-blue-700 hover:to-blue-800 disabled:opacity-50"
                 >
                   {loading ? 'Adding...' : 'Add Category'}
                 </button>

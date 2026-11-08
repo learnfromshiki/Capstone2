@@ -58,14 +58,14 @@ export default function ProductCard({ product, onAddToCart, sellerInfo }) {
         {/* Seller Badge */}
         {sellerInfo && (
           <div className="flex items-center gap-2 mb-2 pb-2 border-b border-gray-100">
-            <div className="w-5 h-5 bg-gradient-to-br from-indigo-500 to-purple-500 rounded-full flex items-center justify-center flex-shrink-0">
+            <div className="w-5 h-5 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full flex items-center justify-center flex-shrink-0">
               <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
                 <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" />
               </svg>
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-xs text-gray-500">Sold by</p>
-              <p className="text-sm font-semibold text-indigo-600 truncate">
+              <p className="text-sm font-semibold text-blue-600 truncate">
                 {sellerInfo.business_name}
               </p>
             </div>
@@ -96,7 +96,7 @@ export default function ProductCard({ product, onAddToCart, sellerInfo }) {
         <div className="flex justify-between items-end mb-4 pb-4 border-b border-gray-100">
           <div>
             <p className="text-xs text-gray-500 mb-1">Price</p>
-            <span className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
+            <span className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-blue-700 bg-clip-text text-transparent">
               ₱{Number(product.price || 0).toFixed(2)}
             </span>
           </div>
@@ -114,7 +114,7 @@ export default function ProductCard({ product, onAddToCart, sellerInfo }) {
           disabled={product.stock <= 0}
           className={`w-full py-3.5 rounded-lg font-bold transition-all flex items-center justify-center gap-2 ${
             product.stock > 0
-              ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white hover:from-blue-700 hover:to-indigo-700 shadow-md hover:shadow-xl transform hover:scale-105 active:scale-95'
+              ? 'bg-gradient-to-r from-blue-600 to-blue-700 text-white hover:from-blue-700 hover:to-blue-800 shadow-md hover:shadow-xl transform hover:scale-105 active:scale-95'
               : 'bg-gray-200 text-gray-400 cursor-not-allowed'
           }`}
         >

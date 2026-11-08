@@ -25,7 +25,7 @@ export default function Cart({ cart, isOpen, onClose, onUpdateQuantity, onRemove
       {/* Cart Sidebar */}
       <div className="fixed right-0 top-0 h-full w-full max-w-md bg-white shadow-2xl z-50 flex flex-col animate-slide-in">
         {/* Header */}
-        <div className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white p-6 flex justify-between items-center shadow-lg">
+        <div className="bg-gradient-to-r from-blue-600 to-blue-700 text-white p-6 flex justify-between items-center shadow-lg">
           <div>
             <h2 className="text-2xl font-bold">Your Cart</h2>
             <p className="text-blue-100 text-sm">
@@ -147,7 +147,7 @@ export default function Cart({ cart, isOpen, onClose, onUpdateQuantity, onRemove
               </div>
               <div className="border-t pt-2 flex justify-between items-center">
                 <span className="text-lg font-bold text-gray-900">Total</span>
-                <span className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
+                <span className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-blue-700 bg-clip-text text-transparent">
                   ₱{total.toFixed(2)}
                 </span>
               </div>
@@ -168,7 +168,7 @@ export default function Cart({ cart, isOpen, onClose, onUpdateQuantity, onRemove
             {/* Checkout Button */}
             <button
               onClick={() => setShowCheckout(true)}
-              className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 text-white py-4 rounded-xl font-bold text-lg hover:from-blue-700 hover:to-indigo-700 transition-all shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 active:scale-95 flex items-center justify-center gap-2"
+              className="w-full bg-gradient-to-r from-blue-600 to-blue-700 text-white py-4 rounded-xl font-bold text-lg hover:from-blue-700 hover:to-blue-800 transition-all shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 active:scale-95 flex items-center justify-center gap-2"
             >
               <span>Proceed to Checkout</span>
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
