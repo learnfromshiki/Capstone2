@@ -141,7 +141,7 @@ export default function AuthModal({ isOpen, onClose, mode: initialMode = 'login'
                     onClick={() => setAccountType('customer')}
                     className={`relative p-3 border-2 rounded-xl transition-all ${
                       accountType === 'customer'
-                        ? 'border-gray-900 bg-gray-50'
+                        ? 'border-blue-600 bg-blue-50'
                         : 'border-gray-200 bg-white hover:border-gray-300'
                     }`}
                   >
@@ -168,7 +168,7 @@ export default function AuthModal({ isOpen, onClose, mode: initialMode = 'login'
                     onClick={() => setAccountType('seller')}
                     className={`relative p-3 border-2 rounded-xl transition-all ${
                       accountType === 'seller'
-                        ? 'border-gray-900 bg-gray-50'
+                        ? 'border-blue-600 bg-blue-50'
                         : 'border-gray-200 bg-white hover:border-gray-300'
                     }`}
                   >
@@ -201,7 +201,7 @@ export default function AuthModal({ isOpen, onClose, mode: initialMode = 'login'
                   type="text"
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}
-                  className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-full focus:ring-2 focus:ring-gray-900 focus:border-transparent transition-all text-sm text-gray-900 placeholder-gray-400"
+                  className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-full focus:ring-2 focus:ring-blue-600 focus:border-transparent transition-all text-sm text-gray-900 placeholder-gray-400"
                   placeholder="Enter your full name"
                   required
                 />
@@ -216,7 +216,7 @@ export default function AuthModal({ isOpen, onClose, mode: initialMode = 'login'
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-full focus:ring-2 focus:ring-gray-900 focus:border-transparent transition-all text-sm text-gray-900 placeholder-gray-400"
+                  className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-full focus:ring-2 focus:ring-blue-600 focus:border-transparent transition-all text-sm text-gray-900 placeholder-gray-400"
                   placeholder="Enter your email"
                   required
                 />
@@ -232,7 +232,7 @@ export default function AuthModal({ isOpen, onClose, mode: initialMode = 'login'
                     type="text"
                     value={businessName}
                     onChange={(e) => setBusinessName(e.target.value)}
-                    className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-full focus:ring-2 focus:ring-gray-900 focus:border-transparent transition-all text-sm text-gray-900 placeholder-gray-400"
+                    className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-full focus:ring-2 focus:ring-blue-600 focus:border-transparent transition-all text-sm text-gray-900 placeholder-gray-400"
                     placeholder="Enter your shop name"
                     required
                   />
@@ -282,7 +282,7 @@ export default function AuthModal({ isOpen, onClose, mode: initialMode = 'login'
               id="showPassword"
               checked={showPassword}
               onChange={(e) => setShowPassword(e.target.checked)}
-              className="w-3.5 h-3.5 text-gray-900 bg-gray-100 border-gray-300 rounded focus:ring-gray-900 focus:ring-2"
+              className="w-3.5 h-3.5 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-600 focus:ring-2"
             />
             <label htmlFor="showPassword" className="ml-2 text-xs font-medium text-gray-700 cursor-pointer">
               Show password
@@ -339,7 +339,7 @@ export default function AuthModal({ isOpen, onClose, mode: initialMode = 'login'
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-gray-900 text-white py-3 rounded-full font-bold hover:bg-gray-800 transition-all shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+            className="w-full bg-blue-600 text-white py-3 rounded-full font-bold hover:bg-blue-700 transition-all shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed text-sm"
           >
             {loading ? 'Please wait...' : mode === 'login' ? 'Log In' : 'Sign Up'}
           </button>
