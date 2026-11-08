@@ -4,6 +4,21 @@
 -- This version works WITHOUT the profiles table
 -- =====================================================
 
+-- Sellers Table
+create table shop_sellers (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid unique not null,  -- Links to Supabase Auth user
+  business_name text not null,
+  contact_email text not null,
+  contact_phone text,
+  address text,
+  description text,
+  is_approved boolean default false,  -- Requires admin approval
+  is_active boolean default true,
+  created_at timestamp with time zone default now(),
+  updated_at timestamp with time zone default now()
+);
+
 -- Products Table
 create table shop_products (
   id uuid primary key default gen_random_uuid(),
@@ -11,9 +26,9 @@ create table shop_products (
   description text,
   price decimal(10,2) not null,
   stock integer default 0,
-  category text check (category in ('handicrafts', 'food', 'souvenirs', 'weavings', 'art')),
+  category text,  -- Now uses dynamic categories from shop_categories
   image_url text,
-  artisan_id uuid,  -- No foreign key constraint
+  seller_id uuid references shop_sellers(id) on delete cascade,
   artisan_name text,
   available boolean default true,
   created_at timestamp with time zone default now(),
@@ -57,11 +72,46 @@ create table shop_reviews (
   created_at timestamp with time zone default now()
 );
 
+-- Categories Table (Dynamic category management)
+create table shop_categories (
+  id uuid primary key default gen_random_uuid(),
+  name text not null unique,
+  slug text not null unique,
+  icon text,
+  description text,
+  created_at timestamp with time zone default now(),
+  updated_at timestamp with time zone default now()
+);
+
+-- Insert default categories
+insert into shop_categories (name, slug, icon, description) values
+  ('All', 'all', '🛍️', 'All products'),
+  ('Handicrafts', 'handicrafts', '🎨', 'Handmade crafts and artworks'),
+  ('Food Products', 'food', '🍽️', 'Local food and delicacies'),
+  ('Souvenirs', 'souvenirs', '🎁', 'Memorable souvenirs'),
+  ('Weavings', 'weavings', '🧵', 'Traditional woven products'),
+  ('Art', 'art', '🎨', 'Artistic creations');
+
 -- Enable Row Level Security
+alter table shop_sellers enable row level security;
 alter table shop_products enable row level security;
 alter table shop_orders enable row level security;
 alter table shop_order_items enable row level security;
 alter table shop_reviews enable row level security;
+alter table shop_categories enable row level security;
+
+-- RLS Policies for Sellers
+create policy "Anyone can view approved sellers" 
+  on shop_sellers for select 
+  using (is_approved = true);
+
+create policy "Anyone can create seller account" 
+  on shop_sellers for insert 
+  with check (true);
+
+create policy "Sellers can update own profile" 
+  on shop_sellers for update 
+  using (auth.uid() = user_id);
 
 -- RLS Policies for Products (Allow ALL for testing)
 create policy "Anyone can view products" 
@@ -98,7 +148,16 @@ create policy "Anyone can create order items"
   on shop_order_items for insert 
   with check (true);
 
--- RLS Policies for Reviews (Allow ALL for testing)
+-- RLS Policies for Categories
+create policy "Anyone can view categories" 
+  on shop_categories for select 
+  using (true);
+
+create policy "Anyone can manage categories (for testing)" 
+  on shop_categories for all 
+  using (true);
+
+-- RLS Policies for Reviews
 create policy "Anyone can view reviews" 
   on shop_reviews for select 
   using (true);
@@ -108,29 +167,24 @@ create policy "Anyone can create reviews"
   with check (true);
 
 -- Create indexes for better performance
+create index idx_shop_sellers_user on shop_sellers(user_id);
+create index idx_shop_sellers_approved on shop_sellers(is_approved);
+create index idx_shop_products_seller on shop_products(seller_id);
 create index idx_shop_products_category on shop_products(category);
-create index idx_shop_products_artisan on shop_products(artisan_id);
 create index idx_shop_products_available on shop_products(available);
 create index idx_shop_orders_user on shop_orders(user_id);
 create index idx_shop_orders_status on shop_orders(status);
 create index idx_shop_order_items_order on shop_order_items(order_id);
 create index idx_shop_order_items_product on shop_order_items(product_id);
 
--- Insert sample products
-insert into shop_products (name, description, price, stock, category, artisan_name, available) values
-  ('Handwoven Abaca Bag', 'Traditional handwoven bag made from local abaca fiber. Perfect for everyday use.', 450.00, 15, 'handicrafts', 'Maria Santos', true),
-  ('Pili Nut Candy', 'Sweet and crunchy candy made from locally grown pili nuts. Pack of 10 pieces.', 120.00, 50, 'food', 'Daet Delicacies', true),
-  ('Daet Keychain', 'Colorful wooden keychain featuring Daet landmarks. Great souvenir!', 80.00, 100, 'souvenirs', 'Local Crafts Co.', true),
-  ('Traditional Banig Mat', 'Handwoven sleeping mat made from pandan leaves. Size: 4x6 feet.', 850.00, 8, 'weavings', 'Lola Remedios', true),
-  ('Pineapple Fiber Shirt', 'Elegant barong-style shirt made from pineapple fiber (piña). Medium size.', 1200.00, 5, 'handicrafts', 'Juan dela Cruz', true),
-  ('Bicol Express Paste', 'Authentic spicy Bicol Express cooking paste. 250g bottle.', 150.00, 30, 'food', 'Daet Delicacies', true),
-  ('Miniature Paraw Boat', 'Handcrafted wooden model of traditional Filipino paraw sailboat.', 350.00, 12, 'souvenirs', 'Local Crafts Co.', true),
-  ('Coconut Shell Bowl', 'Eco-friendly bowl carved from coconut shell. Perfect for serving snacks.', 180.00, 25, 'handicrafts', 'Green Crafts PH', true),
-  ('Laing Mix', 'Ready-to-cook Laing (taro leaves in coconut milk) mix. 200g pack.', 95.00, 40, 'food', 'Daet Delicacies', true),
-  ('Painted Capiz Wind Chime', 'Beautiful wind chime made from painted capiz shells.', 280.00, 18, 'art', 'Maria Santos', true);
-
 -- Success message
 DO $$ 
 BEGIN 
-  RAISE NOTICE 'Shop tables created successfully! 10 sample products added.';
+  RAISE NOTICE 'Shop database schema created successfully!';
+  RAISE NOTICE 'Tables: shop_sellers, shop_products, shop_orders, shop_order_items, shop_categories, shop_reviews';
+  RAISE NOTICE 'Default categories have been added.';
+  RAISE NOTICE 'Next steps:';
+  RAISE NOTICE '1. Create storage bucket "product-images" with public access';
+  RAISE NOTICE '2. Test seller registration at /shop';
+  RAISE NOTICE '3. Admin can approve sellers at /shop/admin';
 END $$;
