@@ -1,6 +1,6 @@
 'use client';
 
-export default function ProductCard({ product, onAddToCart, onBuyNow, sellerInfo }) {
+export default function ProductCard({ product, onAddToCart, onBuyNow, onViewDetails, sellerInfo }) {
   const categoryIcons = {
     handicrafts: '🧺',
     food: '🍽️',
@@ -12,7 +12,19 @@ export default function ProductCard({ product, onAddToCart, onBuyNow, sellerInfo
   return (
     <div className="group bg-white rounded-xl border border-gray-200 overflow-hidden hover:shadow-2xl hover:border-blue-300 transition-all duration-300 transform hover:-translate-y-1">
       {/* Product Image */}
-      <div className="relative h-56 bg-gradient-to-br from-gray-100 to-gray-200 overflow-hidden">
+      <div
+        className="relative h-56 bg-gradient-to-br from-gray-100 to-gray-200 overflow-hidden cursor-pointer"
+        onClick={() => onViewDetails && onViewDetails(product)}
+        role="button"
+        tabIndex={0}
+        aria-label={`View details for ${product.name}`}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            if (onViewDetails) onViewDetails(product);
+          }
+        }}
+      >
         {product.image_url ? (
           <img
             src={product.image_url}
@@ -51,9 +63,13 @@ export default function ProductCard({ product, onAddToCart, onBuyNow, sellerInfo
 
       {/* Product Info */}
       <div className="p-5">
-        <h3 className="font-bold text-lg text-gray-900 mb-2 line-clamp-2 min-h-[3.5rem] group-hover:text-blue-600 transition-colors">
+        <button
+          type="button"
+          onClick={() => onViewDetails && onViewDetails(product)}
+          className="text-left w-full font-bold text-lg text-gray-900 mb-2 line-clamp-2 min-h-[3.5rem] group-hover:text-blue-600 transition-colors"
+        >
           {product.name}
-        </h3>
+        </button>
         
         {/* Seller Badge */}
         {sellerInfo && (

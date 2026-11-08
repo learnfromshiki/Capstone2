@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabaseClient';
 import { useAuth } from '@/contexts/AuthContext';
 import ProductCard from '@/components/shop/ProductCard';
 import Cart from '@/components/shop/Cart';
+import ProductDetailsModal from '@/components/shop/ProductDetailsModal';
 import AuthModal from '@/components/AuthModal';
 
 export default function ShopPage() {
@@ -16,6 +17,7 @@ export default function ShopPage() {
   const [filter, setFilter] = useState('all');
   const [showCart, setShowCart] = useState(false);
   const [checkoutRequest, setCheckoutRequest] = useState(0);
+  const [selectedProduct, setSelectedProduct] = useState(null);
 
   // Open the cart when arriving from the buyer dashboard "My Cart" link
   useEffect(() => {
@@ -116,7 +118,7 @@ export default function ShopPage() {
     }
   };
 
-  const addToCart = (product) => {
+  const addToCart = (product, quantity = 1) => {
     // Check if user is logged in
     if (!user) {
       setShowAuthModal(true);
@@ -141,11 +143,11 @@ export default function ShopPage() {
         
         return prevCart.map((item) =>
           item.id === product.id
-            ? { ...item, quantity: item.quantity + 1 }
+            ? { ...item, quantity: Math.min(item.quantity + quantity, product.stock) }
             : item
         );
       }
-      return [...prevCart, { ...product, quantity: 1 }];
+      return [...prevCart, { ...product, quantity: Math.min(quantity, product.stock) }];
     });
     
     // Open the cart so the customer sees what was just added
@@ -180,7 +182,7 @@ export default function ShopPage() {
   };
 
   // Buy Now puts the item in the cart, opens the drawer and jumps into checkout
-  const buyNow = (product) => {
+  const buyNow = (product, quantity = 1) => {
     if (!user) {
       setShowAuthModal(true);
       return;
@@ -191,7 +193,7 @@ export default function ShopPage() {
       return;
     }
 
-    addToCart(product);
+    addToCart(product, quantity);
     setShowCart(true);
     setCheckoutRequest((request) => request + 1);
   };
@@ -432,6 +434,7 @@ export default function ShopPage() {
                 product={product}
                 onAddToCart={addToCart}
                 onBuyNow={buyNow}
+                onViewDetails={setSelectedProduct}
                 sellerInfo={sellers[product.seller_id]}
               />
             ))}
@@ -449,6 +452,15 @@ export default function ShopPage() {
         onRemoveItem={removeFromCart}
         onClearCart={clearCart}
         total={cartTotal}
+      />
+
+      {/* Product quick view */}
+      <ProductDetailsModal
+        product={selectedProduct}
+        sellerInfo={selectedProduct ? sellers[selectedProduct.seller_id] : null}
+        onClose={() => setSelectedProduct(null)}
+        onAddToCart={addToCart}
+        onBuyNow={buyNow}
       />
 
       {/* Auth Modal */}
