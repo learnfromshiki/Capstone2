@@ -414,54 +414,213 @@ export default function ShopAdminPage() {
     );
   }
 
-  // Main Admin Dashboard
+  // Main Admin Dashboard with Sidebar
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-white border-b shadow-sm sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <Link href="/" className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-lg flex items-center justify-center">
-                <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                </svg>
-              </div>
-              <div>
-                <h1 className="text-lg font-bold text-gray-900">Admin Panel</h1>
-                <p className="text-xs text-gray-500">Manage your store</p>
-              </div>
-            </Link>
-            
-            <div className="flex items-center gap-3">
-              <Link 
-                href="/shop"
-                className="text-sm text-gray-600 hover:text-gray-900 font-medium flex items-center gap-1"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
-                </svg>
-                View Shop
-              </Link>
-              <button
-                onClick={handleLogout}
-                className="flex items-center gap-2 px-4 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 transition-colors text-sm font-medium"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-                </svg>
-                Logout
-              </button>
+    <div className="flex h-screen bg-gray-50">
+      {/* LEFT SIDEBAR */}
+      <aside className="w-64 bg-purple-900 text-white flex flex-col">
+        {/* Logo */}
+        <div className="p-6 border-b border-purple-800">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-white/10 rounded-lg flex items-center justify-center">
+              <svg className="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 20 20">
+                <path d="M3 1a1 1 0 000 2h1.22l.305 1.222a.997.997 0 00.01.042l1.358 5.43-.893.892C3.74 11.846 4.632 14 6.414 14H15a1 1 0 000-2H6.414l1-1H14a1 1 0 00.894-.553l3-6A1 1 0 0017 3H6.28l-.31-1.243A1 1 0 005 1H3zM16 16.5a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0zM6.5 18a1.5 1.5 0 100-3 1.5 1.5 0 000 3z" />
+              </svg>
+            </div>
+            <div>
+              <h1 className="font-bold text-white">ShopEase</h1>
+              <p className="text-xs text-purple-300">Admin Panel</p>
             </div>
           </div>
         </div>
-      </header>
 
-      {/* Stats & Content */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+        {/* Navigation */}
+        <nav className="flex-1 overflow-y-auto py-4">
+          <button
+            onClick={() => setActiveTab('dashboard')}
+            className={`w-full flex items-center gap-3 px-6 py-3 text-left transition-colors ${
+              activeTab === 'dashboard'
+                ? 'bg-purple-800 border-l-4 border-purple-400'
+                : 'hover:bg-purple-800/50'
+            }`}
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+            </svg>
+            <span className="font-medium">Dashboard</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('orders')}
+            className={`w-full flex items-center gap-3 px-6 py-3 text-left transition-colors ${
+              activeTab === 'orders'
+                ? 'bg-purple-800 border-l-4 border-purple-400'
+                : 'hover:bg-purple-800/50'
+            }`}
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
+            </svg>
+            <span className="font-medium">Orders</span>
+            {orders.length > 0 && (
+              <span className="ml-auto px-2 py-0.5 bg-purple-600 text-white text-xs font-bold rounded-full">
+                {orders.length}
+              </span>
+            )}
+          </button>
+
+          <button
+            onClick={() => setActiveTab('products')}
+            className={`w-full flex items-center gap-3 px-6 py-3 text-left transition-colors ${
+              activeTab === 'products'
+                ? 'bg-purple-800 border-l-4 border-purple-400'
+                : 'hover:bg-purple-800/50'
+            }`}
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+            </svg>
+            <span className="font-medium">Products</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('sellers')}
+            className={`w-full flex items-center gap-3 px-6 py-3 text-left transition-colors ${
+              activeTab === 'sellers'
+                ? 'bg-purple-800 border-l-4 border-purple-400'
+                : 'hover:bg-purple-800/50'
+            }`}
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+            </svg>
+            <span className="font-medium">Sellers</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('customers')}
+            className={`w-full flex items-center gap-3 px-6 py-3 text-left transition-colors ${
+              activeTab === 'customers'
+                ? 'bg-purple-800 border-l-4 border-purple-400'
+                : 'hover:bg-purple-800/50'
+            }`}
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+            </svg>
+            <span className="font-medium">Customers</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('categories')}
+            className={`w-full flex items-center gap-3 px-6 py-3 text-left transition-colors ${
+              activeTab === 'categories'
+                ? 'bg-purple-800 border-l-4 border-purple-400'
+                : 'hover:bg-purple-800/50'
+            }`}
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
+            </svg>
+            <span className="font-medium">Categories</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('transactions')}
+            className={`w-full flex items-center gap-3 px-6 py-3 text-left transition-colors ${
+              activeTab === 'transactions'
+                ? 'bg-purple-800 border-l-4 border-purple-400'
+                : 'hover:bg-purple-800/50'
+            }`}
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+            </svg>
+            <span className="font-medium">Transactions</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('reports')}
+            className={`w-full flex items-center gap-3 px-6 py-3 text-left transition-colors ${
+              activeTab === 'reports'
+                ? 'bg-purple-800 border-l-4 border-purple-400'
+                : 'hover:bg-purple-800/50'
+            }`}
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+            </svg>
+            <span className="font-medium">Reports</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('settings')}
+            className={`w-full flex items-center gap-3 px-6 py-3 text-left transition-colors ${
+              activeTab === 'settings'
+                ? 'bg-purple-800 border-l-4 border-purple-400'
+                : 'hover:bg-purple-800/50'
+            }`}
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+            <span className="font-medium">Settings</span>
+          </button>
+        </nav>
+
+        {/* Logout Button */}
+        <div className="p-4 border-t border-purple-800">
+          <button
+            onClick={handleLogout}
+            className="w-full flex items-center gap-3 px-4 py-3 text-left bg-purple-800 hover:bg-purple-700 rounded-lg transition-colors"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+            </svg>
+            <span className="font-medium">Log Out</span>
+          </button>
+        </div>
+      </aside>
+
+      {/* MAIN CONTENT AREA */}
+      <div className="flex-1 flex flex-col overflow-hidden">
+        {/* Top Header */}
+        <header className="bg-white border-b px-8 py-4 flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">Welcome back, Admin! 👋</h1>
+            <p className="text-sm text-gray-600">Here&apos;s what&apos;s happening with your e-commerce platform today.</p>
+          </div>
+          <div className="flex items-center gap-4">
+            <button className="relative p-2 text-gray-600 hover:text-gray-900">
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+              </svg>
+              <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
+            </button>
+            <div className="flex items-center gap-2">
+              <div className="w-10 h-10 bg-purple-100 rounded-full flex items-center justify-center">
+                <span className="text-purple-700 font-bold">A</span>
+              </div>
+              <div className="text-right">
+                <p className="text-sm font-semibold text-gray-900">Admin</p>
+                <p className="text-xs text-gray-600">Administrator</p>
+              </div>
+            </div>
+          </div>
+        </header>
+
+        {/* Scrollable Content */}
+        <main className="flex-1 overflow-y-auto p-8">
+          {/* Date Display */}
+          <div className="flex justify-end mb-4">
+            <div className="flex items-center gap-2 text-sm text-gray-600">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+              </svg>
+              {new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+            </div>
+          </div>
           <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
             <div className="flex items-center justify-between">
               <div>
@@ -509,69 +668,7 @@ export default function ShopAdminPage() {
 
         {/* Tabs */}
         <div className="bg-white rounded-xl shadow-sm mb-6 border border-gray-100">
-          <div className="flex border-b overflow-x-auto">
-            <button
-              onClick={() => setActiveTab('dashboard')}
-              className={`flex-1 py-4 px-6 font-semibold transition-all whitespace-nowrap ${
-                activeTab === 'dashboard'
-                  ? 'border-b-2 border-blue-600 text-blue-600 bg-blue-50'
-                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
-              }`}
-            >
-              📊 Dashboard
-            </button>
-            <button
-              onClick={() => setActiveTab('sellers')}
-              className={`flex-1 py-4 px-6 font-semibold transition-all whitespace-nowrap ${
-                activeTab === 'sellers'
-                  ? 'border-b-2 border-blue-600 text-blue-600 bg-blue-50'
-                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
-              }`}
-            >
-              🏪 Manage Sellers
-            </button>
-            <button
-              onClick={() => setActiveTab('customers')}
-              className={`flex-1 py-4 px-6 font-semibold transition-all whitespace-nowrap ${
-                activeTab === 'customers'
-                  ? 'border-b-2 border-blue-600 text-blue-600 bg-blue-50'
-                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
-              }`}
-            >
-              👥 Manage Customers
-            </button>
-            <button
-              onClick={() => setActiveTab('products')}
-              className={`flex-1 py-4 px-6 font-semibold transition-all whitespace-nowrap ${
-                activeTab === 'products'
-                  ? 'border-b-2 border-blue-600 text-blue-600 bg-blue-50'
-                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
-              }`}
-            >
-              📦 Manage Products
-            </button>
-            <button
-              onClick={() => setActiveTab('categories')}
-              className={`flex-1 py-4 px-6 font-semibold transition-all whitespace-nowrap ${
-                activeTab === 'categories'
-                  ? 'border-b-2 border-blue-600 text-blue-600 bg-blue-50'
-                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
-              }`}
-            >
-              🏷️ Categories
-            </button>
-            <button
-              onClick={() => setActiveTab('orders')}
-              className={`flex-1 py-4 px-6 font-semibold transition-all whitespace-nowrap ${
-                activeTab === 'orders'
-                  ? 'border-b-2 border-blue-600 text-blue-600 bg-blue-50'
-                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
-              }`}
-            >
-              🛒 Manage Orders
-            </button>
-          </div>
-        </div>
+
 
         {/* Content */}
         {loading ? (
@@ -645,16 +742,186 @@ export default function ShopAdminPage() {
               </div>
             </div>
 
-            {/* Quick Overview */}
-            <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-              <h3 className="text-lg font-bold mb-4">Admin Overview</h3>
-              <div className="space-y-3 text-sm">
-                <p className="text-gray-600">✅ View total orders, customers, sellers, and sales</p>
-                <p className="text-gray-600">✅ Approve, reject, or suspend seller accounts</p>
-                <p className="text-gray-600">✅ View and manage buyer accounts</p>
-                <p className="text-gray-600">✅ Review and remove product listings</p>
-                <p className="text-gray-600">✅ Monitor customer orders and delivery status</p>
-                <p className="text-gray-600">✅ Manage website settings and admin account</p>
+            {/* Quick Actions */}
+            <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 mb-6">
+              <h3 className="text-lg font-bold mb-4">Quick Actions</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                <button
+                  onClick={() => setActiveTab('sellers')}
+                  className="flex items-center justify-between p-4 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors group"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center">
+                      <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                      </svg>
+                    </div>
+                    <span className="font-semibold text-gray-900">View Sellers</span>
+                  </div>
+                  {stats.pendingSellers > 0 && (
+                    <span className="bg-orange-500 text-white text-xs font-bold px-2 py-1 rounded-full">{stats.pendingSellers}</span>
+                  )}
+                </button>
+
+                <button
+                  onClick={() => setActiveTab('products')}
+                  className="flex items-center justify-between p-4 bg-green-50 hover:bg-green-100 rounded-lg transition-colors group"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-green-600 rounded-lg flex items-center justify-center">
+                      <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                      </svg>
+                    </div>
+                    <span className="font-semibold text-gray-900">Manage Products</span>
+                  </div>
+                </button>
+
+                <button
+                  onClick={() => setActiveTab('orders')}
+                  className="flex items-center justify-between p-4 bg-purple-50 hover:bg-purple-100 rounded-lg transition-colors group"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-purple-600 rounded-lg flex items-center justify-center">
+                      <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
+                      </svg>
+                    </div>
+                    <span className="font-semibold text-gray-900">View Orders</span>
+                  </div>
+                </button>
+
+                <button
+                  onClick={() => setActiveTab('customers')}
+                  className="flex items-center justify-between p-4 bg-yellow-50 hover:bg-yellow-100 rounded-lg transition-colors group"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-yellow-600 rounded-lg flex items-center justify-center">
+                      <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+                      </svg>
+                    </div>
+                    <span className="font-semibold text-gray-900">View Customers</span>
+                  </div>
+                </button>
+              </div>
+            </div>
+
+            {/* Pending Approvals & Sales Overview Row */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+              {/* Pending Approvals */}
+              <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                <h3 className="text-lg font-bold mb-4">Pending Approvals</h3>
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between p-3 bg-orange-50 rounded-lg">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 bg-orange-500 rounded-lg flex items-center justify-center">
+                        <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                        </svg>
+                      </div>
+                      <div>
+                        <p className="font-semibold text-gray-900">Seller Applications</p>
+                        <p className="text-xs text-gray-600">New registrations</p>
+                      </div>
+                    </div>
+                    <span className="bg-orange-500 text-white text-sm font-bold px-3 py-1 rounded-full">{stats.pendingSellers}</span>
+                  </div>
+
+                  <div className="flex items-center justify-between p-3 bg-blue-50 rounded-lg">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 bg-blue-500 rounded-lg flex items-center justify-center">
+                        <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                        </svg>
+                      </div>
+                      <div>
+                        <p className="font-semibold text-gray-900">Product Listings</p>
+                        <p className="text-xs text-gray-600">Awaiting review</p>
+                      </div>
+                    </div>
+                    <span className="bg-blue-500 text-white text-sm font-bold px-3 py-1 rounded-full">0</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Sales Overview Chart Placeholder */}
+              <div className="lg:col-span-2 bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                <h3 className="text-lg font-bold mb-4">Sales Overview</h3>
+                <div className="h-48 flex items-center justify-center bg-gray-50 rounded-lg">
+                  <div className="text-center">
+                    <svg className="w-16 h-16 text-gray-400 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                    </svg>
+                    <p className="text-gray-600 font-medium">Sales Chart</p>
+                    <p className="text-xs text-gray-500 mt-1">Coming Soon</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Recent Orders */}
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+              <div className="p-6 border-b border-gray-200">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-bold">Recent Orders</h3>
+                  <button
+                    onClick={() => setActiveTab('orders')}
+                    className="text-sm font-semibold text-blue-600 hover:text-blue-700"
+                  >
+                    View All →
+                  </button>
+                </div>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-gray-50 border-b border-gray-200">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Order ID</th>
+                      <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Customer</th>
+                      <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Products</th>
+                      <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Total</th>
+                      <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Status</th>
+                      <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Date</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200">
+                    {orders.slice(0, 5).map((order) => (
+                      <tr key={order.id} className="hover:bg-gray-50">
+                        <td className="px-6 py-4 text-sm font-semibold text-gray-900">#{order.id.slice(0, 8)}</td>
+                        <td className="px-6 py-4 text-sm text-gray-600">
+                          {order.shop_buyers?.full_name || 'N/A'}
+                        </td>
+                        <td className="px-6 py-4 text-sm text-gray-600">
+                          {order.shop_order_items?.length || 0} items
+                        </td>
+                        <td className="px-6 py-4 text-sm font-semibold text-gray-900">
+                          ₱{order.total_amount?.toLocaleString() || '0'}
+                        </td>
+                        <td className="px-6 py-4">
+                          <span className={`px-3 py-1 text-xs font-semibold rounded-full ${
+                            order.status === 'delivered' ? 'bg-green-100 text-green-700' :
+                            order.status === 'confirmed' ? 'bg-blue-100 text-blue-700' :
+                            order.status === 'pending' ? 'bg-yellow-100 text-yellow-700' :
+                            'bg-red-100 text-red-700'
+                          }`}>
+                            {order.status?.charAt(0).toUpperCase() + order.status?.slice(1)}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 text-sm text-gray-600">
+                          {new Date(order.created_at).toLocaleDateString()}
+                        </td>
+                      </tr>
+                    ))}
+                    {orders.length === 0 && (
+                      <tr>
+                        <td colSpan="6" className="px-6 py-8 text-center text-gray-500">
+                          No orders yet
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
               </div>
             </div>
           </div>
@@ -943,6 +1210,388 @@ export default function ShopAdminPage() {
                   ))}
                 </tbody>
               </table>
+            </div>
+          </div>
+        ) : activeTab === 'transactions' ? (
+          <div>
+            <div className="mb-6">
+              <h3 className="text-xl font-bold mb-2">Transaction Monitoring</h3>
+              <p className="text-gray-600 text-sm">Track all payment transactions and financial activities</p>
+            </div>
+
+            {/* Transaction Stats */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
+              <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                <div className="flex items-center gap-3 mb-2">
+                  <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
+                    <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-600 font-medium">Completed</p>
+                    <p className="text-xl font-bold text-gray-900">₱{stats.totalSales.toLocaleString()}</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                <div className="flex items-center gap-3 mb-2">
+                  <div className="w-10 h-10 bg-yellow-100 rounded-lg flex items-center justify-center">
+                    <svg className="w-5 h-5 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-600 font-medium">Pending</p>
+                    <p className="text-xl font-bold text-gray-900">₱0</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                <div className="flex items-center gap-3 mb-2">
+                  <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                    <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
+                    </svg>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-600 font-medium">COD</p>
+                    <p className="text-xl font-bold text-gray-900">
+                      ₱{orders.filter(o => o.payment_method === 'cod').reduce((sum, o) => sum + (o.total_amount || 0), 0).toLocaleString()}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                <div className="flex items-center gap-3 mb-2">
+                  <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
+                    <svg className="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                    </svg>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-600 font-medium">GCash</p>
+                    <p className="text-xl font-bold text-gray-900">
+                      ₱{orders.filter(o => o.payment_method === 'gcash').reduce((sum, o) => sum + (o.total_amount || 0), 0).toLocaleString()}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Transaction History */}
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+              <div className="p-6 border-b border-gray-200">
+                <h4 className="font-bold text-lg">Transaction History</h4>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-gray-50 border-b border-gray-200">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Transaction ID</th>
+                      <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Order ID</th>
+                      <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Customer</th>
+                      <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Amount</th>
+                      <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Payment Method</th>
+                      <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Status</th>
+                      <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Date</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200">
+                    {orders.map((order) => (
+                      <tr key={order.id} className="hover:bg-gray-50">
+                        <td className="px-6 py-4 text-sm font-mono text-gray-900">TXN-{order.id.slice(0, 8).toUpperCase()}</td>
+                        <td className="px-6 py-4 text-sm font-semibold text-blue-600">#{order.id.slice(0, 8)}</td>
+                        <td className="px-6 py-4 text-sm text-gray-600">{order.shop_buyers?.full_name || 'N/A'}</td>
+                        <td className="px-6 py-4 text-sm font-bold text-gray-900">₱{order.total_amount?.toLocaleString()}</td>
+                        <td className="px-6 py-4">
+                          <span className="px-3 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-700 uppercase">
+                            {order.payment_method}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4">
+                          <span className={`px-3 py-1 text-xs font-semibold rounded-full ${
+                            order.status === 'delivered' ? 'bg-green-100 text-green-700' :
+                            order.status === 'confirmed' ? 'bg-blue-100 text-blue-700' :
+                            'bg-yellow-100 text-yellow-700'
+                          }`}>
+                            {order.status === 'delivered' ? 'Completed' : 'Processing'}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 text-sm text-gray-600">
+                          {new Date(order.created_at).toLocaleString()}
+                        </td>
+                      </tr>
+                    ))}
+                    {orders.length === 0 && (
+                      <tr>
+                        <td colSpan="7" className="px-6 py-8 text-center text-gray-500">
+                          No transactions yet
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        ) : activeTab === 'reports' ? (
+          <div>
+            <div className="mb-6">
+              <h3 className="text-xl font-bold mb-2">Reports & Analytics</h3>
+              <p className="text-gray-600 text-sm">Generate reports and analyze business performance</p>
+            </div>
+
+            {/* Report Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-6">
+              <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
+                <div className="flex items-center gap-4 mb-4">
+                  <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
+                    <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                    </svg>
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-gray-900">Sales Report</h4>
+                    <p className="text-xs text-gray-600">Daily, weekly, monthly sales</p>
+                  </div>
+                </div>
+                <button className="w-full py-2 px-4 bg-blue-50 hover:bg-blue-100 text-blue-700 font-semibold rounded-lg transition-colors">
+                  Generate Report
+                </button>
+              </div>
+
+              <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
+                <div className="flex items-center gap-4 mb-4">
+                  <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
+                    <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                    </svg>
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-gray-900">Product Report</h4>
+                    <p className="text-xs text-gray-600">Top selling products</p>
+                  </div>
+                </div>
+                <button className="w-full py-2 px-4 bg-green-50 hover:bg-green-100 text-green-700 font-semibold rounded-lg transition-colors">
+                  Generate Report
+                </button>
+              </div>
+
+              <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
+                <div className="flex items-center gap-4 mb-4">
+                  <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
+                    <svg className="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+                    </svg>
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-gray-900">Customer Report</h4>
+                    <p className="text-xs text-gray-600">Customer insights & behavior</p>
+                  </div>
+                </div>
+                <button className="w-full py-2 px-4 bg-purple-50 hover:bg-purple-100 text-purple-700 font-semibold rounded-lg transition-colors">
+                  Generate Report
+                </button>
+              </div>
+
+              <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
+                <div className="flex items-center gap-4 mb-4">
+                  <div className="w-12 h-12 bg-yellow-100 rounded-lg flex items-center justify-center">
+                    <svg className="w-6 h-6 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                    </svg>
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-gray-900">Seller Report</h4>
+                    <p className="text-xs text-gray-600">Seller performance metrics</p>
+                  </div>
+                </div>
+                <button className="w-full py-2 px-4 bg-yellow-50 hover:bg-yellow-100 text-yellow-700 font-semibold rounded-lg transition-colors">
+                  Generate Report
+                </button>
+              </div>
+
+              <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
+                <div className="flex items-center gap-4 mb-4">
+                  <div className="w-12 h-12 bg-red-100 rounded-lg flex items-center justify-center">
+                    <svg className="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
+                    </svg>
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-gray-900">Order Report</h4>
+                    <p className="text-xs text-gray-600">Order tracking & status</p>
+                  </div>
+                </div>
+                <button className="w-full py-2 px-4 bg-red-50 hover:bg-red-100 text-red-700 font-semibold rounded-lg transition-colors">
+                  Generate Report
+                </button>
+              </div>
+
+              <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
+                <div className="flex items-center gap-4 mb-4">
+                  <div className="w-12 h-12 bg-indigo-100 rounded-lg flex items-center justify-center">
+                    <svg className="w-6 h-6 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-gray-900">Revenue Report</h4>
+                    <p className="text-xs text-gray-600">Revenue analysis & trends</p>
+                  </div>
+                </div>
+                <button className="w-full py-2 px-4 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-semibold rounded-lg transition-colors">
+                  Generate Report
+                </button>
+              </div>
+            </div>
+
+            {/* Export Options */}
+            <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+              <h4 className="font-bold text-lg mb-4">Export Data</h4>
+              <div className="flex flex-wrap gap-3">
+                <button className="flex items-center gap-2 px-4 py-2 bg-green-100 hover:bg-green-200 text-green-700 font-semibold rounded-lg transition-colors">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                  Export as Excel
+                </button>
+                <button className="flex items-center gap-2 px-4 py-2 bg-red-100 hover:bg-red-200 text-red-700 font-semibold rounded-lg transition-colors">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                  </svg>
+                  Export as PDF
+                </button>
+                <button className="flex items-center gap-2 px-4 py-2 bg-blue-100 hover:bg-blue-200 text-blue-700 font-semibold rounded-lg transition-colors">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                  Export as CSV
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : activeTab === 'settings' ? (
+          <div>
+            <div className="mb-6">
+              <h3 className="text-xl font-bold mb-2">Settings</h3>
+              <p className="text-gray-600 text-sm">Manage website settings and admin account</p>
+            </div>
+
+            <div className="space-y-6">
+              {/* Admin Account Settings */}
+              <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                <h4 className="font-bold text-lg mb-4 flex items-center gap-2">
+                  <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                  </svg>
+                  Admin Account
+                </h4>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-semibold mb-2 text-gray-700">Email</label>
+                    <input
+                      type="email"
+                      value="shiki@gmail.com"
+                      disabled
+                      className="w-full px-4 py-3 border-2 rounded-lg bg-gray-50 text-gray-600"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold mb-2 text-gray-700">Admin Name</label>
+                    <input
+                      type="text"
+                      defaultValue="Admin"
+                      className="w-full px-4 py-3 border-2 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                  </div>
+                  <button className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition-colors">
+                    Update Profile
+                  </button>
+                </div>
+              </div>
+
+              {/* Website Settings */}
+              <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                <h4 className="font-bold text-lg mb-4 flex items-center gap-2">
+                  <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
+                  </svg>
+                  Website Settings
+                </h4>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-semibold mb-2 text-gray-700">Website Name</label>
+                    <input
+                      type="text"
+                      defaultValue="Lumina Heritage Marketplace"
+                      className="w-full px-4 py-3 border-2 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold mb-2 text-gray-700">Contact Email</label>
+                    <input
+                      type="email"
+                      defaultValue="support@lumina.com"
+                      className="w-full px-4 py-3 border-2 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold mb-2 text-gray-700">Contact Phone</label>
+                    <input
+                      type="tel"
+                      defaultValue="+63 123 456 7890"
+                      className="w-full px-4 py-3 border-2 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                    />
+                  </div>
+                  <button className="px-6 py-2.5 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg transition-colors">
+                    Save Changes
+                  </button>
+                </div>
+              </div>
+
+              {/* Security Settings */}
+              <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                <h4 className="font-bold text-lg mb-4 flex items-center gap-2">
+                  <svg className="w-5 h-5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                  </svg>
+                  Security
+                </h4>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-semibold mb-2 text-gray-700">Current Password</label>
+                    <input
+                      type="password"
+                      placeholder="Enter current password"
+                      className="w-full px-4 py-3 border-2 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold mb-2 text-gray-700">New Password</label>
+                    <input
+                      type="password"
+                      placeholder="Enter new password"
+                      className="w-full px-4 py-3 border-2 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold mb-2 text-gray-700">Confirm New Password</label>
+                    <input
+                      type="password"
+                      placeholder="Confirm new password"
+                      className="w-full px-4 py-3 border-2 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                    />
+                  </div>
+                  <button className="px-6 py-2.5 bg-red-600 hover:bg-red-700 text-white font-semibold rounded-lg transition-colors">
+                    Change Password
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         ) : null}
