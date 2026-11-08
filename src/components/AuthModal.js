@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabaseClient';
 import { DEMO_ADMIN_EMAIL, DEMO_ADMIN_PASSWORD, getAccountRole } from '@/lib/roles';
+import { ensureSellerProfile } from '@/lib/sellerProfile';
 
 export default function AuthModal({ isOpen, onClose, mode: initialMode = 'login' }) {
   const [mode, setMode] = useState(initialMode); // 'login' or 'signup'
@@ -67,26 +68,15 @@ export default function AuthModal({ isOpen, onClose, mode: initialMode = 'login'
           }
         }
 
-        // Check if user is a seller and redirect to seller dashboard
+        // Sellers always land on their dashboard, and a seller signup that could
+        // not write its shop profile (pending email confirmation) completes here
         if (data?.user) {
-          console.log('Login successful, checking seller profile for user:', data.user.id);
-          
-          const { data: sellerData, error: sellerError } = await supabase
-            .from('shop_sellers')
-            .select('*')
-            .eq('user_id', data.user.id)
-            .maybeSingle(); // Use maybeSingle instead of single to avoid error if not found
-
-          console.log('Seller query result:', { sellerData, sellerError });
+          const sellerData = await ensureSellerProfile(data.user);
 
           if (sellerData) {
-            console.log('User is a seller, redirecting to dashboard...');
-            // User is a seller - redirect to seller dashboard
-            setLoading(false); // Stop loading state
-            window.location.href = '/shop/seller/dashboard'; // Use hard redirect to ensure navigation
+            setLoading(false);
+            window.location.href = '/shop/seller/dashboard';
             return;
-          } else {
-            console.log('User is a buyer, staying on shop page');
           }
         }
 
@@ -113,30 +103,30 @@ export default function AuthModal({ isOpen, onClose, mode: initialMode = 'login'
         const { data, error } = await signUp(email, password, fullName, sellerMetadata);
         if (error) throw error;
 
-        // If signing up as seller, create seller record
+        // If signing up as seller, create seller record. The insert is allowed
+        // before email confirmation, so it must not be skipped without a session.
         if (accountType === 'seller' && data?.user) {
-          if (!data.session) {
-            // No session: the seller row is created automatically on first sign-in
-            setError('✅ Seller account created! Confirm your email, then sign in — your shop profile is completed automatically. Awaiting admin approval.');
-          } else {
-            const { error: sellerError } = await supabase
-              .from('shop_sellers')
-              .insert([{
-                user_id: data.user.id,
-                business_name: businessName,
-                contact_email: email,
-                contact_phone: contactPhone || null,
-                address: address || null,
-                is_approved: false, // Requires admin approval
-                is_active: true
-              }]);
+          const { error: sellerError } = await supabase
+            .from('shop_sellers')
+            .insert([{
+              user_id: data.user.id,
+              business_name: businessName,
+              contact_email: email,
+              contact_phone: contactPhone || null,
+              address: address || null,
+              is_approved: false, // Requires admin approval
+              is_active: true
+            }]);
 
-            if (sellerError) {
-              console.error('Error creating seller account:', sellerError);
-              setError('✅ Account created! Sign in to finish setting up your shop (awaiting admin approval).');
-            } else {
-              setError('✅ Seller account created! Awaiting admin approval.');
-            }
+          if (sellerError) {
+            console.error('Error creating seller account:', sellerError);
+            setError('✅ Account created! Sign in to finish setting up your shop (awaiting admin approval).');
+          } else {
+            // Also flag the profile as a seller so it never lands in Customers
+            await ensureSellerProfile(data.user);
+            setError(data.session
+              ? '✅ Seller account created! Awaiting admin approval.'
+              : '✅ Seller account created! Confirm your email, then sign in — awaiting admin approval.');
           }
         } else {
           setError(data?.session

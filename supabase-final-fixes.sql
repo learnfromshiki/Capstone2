@@ -24,6 +24,21 @@ create policy "Allow product deletes for admin testing" on shop_products
 delete from shop_products where name = 'QA Temp Product';
 delete from shop_categories where name = 'QA Temp Cat';
 
+-- 4. Repair a seller whose shop profile was never written at signup, so the
+--    account sat under Customers. Jed's account was already repaired from the
+--    app; these statements are here for reference and are safe to re-run.
+insert into shop_sellers (user_id, business_name, contact_email, is_approved, is_active)
+select p.id, p.full_name, p.email, false, true
+from profiles p
+where p.email = 'jedbuzinos@gmail.com'
+  and not exists (select 1 from shop_sellers s where s.user_id = p.id);
+
+update profiles set user_type = 'seller' where email = 'jedbuzinos@gmail.com';
+
+-- Rename the shop once the real business name is known.
+-- update shop_sellers set business_name = 'Real Shop Name'
+--   where contact_email = 'jedbuzinos@gmail.com';
+
 -- Verification: the test rows should be gone.
 select name, available, stock from shop_products order by created_at desc;
 select name, slug, is_active from shop_categories order by display_order asc;

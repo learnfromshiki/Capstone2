@@ -358,7 +358,7 @@ export default function ShopAdminPage() {
         // Customers are profiles that are neither sellers nor admins
         const sellerUserIds = new Set((sellersRes.data || []).map(s => s.user_id).filter(Boolean));
         const totalCustomers = (customersRes.data || [])
-          .filter(profile => profile.user_type !== 'admin' && !sellerUserIds.has(profile.id))
+          .filter(profile => !['admin', 'seller'].includes(profile.user_type) && !sellerUserIds.has(profile.id))
           .length;
 
         // Last 7 days of revenue for the dashboard chart
@@ -412,7 +412,8 @@ export default function ShopAdminPage() {
 
         setCustomers(
           (profilesRes.data || []).filter(
-            (profile) => profile.user_type !== 'admin' && !sellerUserIds.has(profile.id)
+            (profile) =>
+              !['admin', 'seller'].includes(profile.user_type) && !sellerUserIds.has(profile.id)
           )
         );
       } else if (activeTab === 'products') {

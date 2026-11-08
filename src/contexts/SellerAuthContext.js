@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabaseClient';
+import { ensureSellerProfile } from '@/lib/sellerProfile';
 
 const SellerAuthContext = createContext({});
 
@@ -64,30 +65,8 @@ export const SellerAuthProvider = ({ children }) => {
       // Seller signup while email confirmation was pending: the row could not be
       // written then (no session). Finish it now that the user is authenticated.
       if (!sellerRow) {
-        const { data: { session } } = await supabase.auth.getSession();
-        const intent = session?.user?.user_metadata;
-
-        if (intent?.account_type === 'seller' && intent.business_name) {
-          const { data: created, error: createError } = await supabase
-            .from('shop_sellers')
-            .insert({
-              user_id: userId,
-              business_name: intent.business_name,
-              contact_email: session.user.email,
-              contact_phone: intent.contact_phone || null,
-              address: intent.address || null,
-              is_approved: false,
-              is_active: true,
-            })
-            .select()
-            .maybeSingle();
-
-          if (createError) {
-            console.error('Could not complete the seller profile:', createError);
-          } else {
-            sellerRow = created;
-          }
-        }
+        const { data: { user: currentUser } } = await supabase.auth.getUser();
+        sellerRow = await ensureSellerProfile(currentUser);
       }
 
       setSeller(sellerRow);
@@ -138,6 +117,8 @@ export const SellerAuthProvider = ({ children }) => {
           console.warn('Seller profile deferred until first sign-in:', sellerError.message);
         } else if (sellerProfile) {
           setSeller(sellerProfile);
+          // Flag the profile as a seller so it never shows up under Customers
+          if (authData.session) await ensureSellerProfile(authData.user);
         }
       }
 
