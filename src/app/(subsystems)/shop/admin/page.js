@@ -2,19 +2,24 @@
 
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabaseClient';
+import { uploadProductImage, deleteProductImage } from '@/lib/imageUpload';
 import Link from 'next/link';
 
 export default function ShopAdminPage() {
   const [products, setProducts] = useState([]);
   const [orders, setOrders] = useState([]);
+  const [categories, setCategories] = useState([]);
   const [activeTab, setActiveTab] = useState('products');
   const [loading, setLoading] = useState(true);
   const [showAddProduct, setShowAddProduct] = useState(false);
+  const [showAddCategory, setShowAddCategory] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [adminEmail, setAdminEmail] = useState('');
   const [adminPassword, setAdminPassword] = useState('');
   const [loginError, setLoginError] = useState('');
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const [imagePreview, setImagePreview] = useState('');
   
   // Product form state
   const [newProduct, setNewProduct] = useState({
@@ -24,7 +29,15 @@ export default function ShopAdminPage() {
     stock: '',
     category: 'handicrafts',
     image_url: '',
-    artisan_name: ''
+    artisan_name: '',
+    imageFile: null
+  });
+
+  // Category form state
+  const [newCategory, setNewCategory] = useState({
+    name: '',
+    icon: '📦',
+    description: ''
   });
 
   // Check if already logged in
@@ -49,9 +62,28 @@ export default function ShopAdminPage() {
 
   useEffect(() => {
     if (isAuthenticated) {
+      fetchCategories();
       fetchData();
     }
   }, [activeTab, isAuthenticated]);
+
+  const fetchCategories = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('shop_categories')
+        .select('*')
+        .eq('is_active', true)
+        .order('display_order', { ascending: true });
+
+      if (error) {
+        console.warn('Categories table may not exist yet:', error);
+        return;
+      }
+      setCategories(data || []);
+    } catch (error) {
+      console.error('Error fetching categories:', error);
+    }
+  };
 
   const handleLogin = (e) => {
     e.preventDefault();
@@ -68,6 +100,60 @@ export default function ShopAdminPage() {
   const handleLogout = () => {
     setIsAuthenticated(false);
     sessionStorage.removeItem('admin_authenticated');
+    // Redirect to shop page after logout
+    window.location.href = '/shop';
+  };
+
+  const handleImageUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    setUploadingImage(true);
+    try {
+      const { url, error } = await uploadProductImage(file, 'admin');
+      
+      if (error) throw error;
+      
+      setNewProduct({ ...newProduct, image_url: url, imageFile: file });
+      setImagePreview(URL.createObjectURL(file));
+      
+    } catch (error) {
+      console.error('Error uploading image:', error);
+      alert('Failed to upload image: ' + error.message);
+    } finally {
+      setUploadingImage(false);
+    }
+  };
+
+  const handleAddCategory = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+
+    try {
+      const slug = newCategory.name.toLowerCase().replace(/\s+/g, '-');
+      
+      const { error } = await supabase
+        .from('shop_categories')
+        .insert([{
+          name: newCategory.name,
+          slug: slug,
+          icon: newCategory.icon,
+          description: newCategory.description,
+          display_order: categories.length
+        }]);
+
+      if (error) throw error;
+
+      setNewCategory({ name: '', icon: '📦', description: '' });
+      setShowAddCategory(false);
+      fetchCategories();
+      alert('Category added successfully!');
+    } catch (error) {
+      console.error('Error adding category:', error);
+      alert('Failed to add category: ' + error.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const fetchData = async () => {
@@ -81,6 +167,14 @@ export default function ShopAdminPage() {
 
         if (error) throw error;
         setProducts(data || []);
+      } else if (activeTab === 'categories') {
+        const { data, error } = await supabase
+          .from('shop_categories')
+          .select('*')
+          .order('display_order', { ascending: true });
+
+        if (error) throw error;
+        setCategories(data || []);
       } else {
         const { data, error } = await supabase
           .from('shop_orders')
@@ -117,6 +211,9 @@ export default function ShopAdminPage() {
         setLoading(false);
         return;
       }
+
+      // Use uploaded image URL if available, otherwise use entered URL
+      const imageUrl = newProduct.image_url || null;
       
       const { error } = await supabase
         .from('shop_products')
@@ -126,7 +223,7 @@ export default function ShopAdminPage() {
           price: price,
           stock: stock,
           category: newProduct.category,
-          image_url: newProduct.image_url || null,
+          image_url: imageUrl,
           artisan_name: newProduct.artisan_name || null,
           available: true
         }]);
@@ -140,8 +237,10 @@ export default function ShopAdminPage() {
         stock: '',
         category: 'handicrafts',
         image_url: '',
-        artisan_name: ''
+        artisan_name: '',
+        imageFile: null
       });
+      setImagePreview('');
       setShowAddProduct(false);
       fetchData();
       alert('Product added successfully!');
@@ -379,6 +478,16 @@ export default function ShopAdminPage() {
               Products
             </button>
             <button
+              onClick={() => setActiveTab('categories')}
+              className={`flex-1 py-4 px-6 font-semibold transition-all ${
+                activeTab === 'categories'
+                  ? 'border-b-2 border-blue-600 text-blue-600 bg-blue-50'
+                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+              }`}
+            >
+              Categories
+            </button>
+            <button
               onClick={() => setActiveTab('orders')}
               className={`flex-1 py-4 px-6 font-semibold transition-all ${
                 activeTab === 'orders'
@@ -553,6 +662,54 @@ export default function ShopAdminPage() {
               ))}
             </div>
           </div>
+        ) : activeTab === 'categories' ? (
+          <div>
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-xl font-bold">Manage Categories</h3>
+              <button
+                onClick={() => setShowAddCategory(true)}
+                className="flex items-center gap-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-6 py-2.5 rounded-lg font-semibold hover:from-blue-700 hover:to-indigo-700 transition-all shadow-md hover:shadow-lg"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                </svg>
+                Add Category
+              </button>
+            </div>
+
+            <div className="bg-white rounded-xl shadow-sm overflow-hidden border border-gray-100">
+              <table className="w-full">
+                <thead className="bg-gray-50 border-b border-gray-200">
+                  <tr>
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase">Icon</th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase">Name</th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase">Slug</th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase">Description</th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase">Order</th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200">
+                  {categories.map((category) => (
+                    <tr key={category.id} className="hover:bg-gray-50">
+                      <td className="px-6 py-4 text-2xl">{category.icon}</td>
+                      <td className="px-6 py-4 font-semibold">{category.name}</td>
+                      <td className="px-6 py-4 text-sm text-gray-600">{category.slug}</td>
+                      <td className="px-6 py-4 text-sm text-gray-600">{category.description || '-'}</td>
+                      <td className="px-6 py-4 text-sm">{category.display_order}</td>
+                      <td className="px-6 py-4">
+                        <span className={`px-3 py-1 text-xs font-semibold rounded-full ${
+                          category.is_active ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                        }`}>
+                          {category.is_active ? 'Active' : 'Inactive'}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
         )}
       </div>
 
@@ -623,18 +780,40 @@ export default function ShopAdminPage() {
 
               <div>
                 <label className="block text-sm font-semibold mb-2">Category *</label>
-                <select
-                  value={newProduct.category}
-                  onChange={(e) => setNewProduct({ ...newProduct, category: e.target.value })}
-                  className="w-full px-4 py-3 border-2 rounded-xl focus:ring-2 focus:ring-blue-500"
-                  required
-                >
-                  <option value="handicrafts">🧺 Handicrafts</option>
-                  <option value="food">🍽️ Food</option>
-                  <option value="souvenirs">🎁 Souvenirs</option>
-                  <option value="weavings">🧵 Weavings</option>
-                  <option value="art">🎨 Art</option>
-                </select>
+                <div className="flex gap-2">
+                  <select
+                    value={newProduct.category}
+                    onChange={(e) => setNewProduct({ ...newProduct, category: e.target.value })}
+                    className="flex-1 px-4 py-3 border-2 rounded-xl focus:ring-2 focus:ring-blue-500"
+                    required
+                  >
+                    {categories.length > 0 ? (
+                      categories.filter(c => c.slug !== 'all').map((cat) => (
+                        <option key={cat.id} value={cat.slug}>
+                          {cat.icon} {cat.name}
+                        </option>
+                      ))
+                    ) : (
+                      <>
+                        <option value="handicrafts">🧺 Handicrafts</option>
+                        <option value="food">🍽️ Food</option>
+                        <option value="souvenirs">🎁 Souvenirs</option>
+                        <option value="weavings">🧵 Weavings</option>
+                        <option value="art">🎨 Art</option>
+                      </>
+                    )}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() => setShowAddCategory(true)}
+                    className="px-4 py-2 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 transition-colors"
+                    title="Add New Category"
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                    </svg>
+                  </button>
+                </div>
               </div>
 
               <div>
@@ -648,21 +827,70 @@ export default function ShopAdminPage() {
               </div>
 
               <div>
-                <label className="block text-sm font-semibold mb-2">Image URL</label>
-                <input
-                  type="url"
-                  value={newProduct.image_url}
-                  onChange={(e) => setNewProduct({ ...newProduct, image_url: e.target.value })}
-                  className="w-full px-4 py-3 border-2 rounded-xl focus:ring-2 focus:ring-blue-500"
-                  placeholder="https://example.com/image.jpg"
-                />
-                {newProduct.image_url && (
-                  <img
-                    src={newProduct.image_url}
-                    alt="Preview"
-                    className="mt-3 w-32 h-32 object-cover rounded-lg"
+                <label className="block text-sm font-semibold mb-2">Product Image</label>
+                
+                {/* Image Upload */}
+                <div className="space-y-4">
+                  <div className="border-2 border-dashed border-gray-300 rounded-xl p-6 text-center hover:border-blue-500 transition-colors">
+                    <input
+                      type="file"
+                      id="imageUpload"
+                      accept="image/jpeg,image/jpg,image/png,image/gif,image/webp"
+                      onChange={handleImageUpload}
+                      className="hidden"
+                    />
+                    <label htmlFor="imageUpload" className="cursor-pointer">
+                      {uploadingImage ? (
+                        <div className="flex flex-col items-center">
+                          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div>
+                          <p className="text-gray-600">Uploading image...</p>
+                        </div>
+                      ) : (
+                        <div>
+                          <svg className="w-12 h-12 text-gray-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                          </svg>
+                          <p className="text-gray-600 font-medium mb-2">Click to upload or drag and drop</p>
+                          <p className="text-sm text-gray-500">JPG, PNG, GIF, WebP (Max 5MB)</p>
+                        </div>
+                      )}
+                    </label>
+                  </div>
+
+                  {/* OR Divider */}
+                  <div className="relative">
+                    <div className="absolute inset-0 flex items-center">
+                      <div className="w-full border-t border-gray-300"></div>
+                    </div>
+                    <div className="relative flex justify-center text-sm">
+                      <span className="px-2 bg-white text-gray-500">OR</span>
+                    </div>
+                  </div>
+
+                  {/* Image URL Input */}
+                  <input
+                    type="url"
+                    value={newProduct.image_url}
+                    onChange={(e) => setNewProduct({ ...newProduct, image_url: e.target.value })}
+                    placeholder="https://example.com/image.jpg"
+                    className="w-full px-4 py-3 border-2 rounded-xl focus:ring-2 focus:ring-blue-500"
                   />
-                )}
+
+                  {/* Image Preview */}
+                  {(imagePreview || newProduct.image_url) && (
+                    <div className="mt-4">
+                      <p className="text-sm font-semibold mb-2">Preview:</p>
+                      <img
+                        src={imagePreview || newProduct.image_url}
+                        alt="Preview"
+                        className="w-full h-48 object-cover rounded-lg"
+                        onError={(e) => {
+                          e.target.style.display = 'none';
+                        }}
+                      />
+                    </div>
+                  )}
+                </div>
               </div>
 
               <div className="flex gap-3 pt-4">
@@ -679,6 +907,80 @@ export default function ShopAdminPage() {
                   className="flex-1 px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl font-semibold hover:from-blue-700 hover:to-indigo-700 disabled:opacity-50"
                 >
                   {loading ? 'Adding...' : 'Add Product'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Add Category Modal */}
+      {showAddCategory && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full">
+            <div className="p-6 border-b">
+              <div className="flex justify-between items-center">
+                <h2 className="text-2xl font-bold">Add New Category</h2>
+                <button onClick={() => setShowAddCategory(false)} className="text-gray-400 hover:text-gray-600">
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+
+            <form onSubmit={handleAddCategory} className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-semibold mb-2">Category Name *</label>
+                <input
+                  type="text"
+                  value={newCategory.name}
+                  onChange={(e) => setNewCategory({ ...newCategory, name: e.target.value })}
+                  className="w-full px-4 py-3 border-2 rounded-xl focus:ring-2 focus:ring-blue-500"
+                  placeholder="e.g., Electronics"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold mb-2">Icon (Emoji) *</label>
+                <input
+                  type="text"
+                  value={newCategory.icon}
+                  onChange={(e) => setNewCategory({ ...newCategory, icon: e.target.value })}
+                  className="w-full px-4 py-3 border-2 rounded-xl focus:ring-2 focus:ring-blue-500 text-2xl"
+                  placeholder="📦"
+                  required
+                  maxLength={2}
+                />
+                <p className="text-xs text-gray-500 mt-1">Choose any emoji (🎯 📱 👕 🍕 etc.)</p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold mb-2">Description</label>
+                <textarea
+                  value={newCategory.description}
+                  onChange={(e) => setNewCategory({ ...newCategory, description: e.target.value })}
+                  rows="3"
+                  className="w-full px-4 py-3 border-2 rounded-xl focus:ring-2 focus:ring-blue-500"
+                  placeholder="Optional category description"
+                />
+              </div>
+
+              <div className="flex gap-3 pt-4">
+                <button
+                  type="button"
+                  onClick={() => setShowAddCategory(false)}
+                  className="flex-1 px-6 py-3 border-2 rounded-xl font-semibold hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="flex-1 px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl font-semibold hover:from-blue-700 hover:to-indigo-700 disabled:opacity-50"
+                >
+                  {loading ? 'Adding...' : 'Add Category'}
                 </button>
               </div>
             </form>
