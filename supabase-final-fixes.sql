@@ -1,0 +1,29 @@
+-- =====================================================
+-- FINAL FIXES — run once in the Supabase SQL Editor
+-- =====================================================
+-- The demo admin login (shiki@gmail.com) is checked in the browser only, so
+-- its requests reach the database as "anon". If an RLS policy requires
+-- is_admin() or auth.role() = 'authenticated', that check fails and the action
+-- breaks with 401 or, worse, silently changes nothing.
+--
+-- These are the same permissive "for testing" policies already used for
+-- profiles and shop_sellers. Replace them with is_admin() policies once every
+-- admin signs in with a real Supabase account.
+
+-- 1. Website Settings → "Save Changes" returned 401.
+drop policy if exists "Allow settings writes for admin testing" on shop_settings;
+create policy "Allow settings writes for admin testing" on shop_settings
+  for all using (true) with check (true);
+
+-- 2. Products → Delete returned 204 but removed nothing (no DELETE policy existed).
+drop policy if exists "Allow product deletes for admin testing" on shop_products;
+create policy "Allow product deletes for admin testing" on shop_products
+  for delete using (true);
+
+-- 3. Remove the two rows created by the automated button test.
+delete from shop_products where name = 'QA Temp Product';
+delete from shop_categories where name = 'QA Temp Cat';
+
+-- Verification: the test rows should be gone.
+select name, available, stock from shop_products order by created_at desc;
+select name, slug, is_active from shop_categories order by display_order asc;

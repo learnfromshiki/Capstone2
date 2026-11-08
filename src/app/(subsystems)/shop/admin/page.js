@@ -510,16 +510,21 @@ export default function ShopAdminPage() {
 
   const toggleProductAvailability = async (productId, currentStatus) => {
     try {
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('shop_products')
         .update({ available: !currentStatus })
-        .eq('id', productId);
+        .eq('id', productId)
+        .select('id');
 
       if (error) throw error;
+      if (!data || data.length === 0) {
+        alert('Could not update this product. The database blocked the change — run supabase-final-fixes.sql to allow admin writes.');
+        return;
+      }
       fetchData();
     } catch (error) {
       console.error('Error updating product:', error);
-      alert('Failed to update product');
+      alert('Failed to update product: ' + (error.message || 'unknown error'));
     }
   };
 
@@ -527,16 +532,21 @@ export default function ShopAdminPage() {
     if (!confirm('Are you sure you want to delete this product?')) return;
     
     try {
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('shop_products')
         .delete()
-        .eq('id', productId);
+        .eq('id', productId)
+        .select('id');
 
       if (error) throw error;
+      if (!data || data.length === 0) {
+        alert('Could not delete this product. The database blocked the change — run supabase-final-fixes.sql to allow admin writes.');
+        return;
+      }
       fetchData();
     } catch (error) {
       console.error('Error deleting product:', error);
-      alert('Failed to delete product');
+      alert('Failed to delete product: ' + (error.message || 'unknown error'));
     }
   };
 
@@ -842,7 +852,7 @@ export default function ShopAdminPage() {
       console.error('Error saving website settings:', error);
       showToast(
         error.code === '42P01' || error.message?.includes('shop_settings')
-          ? 'Saving settings needs the shop_settings table. Run supabase-admin-policies.sql in Supabase.'
+          ? 'Could not save settings — the database blocked the write. Run supabase-final-fixes.sql in Supabase.'
           : 'Failed to save settings: ' + error.message,
         'error'
       );
