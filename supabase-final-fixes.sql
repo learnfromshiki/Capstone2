@@ -24,7 +24,23 @@ create policy "Allow product deletes for admin testing" on shop_products
 delete from shop_products where name = 'QA Temp Product';
 delete from shop_categories where name = 'QA Temp Cat';
 
--- 4. Repair a seller whose shop profile was never written at signup, so the
+-- 4. Admin → Customers/Sellers → Delete returned nothing (no DELETE policies).
+drop policy if exists "Allow profile deletes for admin testing" on profiles;
+create policy "Allow profile deletes for admin testing" on profiles
+  for delete using (true);
+
+drop policy if exists "Allow seller deletes for admin testing" on shop_sellers;
+create policy "Allow seller deletes for admin testing" on shop_sellers
+  for delete using (true);
+
+-- The login itself lives in auth.users, which the browser keys cannot reach.
+-- To wipe a deleted account's login completely, run it here in the SQL editor:
+-- delete from auth.users where email = 'someone@example.com';
+
+-- Leftover row from the delete-button test (safe to ignore if absent).
+delete from shop_sellers where business_name = 'ZZ Delete Probe';
+
+-- 5. Repair a seller whose shop profile was never written at signup, so the
 --    account sat under Customers. Jed's account was already repaired from the
 --    app; these statements are here for reference and are safe to re-run.
 insert into shop_sellers (user_id, business_name, contact_email, is_approved, is_active)

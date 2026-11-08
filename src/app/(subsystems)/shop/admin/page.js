@@ -551,6 +551,84 @@ export default function ShopAdminPage() {
     }
   };
 
+  const deleteCustomer = async (customer) => {
+    const name = customer.full_name || customer.email || 'this customer';
+
+    if (!confirm(`Delete "${name}" permanently?\n\nTheir profile and reward history are removed. Past orders stay in Transactions so sales records are not lost. This cannot be undone.`)) {
+      return;
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .delete()
+        .eq('id', customer.id)
+        .select('id');
+
+      if (error) throw error;
+      if (!data || data.length === 0) {
+        showToast('Could not delete this customer — the database blocked the change. Run supabase-final-fixes.sql in Supabase.', 'error');
+        return;
+      }
+
+      showToast(`${name} deleted.`, 'success');
+      fetchData();
+    } catch (error) {
+      console.error('Error deleting customer:', error);
+      showToast('Failed to delete customer: ' + (error.message || 'unknown error'), 'error');
+    }
+  };
+
+  const deleteSeller = async (seller) => {
+    const name = seller.business_name || 'this seller';
+
+    if (!confirm(`Delete "${name}" permanently?\n\nThis removes the shop, every product they listed and their account profile. This cannot be undone.`)) {
+      return;
+    }
+
+    try {
+      // Products first: seller_id is SET NULL on delete, so removing the shop
+      // afterwards would leave orphan listings in the catalog.
+      const { error: productsError } = await supabase
+        .from('shop_products')
+        .delete()
+        .eq('seller_id', seller.id);
+
+      if (productsError) {
+        console.warn('Could not remove the seller\'s products:', productsError.message);
+      }
+
+      const { data, error } = await supabase
+        .from('shop_sellers')
+        .delete()
+        .eq('id', seller.id)
+        .select('id');
+
+      if (error) throw error;
+      if (!data || data.length === 0) {
+        showToast('Could not delete this seller — the database blocked the change. Run supabase-final-fixes.sql in Supabase.', 'error');
+        return;
+      }
+
+      if (seller.user_id) {
+        const { error: profileError } = await supabase
+          .from('profiles')
+          .delete()
+          .eq('id', seller.user_id);
+
+        if (profileError) {
+          console.warn('Seller removed but the profile stayed:', profileError.message);
+        }
+      }
+
+      showToast(`Seller "${name}" deleted.`, 'success');
+      fetchData();
+    } catch (error) {
+      console.error('Error deleting seller:', error);
+      showToast('Failed to delete seller: ' + (error.message || 'unknown error'), 'error');
+    }
+  };
+
   const updateOrderStatus = async (orderId, newStatus) => {
     try {
       const { error} = await supabase
@@ -1548,6 +1626,12 @@ export default function ShopAdminPage() {
                             </button>
                           )}
                           <button
+                            onClick={() => deleteSeller(seller)}
+                            className="px-4 py-2 text-sm font-medium rounded-lg bg-red-600 text-white hover:bg-red-700 transition-colors shadow-sm"
+                          >
+                            Delete
+                          </button>
+                          <button
                             onClick={async () => {
                               try {
                                 const newStatus = !seller.is_active;
@@ -1629,16 +1713,24 @@ export default function ShopAdminPage() {
                       </td>
                       <td className="px-6 py-4 text-sm text-gray-700">{new Date(customer.created_at).toLocaleDateString()}</td>
                       <td className="px-6 py-4">
-                        <button
-                          onClick={() => toggleCustomerStatus(customer)}
-                          className={`text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors ${
-                            customer.is_suspended
-                              ? 'bg-green-50 text-green-700 hover:bg-green-100'
-                              : 'bg-red-50 text-red-700 hover:bg-red-100'
-                          }`}
-                        >
-                          {customer.is_suspended ? 'Reactivate' : 'Suspend'}
-                        </button>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => toggleCustomerStatus(customer)}
+                            className={`text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors ${
+                              customer.is_suspended
+                                ? 'bg-green-50 text-green-700 hover:bg-green-100'
+                                : 'bg-red-50 text-red-700 hover:bg-red-100'
+                            }`}
+                          >
+                            {customer.is_suspended ? 'Reactivate' : 'Suspend'}
+                          </button>
+                          <button
+                            onClick={() => deleteCustomer(customer)}
+                            className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-red-600 text-white hover:bg-red-700 transition-colors"
+                          >
+                            Delete
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
