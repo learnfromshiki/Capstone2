@@ -20,6 +20,7 @@ create table if not exists profiles (
   avatar_url text,
   points integer default 0,
   user_type text default 'tourist',
+  is_suspended boolean default false,
   created_at timestamp with time zone default now(),
   updated_at timestamp with time zone default now()
 );
@@ -29,6 +30,7 @@ alter table profiles add column if not exists email text;
 alter table profiles add column if not exists avatar_url text;
 alter table profiles add column if not exists phone text;
 alter table profiles add column if not exists address text;
+alter table profiles add column if not exists is_suspended boolean default false;
 alter table profiles add column if not exists points integer default 0;
 alter table profiles add column if not exists user_type text default 'tourist';
 alter table profiles add column if not exists updated_at timestamp with time zone default now();
@@ -119,6 +121,13 @@ create policy "Users can insert own profile" on profiles
 drop policy if exists "Users can update own profile" on profiles;
 create policy "Users can update own profile" on profiles
   for update using (auth.uid() = id or is_admin());
+
+-- The demo admin login has no Supabase session, so it cannot satisfy is_admin().
+-- This testing policy lets the admin dashboard suspend and restore customers.
+-- Remove it once every admin signs in with a real Supabase account.
+drop policy if exists "Allow profile updates for admin testing" on profiles;
+create policy "Allow profile updates for admin testing" on profiles
+  for update using (true);
 
 alter table reward_history enable row level security;
 

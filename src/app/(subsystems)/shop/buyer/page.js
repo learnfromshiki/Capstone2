@@ -71,6 +71,7 @@ export default function BuyerDashboard() {
   const [profileForm, setProfileForm] = useState({ full_name: '', phone: '', address: '' });
   const [passwordForm, setPasswordForm] = useState({ current: '', next: '', confirm: '' });
   const [reviewDrafts, setReviewDrafts] = useState({});
+  const [suspended, setSuspended] = useState(false);
 
   useEffect(() => {
     // Wait for the session to resolve before redirecting, otherwise a fresh
@@ -124,6 +125,8 @@ export default function BuyerDashboard() {
       if (productsRes.error) console.error('Error loading products:', productsRes.error);
       if (reviewsRes.error) console.error('Error loading reviews:', reviewsRes.error);
 
+      // A suspended customer sees a blocked screen instead of the dashboard
+      setSuspended(Boolean(profileRes.data?.is_suspended));
       setProfile(profileRes.data || null);
       setProfileForm({
         full_name: profileRes.data?.full_name || '',
@@ -287,8 +290,35 @@ export default function BuyerDashboard() {
 
   if (authLoading || loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
+
+  if (suspended) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+        <div className="bg-white p-8 rounded-2xl shadow-xl max-w-md w-full text-center">
+          <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <svg className="w-8 h-8 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M5 19h14a2 2 0 001.84-2.75L13.74 4a2 2 0 00-3.5 0L3.16 16.25A2 2 0 005 19z" />
+            </svg>
+          </div>
+          <h2 className="text-2xl font-bold text-gray-900 mb-2">Account Suspended</h2>
+          <p className="text-gray-600 mb-6">
+            This account has been suspended by an administrator. Please contact CONNECT-Daet support if you believe this is a mistake.
+          </p>
+          <button
+            onClick={async () => {
+              await supabase.auth.signOut();
+              router.push('/shop');
+            }}
+            className="w-full bg-blue-600 text-white py-3 rounded-lg font-semibold hover:bg-blue-700"
+          >
+            Back to Shop
+          </button>
+        </div>
       </div>
     );
   }

@@ -398,13 +398,23 @@ export default function ShopAdminPage() {
         if (error) throw error;
         setSellers(data || []);
       } else if (activeTab === 'customers') {
-        const { data, error } = await supabase
-          .from('profiles')
-          .select('*')
-          .order('created_at', { ascending: false });
+        const [profilesRes, sellerRowsRes] = await Promise.all([
+          supabase.from('profiles').select('*').order('created_at', { ascending: false }),
+          supabase.from('shop_sellers').select('user_id'),
+        ]);
 
-        if (error) throw error;
-        setCustomers(data || []);
+        if (profilesRes.error) throw profilesRes.error;
+
+        // A customer is a profile that is neither an admin nor a seller account
+        const sellerUserIds = new Set(
+          (sellerRowsRes.data || []).map((seller) => seller.user_id).filter(Boolean)
+        );
+
+        setCustomers(
+          (profilesRes.data || []).filter(
+            (profile) => profile.user_type !== 'admin' && !sellerUserIds.has(profile.id)
+          )
+        );
       } else if (activeTab === 'products') {
         const { data, error } = await supabase
           .from('shop_products')
@@ -542,6 +552,35 @@ export default function ShopAdminPage() {
     } catch (error) {
       console.error('Error updating order:', error);
       alert('Failed to update order');
+    }
+  };
+
+  const toggleCustomerStatus = async (customer) => {
+    const suspending = !customer.is_suspended;
+    const name = customer.full_name || customer.email || 'this customer';
+
+    if (!confirm(`Are you sure you want to ${suspending ? 'suspend' : 'reactivate'} "${name}"?`)) {
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update({ is_suspended: suspending, updated_at: new Date().toISOString() })
+        .eq('id', customer.id);
+
+      if (error) throw error;
+
+      showToast(`${name} ${suspending ? 'suspended' : 'reactivated'}.`, 'success');
+      fetchData();
+    } catch (error) {
+      console.error('Error updating customer status:', error);
+      showToast(
+        error.message?.includes('is_suspended')
+          ? 'Suspending needs the is_suspended column. Run supabase-admin-policies.sql in Supabase.'
+          : 'Failed to update customer: ' + error.message,
+        'error'
+      );
     }
   };
 
@@ -1550,16 +1589,46 @@ export default function ShopAdminPage() {
                     <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wide">Full Name</th>
                     <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wide">Email</th>
                     <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wide">Reward Points</th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wide">Status</th>
                     <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wide">Joined</th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wide">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200">
+                  {customers.length === 0 && (
+                    <tr>
+                      <td colSpan={6} className="px-6 py-10 text-center text-sm text-gray-500">
+                        No customers yet.
+                      </td>
+                    </tr>
+                  )}
                   {customers.map((customer) => (
                     <tr key={customer.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 font-semibold text-gray-900">{customer.full_name}</td>
-                      <td className="px-6 py-4 text-sm text-gray-700">{customer.email}</td>
+                      <td className="px-6 py-4 font-semibold text-gray-900">{customer.full_name || '—'}</td>
+                      <td className="px-6 py-4 text-sm text-gray-700">{customer.email || '—'}</td>
                       <td className="px-6 py-4 text-sm font-medium text-blue-600">{(customer.points ?? customer.reward_points) || 0} pts</td>
+                      <td className="px-6 py-4">
+                        <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
+                          customer.is_suspended
+                            ? 'bg-red-100 text-red-700'
+                            : 'bg-green-100 text-green-700'
+                        }`}>
+                          {customer.is_suspended ? 'Suspended' : 'Active'}
+                        </span>
+                      </td>
                       <td className="px-6 py-4 text-sm text-gray-700">{new Date(customer.created_at).toLocaleDateString()}</td>
+                      <td className="px-6 py-4">
+                        <button
+                          onClick={() => toggleCustomerStatus(customer)}
+                          className={`text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors ${
+                            customer.is_suspended
+                              ? 'bg-green-50 text-green-700 hover:bg-green-100'
+                              : 'bg-red-50 text-red-700 hover:bg-red-100'
+                          }`}
+                        >
+                          {customer.is_suspended ? 'Reactivate' : 'Suspend'}
+                        </button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>

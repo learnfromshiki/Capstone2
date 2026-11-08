@@ -51,6 +51,22 @@ export default function AuthModal({ isOpen, onClose, mode: initialMode = 'login'
           return;
         }
 
+        // Suspended accounts are blocked before any dashboard opens
+        if (data?.user) {
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('is_suspended')
+            .eq('id', data.user.id)
+            .maybeSingle();
+
+          if (profile?.is_suspended) {
+            await supabase.auth.signOut();
+            setError('This account has been suspended. Please contact CONNECT-Daet support.');
+            setLoading(false);
+            return;
+          }
+        }
+
         // Check if user is a seller and redirect to seller dashboard
         if (data?.user) {
           console.log('Login successful, checking seller profile for user:', data.user.id);
