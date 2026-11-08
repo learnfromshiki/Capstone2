@@ -153,7 +153,8 @@ export default function SellerDashboard() {
 
     setUploadingImage(true);
     try {
-      const imageUrl = await uploadProductImage(file);
+      const { url: imageUrl, error } = await uploadProductImage(file);
+      if (error) throw error;
       setNewProduct({ ...newProduct, image_url: imageUrl, imageFile: file });
       setImagePreview(URL.createObjectURL(file));
       alert('Image uploaded successfully!');

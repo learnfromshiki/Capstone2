@@ -3,8 +3,68 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import { uploadProductImage, deleteProductImage } from '@/lib/imageUpload';
+import { DEMO_ADMIN_EMAIL, DEMO_ADMIN_PASSWORD, getAccountRole } from '@/lib/roles';
 import Link from 'next/link';
 import Toast from '@/components/Toast';
+
+const REPORT_CONFIG = {
+  sales: {
+    title: 'Sales Report',
+    subtitle: 'Revenue grouped by day (cancelled orders excluded)',
+    columns: [
+      { key: 'date', label: 'Date' },
+      { key: 'orders', label: 'Orders' },
+      { key: 'revenue', label: 'Revenue (PHP)' }
+    ]
+  },
+  products: {
+    title: 'Product Report',
+    subtitle: 'Best selling products by units and revenue',
+    columns: [
+      { key: 'name', label: 'Product' },
+      { key: 'units', label: 'Units Sold' },
+      { key: 'revenue', label: 'Revenue (PHP)' }
+    ]
+  },
+  customers: {
+    title: 'Customer Report',
+    subtitle: 'Top customers by total spend',
+    columns: [
+      { key: 'name', label: 'Customer' },
+      { key: 'email', label: 'Email' },
+      { key: 'orders', label: 'Orders' },
+      { key: 'spent', label: 'Total Spent (PHP)' }
+    ]
+  },
+  sellers: {
+    title: 'Seller Report',
+    subtitle: 'Sales performance per seller',
+    columns: [
+      { key: 'name', label: 'Seller' },
+      { key: 'products', label: 'Listings' },
+      { key: 'units', label: 'Units Sold' },
+      { key: 'revenue', label: 'Sales (PHP)' }
+    ]
+  },
+  orders: {
+    title: 'Order Report',
+    subtitle: 'Order count and value by status',
+    columns: [
+      { key: 'status', label: 'Status' },
+      { key: 'orders', label: 'Orders' },
+      { key: 'value', label: 'Value (PHP)' }
+    ]
+  },
+  revenue: {
+    title: 'Revenue Report',
+    subtitle: 'Revenue breakdown by payment method',
+    columns: [
+      { key: 'method', label: 'Payment Method' },
+      { key: 'orders', label: 'Orders' },
+      { key: 'revenue', label: 'Revenue (PHP)' }
+    ]
+  }
+};
 
 export default function ShopAdminPage() {
   const [products, setProducts] = useState([]);
@@ -17,7 +77,8 @@ export default function ShopAdminPage() {
     totalCustomers: 0,
     totalSellers: 0,
     totalSales: 0,
-    pendingSellers: 0
+    pendingSellers: 0,
+    toFulfill: 0
   });
   const [activeTab, setActiveTab] = useState('dashboard');
   const [loading, setLoading] = useState(true);
@@ -25,9 +86,24 @@ export default function ShopAdminPage() {
   const [showAddCategory, setShowAddCategory] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [checkingAuth, setCheckingAuth] = useState(true);
   const [adminEmail, setAdminEmail] = useState('');
+  const [adminName, setAdminName] = useState('Admin');
   const [adminPassword, setAdminPassword] = useState('');
   const [loginError, setLoginError] = useState('');
+  const [websiteSettings, setWebsiteSettings] = useState({
+    siteName: 'Daet Local Shop',
+    contactEmail: 'support@connect-daet.ph',
+    contactPhone: '+63 900 000 0000'
+  });
+  const [savingSettings, setSavingSettings] = useState(false);
+  const [report, setReport] = useState(null);
+  const [reportLoading, setReportLoading] = useState('');
+  const [passwordForm, setPasswordForm] = useState({
+    current: '',
+    next: '',
+    confirm: ''
+  });
   const [uploadingImage, setUploadingImage] = useState(false);
   const [toast, setToast] = useState(null);
   const [imagePreview, setImagePreview] = useState('');
@@ -56,30 +132,42 @@ export default function ShopAdminPage() {
     description: ''
   });
 
-  // Check if already logged in
+  // Verify admin access: a Supabase account with the admin role, or the demo admin session
   useEffect(() => {
-    const adminAuth = sessionStorage.getItem('admin_authenticated');
-    const redirectEmail = sessionStorage.getItem('admin_redirect_email');
-    const redirectPassword = sessionStorage.getItem('admin_redirect_password');
-    
-    // Check if redirected with credentials
-    if (redirectEmail && redirectPassword) {
-      if (redirectEmail === 'shiki@gmail.com' && redirectPassword === 'shiki1234') {
-        setIsAuthenticated(true);
-        sessionStorage.setItem('admin_authenticated', 'true');
-        // Clear the redirect credentials
-        sessionStorage.removeItem('admin_redirect_email');
-        sessionStorage.removeItem('admin_redirect_password');
+    const verifyAdminAccess = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+
+        if (session?.user) {
+          const role = await getAccountRole(session.user.id);
+
+          if (role === 'admin') {
+            setIsAuthenticated(true);
+            setAdminEmail(session.user.email || '');
+            setAdminName(session.user.user_metadata?.full_name || 'Admin');
+            sessionStorage.setItem('admin_authenticated', 'true');
+            sessionStorage.setItem('admin_email', session.user.email || '');
+            return;
+          }
+        }
+      } catch (error) {
+        console.error('Error verifying admin access:', error);
       }
-    } else if (adminAuth === 'true') {
-      setIsAuthenticated(true);
-    }
+
+      if (sessionStorage.getItem('admin_authenticated') === 'true') {
+        setIsAuthenticated(true);
+        setAdminEmail(sessionStorage.getItem('admin_email') || DEMO_ADMIN_EMAIL);
+      }
+    };
+
+    verifyAdminAccess().finally(() => setCheckingAuth(false));
   }, []);
 
   useEffect(() => {
     if (isAuthenticated) {
       fetchCategories();
       fetchData();
+      fetchSettings();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, isAuthenticated]);
@@ -102,22 +190,87 @@ export default function ShopAdminPage() {
     }
   };
 
-  const handleLogin = (e) => {
-    e.preventDefault();
-    // Check admin credentials
-    if (adminEmail === 'shiki@gmail.com' && adminPassword === 'shiki1234') {
-      setIsAuthenticated(true);
-      sessionStorage.setItem('admin_authenticated', 'true');
-      setLoginError('');
-    } else {
-      setLoginError('Invalid email or password');
+  const fetchSettings = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('shop_settings')
+        .select('key, value');
+
+      // Settings table is optional until supabase-admin-policies.sql is run
+      if (error) return;
+
+      if (data?.length) {
+        const stored = data.reduce((acc, row) => ({ ...acc, [row.key]: row.value }), {});
+        setWebsiteSettings((prev) => ({ ...prev, ...stored }));
+      }
+    } catch (error) {
+      console.error('Error loading website settings:', error);
     }
   };
 
-  const handleLogout = () => {
+  const handleLogin = async (e) => {
+    e.preventDefault();
+    setLoginError('');
+    setLoading(true);
+
+    try {
+      // 1. Demo admin account (documented demo login)
+      if (
+        adminEmail.trim().toLowerCase() === DEMO_ADMIN_EMAIL &&
+        adminPassword === DEMO_ADMIN_PASSWORD
+      ) {
+        setIsAuthenticated(true);
+        setAdminName('Admin');
+        setAdminEmail(DEMO_ADMIN_EMAIL);
+        sessionStorage.setItem('admin_authenticated', 'true');
+        sessionStorage.setItem('admin_email', DEMO_ADMIN_EMAIL);
+        return;
+      }
+
+      // 2. Real admin account: Supabase login + admin role on the profile
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: adminEmail.trim(),
+        password: adminPassword
+      });
+
+      if (error || !data?.user) {
+        setLoginError('Invalid email or password');
+        return;
+      }
+
+      const role = await getAccountRole(data.user.id);
+
+      if (role !== 'admin') {
+        // Signed in, but this account is a buyer or seller - do not grant admin access
+        await supabase.auth.signOut();
+        setLoginError('This account does not have admin access.');
+        return;
+      }
+
+      setIsAuthenticated(true);
+      setAdminName(data.user.user_metadata?.full_name || 'Admin');
+      setAdminEmail(data.user.email || adminEmail.trim());
+      sessionStorage.setItem('admin_authenticated', 'true');
+      sessionStorage.setItem('admin_email', data.user.email || adminEmail.trim());
+    } catch (error) {
+      console.error('Admin login error:', error);
+      setLoginError('Unable to sign in right now. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleLogout = async () => {
     setIsAuthenticated(false);
     sessionStorage.removeItem('admin_authenticated');
-    // Redirect to shop page after logout
+    sessionStorage.removeItem('admin_email');
+
+    try {
+      await supabase.auth.signOut();
+    } catch (error) {
+      console.error('Error signing out:', error);
+    }
+
     window.location.href = '/shop';
   };
 
@@ -179,21 +332,25 @@ export default function ShopAdminPage() {
       if (activeTab === 'dashboard') {
         // Fetch all stats AND recent orders for dashboard
         const [ordersRes, customersRes, sellersRes, recentOrdersRes] = await Promise.all([
-          supabase.from('shop_orders').select('total_amount', { count: 'exact' }),
+          supabase.from('shop_orders').select('total_amount, status', { count: 'exact' }),
           supabase.from('profiles').select('id', { count: 'exact' }),
           supabase.from('shop_sellers').select('is_approved', { count: 'exact' }),
           supabase.from('shop_orders').select('*, shop_order_items(*)').order('created_at', { ascending: false }).limit(10)
         ]);
 
-        const totalSales = ordersRes.data?.reduce((sum, order) => sum + (order.total_amount || 0), 0) || 0;
+        // Cancelled orders are refunds, not revenue
+        const paidOrders = ordersRes.data?.filter(order => order.status !== 'cancelled') || [];
+        const totalSales = paidOrders.reduce((sum, order) => sum + (Number(order.total_amount) || 0), 0);
         const pendingSellers = sellersRes.data?.filter(s => !s.is_approved).length || 0;
+        const toFulfill = paidOrders.filter(order => ['pending', 'confirmed', 'processing'].includes(order.status)).length;
 
         setStats({
           totalOrders: ordersRes.count || 0,
           totalCustomers: customersRes.count || 0,
           totalSellers: sellersRes.count || 0,
           totalSales: totalSales,
-          pendingSellers: pendingSellers
+          pendingSellers: pendingSellers,
+          toFulfill: toFulfill
         });
         setOrders(recentOrdersRes.data || []);
       } else if (activeTab === 'sellers') {
@@ -352,7 +509,322 @@ export default function ShopAdminPage() {
     }
   };
 
+  const rejectSeller = async (seller) => {
+    if (!confirm(`Reject the seller application for "${seller.business_name}"?`)) {
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('shop_sellers')
+        .update({
+          is_rejected: true,
+          is_approved: false,
+          is_active: false,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', seller.id);
+
+      if (error) throw error;
+
+      showToast(`Seller application "${seller.business_name}" rejected.`, 'success');
+      fetchData();
+    } catch (error) {
+      console.error('Error rejecting seller:', error);
+      showToast(
+        error.message?.includes('is_rejected')
+          ? 'Rejecting needs the is_rejected column. Run supabase-admin-policies.sql in Supabase.'
+          : 'Failed to reject seller: ' + error.message,
+        'error'
+      );
+    }
+  };
+
+  const orderTotals = orders.reduce(
+    (acc, order) => {
+      const amount = Number(order.total_amount) || 0;
+
+      if (order.status === 'delivered') acc.completed += amount;
+      else if (order.status === 'cancelled') acc.refunded += amount;
+      else acc.pending += amount;
+
+      if (order.payment_method === 'cod') acc.cod += amount;
+      if (order.payment_method === 'gcash') acc.gcash += amount;
+
+      return acc;
+    },
+    { completed: 0, pending: 0, refunded: 0, cod: 0, gcash: 0 }
+  );
+
+  const generateReport = async (type) => {
+    const config = REPORT_CONFIG[type];
+    if (!config) return;
+
+    setReportLoading(type);
+
+    try {
+      const salesOrders = orders.filter((order) => order.status !== 'cancelled');
+      let rows = [];
+
+      if (type === 'sales') {
+        const byDay = {};
+
+        salesOrders.forEach((order) => {
+          const day = new Date(order.created_at).toLocaleDateString('en-CA');
+          byDay[day] = byDay[day] || { date: day, orders: 0, revenue: 0 };
+          byDay[day].orders += 1;
+          byDay[day].revenue += Number(order.total_amount) || 0;
+        });
+
+        rows = Object.values(byDay)
+          .sort((a, b) => b.date.localeCompare(a.date))
+          .map((row) => ({ ...row, revenue: row.revenue.toFixed(2) }));
+      } else if (type === 'products') {
+        const byProduct = {};
+
+        salesOrders.forEach((order) => {
+          (order.shop_order_items || []).forEach((item) => {
+            const key = item.product_name;
+            byProduct[key] = byProduct[key] || { name: key, units: 0, revenue: 0 };
+            byProduct[key].units += item.quantity || 0;
+            byProduct[key].revenue += (Number(item.price) || 0) * (item.quantity || 0);
+          });
+        });
+
+        rows = Object.values(byProduct)
+          .sort((a, b) => b.revenue - a.revenue)
+          .map((row) => ({ ...row, revenue: row.revenue.toFixed(2) }));
+      } else if (type === 'customers') {
+        const byCustomer = {};
+
+        salesOrders.forEach((order) => {
+          const key = order.customer_email || order.customer_name || 'Unknown';
+          byCustomer[key] = byCustomer[key] || {
+            name: order.customer_name || 'Unknown',
+            email: order.customer_email || '-',
+            orders: 0,
+            spent: 0
+          };
+          byCustomer[key].orders += 1;
+          byCustomer[key].spent += Number(order.total_amount) || 0;
+        });
+
+        rows = Object.values(byCustomer)
+          .sort((a, b) => b.spent - a.spent)
+          .map((row) => ({ ...row, spent: row.spent.toFixed(2) }));
+      } else if (type === 'sellers') {
+        const [{ data: sellerRows }, { data: productRows }] = await Promise.all([
+          supabase.from('shop_sellers').select('id, business_name'),
+          supabase.from('shop_products').select('id, seller_id')
+        ]);
+
+        const sellerNames = new Map((sellerRows || []).map((seller) => [seller.id, seller.business_name]));
+        const productSellers = new Map((productRows || []).map((product) => [product.id, product.seller_id]));
+        const bySeller = {};
+
+        (productRows || []).forEach((product) => {
+          const key = product.seller_id || 'unassigned';
+          bySeller[key] = bySeller[key] || {
+            name: product.seller_id ? sellerNames.get(product.seller_id) || 'Unknown seller' : 'Platform listings',
+            products: 0,
+            units: 0,
+            revenue: 0
+          };
+          bySeller[key].products += 1;
+        });
+
+        salesOrders.forEach((order) => {
+          (order.shop_order_items || []).forEach((item) => {
+            const sellerId = productSellers.get(item.product_id) || 'unassigned';
+            bySeller[sellerId] = bySeller[sellerId] || {
+              name: sellerId === 'unassigned' ? 'Platform listings' : sellerNames.get(sellerId) || 'Unknown seller',
+              products: 0,
+              units: 0,
+              revenue: 0
+            };
+            bySeller[sellerId].units += item.quantity || 0;
+            bySeller[sellerId].revenue += (Number(item.price) || 0) * (item.quantity || 0);
+          });
+        });
+
+        rows = Object.values(bySeller)
+          .sort((a, b) => b.revenue - a.revenue)
+          .map((row) => ({ ...row, revenue: row.revenue.toFixed(2) }));
+      } else if (type === 'orders') {
+        const statuses = ['pending', 'confirmed', 'processing', 'shipped', 'delivered', 'cancelled'];
+
+        rows = statuses.map((status) => {
+          const matching = orders.filter((order) => order.status === status);
+          return {
+            status: status.charAt(0).toUpperCase() + status.slice(1),
+            orders: matching.length,
+            value: matching.reduce((sum, order) => sum + (Number(order.total_amount) || 0), 0).toFixed(2)
+          };
+        });
+      } else if (type === 'revenue') {
+        const methods = [
+          { key: 'gcash', label: 'GCash' },
+          { key: 'cod', label: 'Cash on Delivery' },
+          { key: 'bank', label: 'Bank Transfer' }
+        ];
+
+        rows = methods.map((method) => {
+          const matching = salesOrders.filter((order) => order.payment_method === method.key);
+          return {
+            method: method.label,
+            orders: matching.length,
+            revenue: matching.reduce((sum, order) => sum + (Number(order.total_amount) || 0), 0).toFixed(2)
+          };
+        });
+      }
+
+      setReport({
+        type,
+        title: config.title,
+        subtitle: config.subtitle,
+        columns: config.columns,
+        rows,
+        generatedAt: new Date().toLocaleString()
+      });
+
+      showToast(
+        rows.length
+          ? `${config.title} generated: ${rows.length} row(s).`
+          : `${config.title} generated, but there is no data yet.`,
+        'success'
+      );
+    } catch (error) {
+      console.error('Error generating report:', error);
+      showToast('Failed to generate report: ' + error.message, 'error');
+    } finally {
+      setReportLoading('');
+    }
+  };
+
+  const exportReportCsv = () => {
+    if (!report || report.rows.length === 0) {
+      showToast('Generate a report with data before exporting.', 'error');
+      return;
+    }
+
+    const escape = (value) => `"${String(value ?? '').replace(/"/g, '""')}"`;
+    const lines = [
+      report.columns.map((column) => escape(column.label)).join(','),
+      ...report.rows.map((row) => report.columns.map((column) => escape(row[column.key])).join(','))
+    ];
+
+    const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${report.type}-report-${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    showToast('CSV file downloaded.', 'success');
+  };
+
+  const updateAdminProfile = async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+
+      if (!session?.user) {
+        showToast('Demo admin session: sign in with a Supabase admin account to edit the profile.', 'error');
+        return;
+      }
+
+      const { error } = await supabase
+        .from('profiles')
+        .update({ full_name: adminName })
+        .eq('id', session.user.id);
+
+      if (error) throw error;
+
+      await supabase.auth.updateUser({ data: { full_name: adminName } });
+      showToast('Admin profile updated.', 'success');
+    } catch (error) {
+      console.error('Error updating admin profile:', error);
+      showToast('Failed to update profile: ' + error.message, 'error');
+    }
+  };
+
+  const saveWebsiteSettings = async () => {
+    setSavingSettings(true);
+
+    try {
+      const rows = Object.entries(websiteSettings).map(([key, value]) => ({
+        key,
+        value: String(value)
+      }));
+
+      const { error } = await supabase.from('shop_settings').upsert(rows, { onConflict: 'key' });
+
+      if (error) throw error;
+
+      showToast('Website settings saved.', 'success');
+    } catch (error) {
+      console.error('Error saving website settings:', error);
+      showToast(
+        error.code === '42P01' || error.message?.includes('shop_settings')
+          ? 'Saving settings needs the shop_settings table. Run supabase-admin-policies.sql in Supabase.'
+          : 'Failed to save settings: ' + error.message,
+        'error'
+      );
+    } finally {
+      setSavingSettings(false);
+    }
+  };
+
+  const changeAdminPassword = async () => {
+    if (passwordForm.next.length < 6) {
+      showToast('New password must be at least 6 characters.', 'error');
+      return;
+    }
+
+    if (passwordForm.next !== passwordForm.confirm) {
+      showToast('New passwords do not match.', 'error');
+      return;
+    }
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+
+      if (!session?.user?.email) {
+        showToast('Demo admin session: no Supabase password is stored for this account.', 'error');
+        return;
+      }
+
+      const { error: verifyError } = await supabase.auth.signInWithPassword({
+        email: session.user.email,
+        password: passwordForm.current
+      });
+
+      if (verifyError) {
+        showToast('Current password is incorrect.', 'error');
+        return;
+      }
+
+      const { error } = await supabase.auth.updateUser({ password: passwordForm.next });
+      if (error) throw error;
+
+      setPasswordForm({ current: '', next: '', confirm: '' });
+      showToast('Password updated.', 'success');
+    } catch (error) {
+      console.error('Error changing admin password:', error);
+      showToast('Failed to change password: ' + error.message, 'error');
+    }
+  };
+
   // Login Screen
+  if (checkingAuth) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
+
   if (!isAuthenticated) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
@@ -365,7 +837,7 @@ export default function ShopAdminPage() {
                 </svg>
               </div>
               <h1 className="text-3xl font-bold text-gray-900 mb-2">Admin Access</h1>
-              <p className="text-gray-600">Enter password to access admin panel</p>
+              <p className="text-gray-600">Sign in with your admin account</p>
             </div>
 
             <form onSubmit={handleLogin} className="space-y-6">
@@ -613,8 +1085,8 @@ export default function ShopAdminPage() {
                 <span className="text-purple-700 font-bold">A</span>
               </div>
               <div className="text-right">
-                <p className="text-sm font-semibold text-gray-900">Admin</p>
-                <p className="text-xs text-gray-600">Administrator</p>
+                <p className="text-sm font-semibold text-gray-900">{adminName}</p>
+                <p className="text-xs text-gray-600">{adminEmail || 'Administrator'}</p>
               </div>
             </div>
           </div>
@@ -794,15 +1266,15 @@ export default function ShopAdminPage() {
                     <div className="flex items-center gap-3">
                       <div className="w-10 h-10 bg-blue-500 rounded-lg flex items-center justify-center">
                         <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
                         </svg>
                       </div>
                       <div>
-                        <p className="font-semibold text-gray-900">Product Listings</p>
-                        <p className="text-xs text-gray-600">Awaiting review</p>
+                        <p className="font-semibold text-gray-900">Orders to Fulfill</p>
+                        <p className="text-xs text-gray-600">Pending, confirmed, processing</p>
                       </div>
                     </div>
-                    <span className="bg-blue-500 text-white text-sm font-bold px-3 py-1 rounded-full">0</span>
+                    <span className="bg-blue-500 text-white text-sm font-bold px-3 py-1 rounded-full">{stats.toFulfill}</span>
                   </div>
                 </div>
               </div>
@@ -852,7 +1324,7 @@ export default function ShopAdminPage() {
                       <tr key={order.id} className="hover:bg-gray-50">
                         <td className="px-6 py-4 text-sm font-semibold text-gray-900">#{order.id.slice(0, 8)}</td>
                         <td className="px-6 py-4 text-sm text-gray-600">
-                          {order.shop_buyers?.full_name || 'N/A'}
+                          {order.customer_name || 'Customer'}
                         </td>
                         <td className="px-6 py-4 text-sm text-gray-600">
                           {order.shop_order_items?.length || 0} items
@@ -908,13 +1380,21 @@ export default function ShopAdminPage() {
                       <td className="px-6 py-4 text-sm text-gray-700">{seller.contact_phone || '-'}</td>
                       <td className="px-6 py-4">
                         <span className={`px-3 py-1 text-xs font-semibold rounded-full ${
-                          seller.is_approved && seller.is_active
+                          seller.is_rejected
+                            ? 'bg-red-100 text-red-700'
+                            : seller.is_approved && seller.is_active
                             ? 'bg-green-100 text-green-700'
                             : !seller.is_approved
                             ? 'bg-yellow-100 text-yellow-700'
                             : 'bg-red-100 text-red-700'
                         }`}>
-                          {seller.is_approved && seller.is_active ? 'Active' : !seller.is_approved ? 'Pending Approval' : 'Suspended'}
+                          {seller.is_rejected
+                            ? 'Rejected'
+                            : seller.is_approved && seller.is_active
+                            ? 'Active'
+                            : !seller.is_approved
+                            ? 'Pending Approval'
+                            : 'Suspended'}
                         </span>
                       </td>
                       <td className="px-6 py-4">
@@ -949,6 +1429,14 @@ export default function ShopAdminPage() {
                             <span className="px-4 py-2 text-sm font-medium text-gray-400 cursor-not-allowed">
                               Approved ✓
                             </span>
+                          )}
+                          {!seller.is_approved && !seller.is_rejected && (
+                            <button
+                              onClick={() => rejectSeller(seller)}
+                              className="px-4 py-2 text-sm font-medium rounded-lg bg-red-600 text-white hover:bg-red-700 transition-colors shadow-sm"
+                            >
+                              Reject
+                            </button>
                           )}
                           <button
                             onClick={async () => {
@@ -1011,7 +1499,7 @@ export default function ShopAdminPage() {
                     <tr key={customer.id} className="hover:bg-gray-50">
                       <td className="px-6 py-4 font-semibold text-gray-900">{customer.full_name}</td>
                       <td className="px-6 py-4 text-sm text-gray-700">{customer.email}</td>
-                      <td className="px-6 py-4 text-sm font-medium text-blue-600">{customer.reward_points || 0} pts</td>
+                      <td className="px-6 py-4 text-sm font-medium text-blue-600">{(customer.points ?? customer.reward_points) || 0} pts</td>
                       <td className="px-6 py-4 text-sm text-gray-700">{new Date(customer.created_at).toLocaleDateString()}</td>
                     </tr>
                   ))}
@@ -1229,7 +1717,7 @@ export default function ShopAdminPage() {
             </div>
 
             {/* Transaction Stats */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-6">
               <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
                 <div className="flex items-center gap-3 mb-2">
                   <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
@@ -1239,7 +1727,7 @@ export default function ShopAdminPage() {
                   </div>
                   <div>
                     <p className="text-xs text-gray-600 font-medium">Completed</p>
-                    <p className="text-xl font-bold text-gray-900">₱{stats.totalSales.toLocaleString()}</p>
+                    <p className="text-xl font-bold text-gray-900">₱{orderTotals.completed.toLocaleString()}</p>
                   </div>
                 </div>
               </div>
@@ -1253,7 +1741,21 @@ export default function ShopAdminPage() {
                   </div>
                   <div>
                     <p className="text-xs text-gray-600 font-medium">Pending</p>
-                    <p className="text-xl font-bold text-gray-900">₱0</p>
+                    <p className="text-xl font-bold text-gray-900">₱{orderTotals.pending.toLocaleString()}</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                <div className="flex items-center gap-3 mb-2">
+                  <div className="w-10 h-10 bg-red-100 rounded-lg flex items-center justify-center">
+                    <svg className="w-5 h-5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 15L3 9m0 0l6-6M3 9h12a6 6 0 010 12h-3" />
+                    </svg>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-600 font-medium">Refunds / Cancelled</p>
+                    <p className="text-xl font-bold text-gray-900">₱{orderTotals.refunded.toLocaleString()}</p>
                   </div>
                 </div>
               </div>
@@ -1268,7 +1770,7 @@ export default function ShopAdminPage() {
                   <div>
                     <p className="text-xs text-gray-600 font-medium">COD</p>
                     <p className="text-xl font-bold text-gray-900">
-                      ₱{orders.filter(o => o.payment_method === 'cod').reduce((sum, o) => sum + (o.total_amount || 0), 0).toLocaleString()}
+                      ₱{orderTotals.cod.toLocaleString()}
                     </p>
                   </div>
                 </div>
@@ -1284,7 +1786,7 @@ export default function ShopAdminPage() {
                   <div>
                     <p className="text-xs text-gray-600 font-medium">GCash</p>
                     <p className="text-xl font-bold text-gray-900">
-                      ₱{orders.filter(o => o.payment_method === 'gcash').reduce((sum, o) => sum + (o.total_amount || 0), 0).toLocaleString()}
+                      ₱{orderTotals.gcash.toLocaleString()}
                     </p>
                   </div>
                 </div>
@@ -1314,7 +1816,7 @@ export default function ShopAdminPage() {
                       <tr key={order.id} className="hover:bg-gray-50">
                         <td className="px-6 py-4 text-sm font-mono text-gray-900">TXN-{order.id.slice(0, 8).toUpperCase()}</td>
                         <td className="px-6 py-4 text-sm font-semibold text-blue-600">#{order.id.slice(0, 8)}</td>
-                        <td className="px-6 py-4 text-sm text-gray-600">{order.shop_buyers?.full_name || 'N/A'}</td>
+                        <td className="px-6 py-4 text-sm text-gray-600">{order.customer_name || 'Customer'}</td>
                         <td className="px-6 py-4 text-sm font-bold text-gray-900">₱{order.total_amount?.toLocaleString()}</td>
                         <td className="px-6 py-4">
                           <span className="px-3 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-700 uppercase">
@@ -1368,8 +1870,12 @@ export default function ShopAdminPage() {
                     <p className="text-xs text-gray-600">Daily, weekly, monthly sales</p>
                   </div>
                 </div>
-                <button className="w-full py-2 px-4 bg-blue-50 hover:bg-blue-100 text-blue-700 font-semibold rounded-lg transition-colors">
-                  Generate Report
+                <button
+                  onClick={() => generateReport('sales')}
+                  disabled={reportLoading !== ''}
+                  className="w-full py-2 px-4 bg-blue-50 hover:bg-blue-100 text-blue-700 font-semibold rounded-lg transition-colors disabled:opacity-50"
+                >
+                  {reportLoading === 'sales' ? 'Generating...' : 'Generate Report'}
                 </button>
               </div>
 
@@ -1385,8 +1891,12 @@ export default function ShopAdminPage() {
                     <p className="text-xs text-gray-600">Top selling products</p>
                   </div>
                 </div>
-                <button className="w-full py-2 px-4 bg-green-50 hover:bg-green-100 text-green-700 font-semibold rounded-lg transition-colors">
-                  Generate Report
+                <button
+                  onClick={() => generateReport('products')}
+                  disabled={reportLoading !== ''}
+                  className="w-full py-2 px-4 bg-green-50 hover:bg-green-100 text-green-700 font-semibold rounded-lg transition-colors disabled:opacity-50"
+                >
+                  {reportLoading === 'products' ? 'Generating...' : 'Generate Report'}
                 </button>
               </div>
 
@@ -1402,8 +1912,12 @@ export default function ShopAdminPage() {
                     <p className="text-xs text-gray-600">Customer insights & behavior</p>
                   </div>
                 </div>
-                <button className="w-full py-2 px-4 bg-purple-50 hover:bg-purple-100 text-purple-700 font-semibold rounded-lg transition-colors">
-                  Generate Report
+                <button
+                  onClick={() => generateReport('customers')}
+                  disabled={reportLoading !== ''}
+                  className="w-full py-2 px-4 bg-purple-50 hover:bg-purple-100 text-purple-700 font-semibold rounded-lg transition-colors disabled:opacity-50"
+                >
+                  {reportLoading === 'customers' ? 'Generating...' : 'Generate Report'}
                 </button>
               </div>
 
@@ -1419,8 +1933,12 @@ export default function ShopAdminPage() {
                     <p className="text-xs text-gray-600">Seller performance metrics</p>
                   </div>
                 </div>
-                <button className="w-full py-2 px-4 bg-yellow-50 hover:bg-yellow-100 text-yellow-700 font-semibold rounded-lg transition-colors">
-                  Generate Report
+                <button
+                  onClick={() => generateReport('sellers')}
+                  disabled={reportLoading !== ''}
+                  className="w-full py-2 px-4 bg-yellow-50 hover:bg-yellow-100 text-yellow-700 font-semibold rounded-lg transition-colors disabled:opacity-50"
+                >
+                  {reportLoading === 'sellers' ? 'Generating...' : 'Generate Report'}
                 </button>
               </div>
 
@@ -1436,8 +1954,12 @@ export default function ShopAdminPage() {
                     <p className="text-xs text-gray-600">Order tracking & status</p>
                   </div>
                 </div>
-                <button className="w-full py-2 px-4 bg-red-50 hover:bg-red-100 text-red-700 font-semibold rounded-lg transition-colors">
-                  Generate Report
+                <button
+                  onClick={() => generateReport('orders')}
+                  disabled={reportLoading !== ''}
+                  className="w-full py-2 px-4 bg-red-50 hover:bg-red-100 text-red-700 font-semibold rounded-lg transition-colors disabled:opacity-50"
+                >
+                  {reportLoading === 'orders' ? 'Generating...' : 'Generate Report'}
                 </button>
               </div>
 
@@ -1453,33 +1975,87 @@ export default function ShopAdminPage() {
                     <p className="text-xs text-gray-600">Revenue analysis & trends</p>
                   </div>
                 </div>
-                <button className="w-full py-2 px-4 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-semibold rounded-lg transition-colors">
-                  Generate Report
+                <button
+                  onClick={() => generateReport('revenue')}
+                  disabled={reportLoading !== ''}
+                  className="w-full py-2 px-4 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-semibold rounded-lg transition-colors disabled:opacity-50"
+                >
+                  {reportLoading === 'revenue' ? 'Generating...' : 'Generate Report'}
                 </button>
               </div>
             </div>
 
+            {/* Generated Report */}
+            {report && (
+              <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden mb-6">
+                <div className="p-6 border-b border-gray-200 flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <h4 className="font-bold text-lg">{report.title}</h4>
+                    <p className="text-xs text-gray-600">{report.subtitle} · Generated {report.generatedAt}</p>
+                  </div>
+                  <button
+                    onClick={exportReportCsv}
+                    className="px-4 py-2 bg-green-100 hover:bg-green-200 text-green-700 font-semibold rounded-lg transition-colors text-sm"
+                  >
+                    Download CSV
+                  </button>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead className="bg-gray-50 border-b border-gray-200">
+                      <tr>
+                        {report.columns.map((column) => (
+                          <th key={column.key} className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">
+                            {column.label}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-200">
+                      {report.rows.length === 0 && (
+                        <tr>
+                          <td colSpan={report.columns.length} className="px-6 py-8 text-center text-gray-500">
+                            No data for this report yet. Place some orders first.
+                          </td>
+                        </tr>
+                      )}
+                      {report.rows.map((row, index) => (
+                        <tr key={index} className="hover:bg-gray-50">
+                          {report.columns.map((column) => (
+                            <td key={column.key} className="px-6 py-3 text-sm text-gray-700">{row[column.key]}</td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
             {/* Export Options */}
             <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-              <h4 className="font-bold text-lg mb-4">Export Data</h4>
+              <h4 className="font-bold text-lg mb-2">Export Data</h4>
+              <p className="text-xs text-gray-600 mb-4">
+                Generate a report above, then export it. CSV opens in Excel; Print → Save as PDF gives a PDF copy.
+              </p>
               <div className="flex flex-wrap gap-3">
-                <button className="flex items-center gap-2 px-4 py-2 bg-green-100 hover:bg-green-200 text-green-700 font-semibold rounded-lg transition-colors">
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                  </svg>
-                  Export as Excel
-                </button>
-                <button className="flex items-center gap-2 px-4 py-2 bg-red-100 hover:bg-red-200 text-red-700 font-semibold rounded-lg transition-colors">
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
-                  </svg>
-                  Export as PDF
-                </button>
-                <button className="flex items-center gap-2 px-4 py-2 bg-blue-100 hover:bg-blue-200 text-blue-700 font-semibold rounded-lg transition-colors">
+                <button
+                  onClick={exportReportCsv}
+                  className="flex items-center gap-2 px-4 py-2 bg-green-100 hover:bg-green-200 text-green-700 font-semibold rounded-lg transition-colors"
+                >
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                   </svg>
                   Export as CSV
+                </button>
+                <button
+                  onClick={() => window.print()}
+                  className="flex items-center gap-2 px-4 py-2 bg-red-100 hover:bg-red-200 text-red-700 font-semibold rounded-lg transition-colors"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                  </svg>
+                  Print / Save as PDF
                 </button>
               </div>
             </div>
@@ -1505,7 +2081,7 @@ export default function ShopAdminPage() {
                     <label className="block text-sm font-semibold mb-2 text-gray-700">Email</label>
                     <input
                       type="email"
-                      value="shiki@gmail.com"
+                      value={adminEmail || DEMO_ADMIN_EMAIL}
                       disabled
                       className="w-full px-4 py-3 border-2 rounded-lg bg-gray-50 text-gray-600"
                     />
@@ -1514,11 +2090,15 @@ export default function ShopAdminPage() {
                     <label className="block text-sm font-semibold mb-2 text-gray-700">Admin Name</label>
                     <input
                       type="text"
-                      defaultValue="Admin"
+                      value={adminName}
+                      onChange={(e) => setAdminName(e.target.value)}
                       className="w-full px-4 py-3 border-2 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     />
                   </div>
-                  <button className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition-colors">
+                  <button
+                    onClick={updateAdminProfile}
+                    className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition-colors"
+                  >
                     Update Profile
                   </button>
                 </div>
@@ -1537,7 +2117,8 @@ export default function ShopAdminPage() {
                     <label className="block text-sm font-semibold mb-2 text-gray-700">Website Name</label>
                     <input
                       type="text"
-                      defaultValue="Lumina Heritage Marketplace"
+                      value={websiteSettings.siteName}
+                      onChange={(e) => setWebsiteSettings({ ...websiteSettings, siteName: e.target.value })}
                       className="w-full px-4 py-3 border-2 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
                     />
                   </div>
@@ -1545,7 +2126,8 @@ export default function ShopAdminPage() {
                     <label className="block text-sm font-semibold mb-2 text-gray-700">Contact Email</label>
                     <input
                       type="email"
-                      defaultValue="support@lumina.com"
+                      value={websiteSettings.contactEmail}
+                      onChange={(e) => setWebsiteSettings({ ...websiteSettings, contactEmail: e.target.value })}
                       className="w-full px-4 py-3 border-2 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
                     />
                   </div>
@@ -1553,12 +2135,17 @@ export default function ShopAdminPage() {
                     <label className="block text-sm font-semibold mb-2 text-gray-700">Contact Phone</label>
                     <input
                       type="tel"
-                      defaultValue="+63 123 456 7890"
+                      value={websiteSettings.contactPhone}
+                      onChange={(e) => setWebsiteSettings({ ...websiteSettings, contactPhone: e.target.value })}
                       className="w-full px-4 py-3 border-2 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
                     />
                   </div>
-                  <button className="px-6 py-2.5 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg transition-colors">
-                    Save Changes
+                  <button
+                    onClick={saveWebsiteSettings}
+                    disabled={savingSettings}
+                    className="px-6 py-2.5 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg transition-colors disabled:opacity-50"
+                  >
+                    {savingSettings ? 'Saving...' : 'Save Changes'}
                   </button>
                 </div>
               </div>
@@ -1576,6 +2163,8 @@ export default function ShopAdminPage() {
                     <label className="block text-sm font-semibold mb-2 text-gray-700">Current Password</label>
                     <input
                       type="password"
+                      value={passwordForm.current}
+                      onChange={(e) => setPasswordForm({ ...passwordForm, current: e.target.value })}
                       placeholder="Enter current password"
                       className="w-full px-4 py-3 border-2 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
                     />
@@ -1584,6 +2173,8 @@ export default function ShopAdminPage() {
                     <label className="block text-sm font-semibold mb-2 text-gray-700">New Password</label>
                     <input
                       type="password"
+                      value={passwordForm.next}
+                      onChange={(e) => setPasswordForm({ ...passwordForm, next: e.target.value })}
                       placeholder="Enter new password"
                       className="w-full px-4 py-3 border-2 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
                     />
@@ -1592,11 +2183,16 @@ export default function ShopAdminPage() {
                     <label className="block text-sm font-semibold mb-2 text-gray-700">Confirm New Password</label>
                     <input
                       type="password"
+                      value={passwordForm.confirm}
+                      onChange={(e) => setPasswordForm({ ...passwordForm, confirm: e.target.value })}
                       placeholder="Confirm new password"
                       className="w-full px-4 py-3 border-2 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
                     />
                   </div>
-                  <button className="px-6 py-2.5 bg-red-600 hover:bg-red-700 text-white font-semibold rounded-lg transition-colors">
+                  <button
+                    onClick={changeAdminPassword}
+                    className="px-6 py-2.5 bg-red-600 hover:bg-red-700 text-white font-semibold rounded-lg transition-colors"
+                  >
                     Change Password
                   </button>
                 </div>

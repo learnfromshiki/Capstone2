@@ -7,7 +7,7 @@ import { supabase } from '@/lib/supabaseClient';
 import Link from 'next/link';
 
 export default function BuyerDashboard() {
-  const { user, signOut } = useAuth();
+  const { user, loading: authLoading, signOut } = useAuth();
   const router = useRouter();
   
   const [orders, setOrders] = useState([]);
@@ -16,13 +16,18 @@ export default function BuyerDashboard() {
   const [activeTab, setActiveTab] = useState('home');
 
   useEffect(() => {
+    // Wait for the session to resolve before redirecting, otherwise a fresh
+    // login bounce sends the buyer back to the shop page.
+    if (authLoading) return;
+
     if (!user) {
       router.push('/shop');
-    } else {
-      fetchData();
+      return;
     }
+
+    fetchData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, router]);
+  }, [user, authLoading, router]);
 
   const fetchData = async () => {
     setLoading(true);
@@ -440,7 +445,7 @@ export default function BuyerDashboard() {
                       <div className="flex items-center gap-2">
                         <input
                           type="text"
-                          value={`${profile?.reward_points || 0} points`}
+                          value={`${(profile?.points ?? profile?.reward_points) || 0} points`}
                           disabled
                           className="flex-1 px-4 py-3 border-2 border-gray-200 rounded-xl bg-gray-50"
                         />

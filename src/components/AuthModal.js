@@ -1,12 +1,11 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabaseClient';
+import { DEMO_ADMIN_EMAIL, DEMO_ADMIN_PASSWORD, getAccountRole } from '@/lib/roles';
 
 export default function AuthModal({ isOpen, onClose, mode: initialMode = 'login' }) {
-  const router = useRouter();
   const [mode, setMode] = useState(initialMode); // 'login' or 'signup'
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -28,19 +27,25 @@ export default function AuthModal({ isOpen, onClose, mode: initialMode = 'login'
     setLoading(true);
 
     try {
-      // Check if admin credentials - redirect to admin panel
-      if (mode === 'login' && email === 'shiki@gmail.com' && password === 'shiki1234') {
-        // Store admin credentials for redirect
-        sessionStorage.setItem('admin_redirect_email', email);
-        sessionStorage.setItem('admin_redirect_password', password);
-        // Redirect to admin panel using Next.js router
-        router.push('/shop/admin');
+      // Demo admin account (see ADMIN-LOGIN-FLOW.md) goes straight to the admin dashboard
+      if (mode === 'login' && email.trim().toLowerCase() === DEMO_ADMIN_EMAIL && password === DEMO_ADMIN_PASSWORD) {
+        sessionStorage.setItem('admin_authenticated', 'true');
+        sessionStorage.setItem('admin_email', DEMO_ADMIN_EMAIL);
+        window.location.href = '/shop/admin';
         return;
       }
 
       if (mode === 'login') {
         const { data, error } = await signIn(email, password);
         if (error) throw error;
+
+        // Admin accounts go to the admin dashboard, never the buyer/seller views
+        if (data?.user && (await getAccountRole(data.user.id)) === 'admin') {
+          sessionStorage.setItem('admin_authenticated', 'true');
+          sessionStorage.setItem('admin_email', data.user.email || '');
+          window.location.href = '/shop/admin';
+          return;
+        }
 
         // Check if user is a seller and redirect to seller dashboard
         if (data?.user) {
@@ -65,7 +70,13 @@ export default function AuthModal({ isOpen, onClose, mode: initialMode = 'login'
           }
         }
 
-        // User is a buyer - just close modal and stay on shop page
+        // Buyers are routed to the buyer dashboard
+        if (data?.user) {
+          setLoading(false);
+          window.location.href = '/shop/buyer';
+          return;
+        }
+
         onClose();
       } else {
         // Sign up user
