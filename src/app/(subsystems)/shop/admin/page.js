@@ -913,20 +913,53 @@ export default function ShopAdminPage() {
                           {!seller.is_approved && (
                             <button
                               onClick={async () => {
-                                await supabase.from('shop_sellers').update({ is_approved: true }).eq('id', seller.id);
-                                fetchData();
+                                try {
+                                  const { error } = await supabase
+                                    .from('shop_sellers')
+                                    .update({ is_approved: true, updated_at: new Date().toISOString() })
+                                    .eq('id', seller.id);
+                                  
+                                  if (error) {
+                                    console.error('Error approving seller:', error);
+                                    alert('Failed to approve seller: ' + error.message);
+                                    return;
+                                  }
+                                  
+                                  alert('✅ Seller approved successfully!');
+                                  fetchData();
+                                } catch (err) {
+                                  console.error('Error:', err);
+                                  alert('Failed to approve seller');
+                                }
                               }}
-                              className="px-3 py-1.5 text-xs font-medium rounded-lg bg-green-100 text-green-700 hover:bg-green-200"
+                              className="px-3 py-1.5 text-xs font-medium rounded-lg bg-green-100 text-green-700 hover:bg-green-200 transition-colors"
                             >
                               Approve
                             </button>
                           )}
                           <button
                             onClick={async () => {
-                              await supabase.from('shop_sellers').update({ is_active: !seller.is_active }).eq('id', seller.id);
-                              fetchData();
+                              try {
+                                const newStatus = !seller.is_active;
+                                const { error } = await supabase
+                                  .from('shop_sellers')
+                                  .update({ is_active: newStatus, updated_at: new Date().toISOString() })
+                                  .eq('id', seller.id);
+                                
+                                if (error) {
+                                  console.error('Error updating seller status:', error);
+                                  alert('Failed to update status: ' + error.message);
+                                  return;
+                                }
+                                
+                                alert(`✅ Seller ${newStatus ? 'activated' : 'suspended'} successfully!`);
+                                fetchData();
+                              } catch (err) {
+                                console.error('Error:', err);
+                                alert('Failed to update seller status');
+                              }
                             }}
-                            className="px-3 py-1.5 text-xs font-medium rounded-lg bg-orange-100 text-orange-700 hover:bg-orange-200"
+                            className="px-3 py-1.5 text-xs font-medium rounded-lg bg-orange-100 text-orange-700 hover:bg-orange-200 transition-colors"
                           >
                             {seller.is_active ? 'Suspend' : 'Activate'}
                           </button>
