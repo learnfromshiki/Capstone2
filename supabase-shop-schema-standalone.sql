@@ -2,10 +2,11 @@
 -- CONNECT-Daet.ph - Shop System Database Schema (STANDALONE)
 -- Local Artisan and Product E-commerce Platform
 -- This version works WITHOUT the profiles table
+-- SAFE VERSION: Checks if tables exist before creating
 -- =====================================================
 
 -- Sellers Table
-create table shop_sellers (
+create table if not exists shop_sellers (
   id uuid primary key default gen_random_uuid(),
   user_id uuid unique not null,  -- Links to Supabase Auth user
   business_name text not null,
@@ -20,7 +21,7 @@ create table shop_sellers (
 );
 
 -- Products Table
-create table shop_products (
+create table if not exists shop_products (
   id uuid primary key default gen_random_uuid(),
   name text not null,
   description text,
@@ -36,7 +37,7 @@ create table shop_products (
 );
 
 -- Orders Table
-create table shop_orders (
+create table if not exists shop_orders (
   id uuid primary key default gen_random_uuid(),
   user_id uuid,  -- No foreign key constraint
   customer_name text not null,
@@ -52,7 +53,7 @@ create table shop_orders (
 );
 
 -- Order Items Table
-create table shop_order_items (
+create table if not exists shop_order_items (
   id uuid primary key default gen_random_uuid(),
   order_id uuid references shop_orders(id) on delete cascade,
   product_id uuid references shop_products(id),
@@ -63,7 +64,7 @@ create table shop_order_items (
 );
 
 -- Artisan Reviews Table (Optional - for future feature)
-create table shop_reviews (
+create table if not exists shop_reviews (
   id uuid primary key default gen_random_uuid(),
   product_id uuid references shop_products(id) on delete cascade,
   user_id uuid,  -- No foreign key constraint
@@ -73,7 +74,7 @@ create table shop_reviews (
 );
 
 -- Categories Table (Dynamic category management)
-create table shop_categories (
+create table if not exists shop_categories (
   id uuid primary key default gen_random_uuid(),
   name text not null unique,
   slug text not null unique,
@@ -83,14 +84,15 @@ create table shop_categories (
   updated_at timestamp with time zone default now()
 );
 
--- Insert default categories
+-- Insert default categories (skip if already exist)
 insert into shop_categories (name, slug, icon, description) values
   ('All', 'all', '🛍️', 'All products'),
   ('Handicrafts', 'handicrafts', '🎨', 'Handmade crafts and artworks'),
   ('Food Products', 'food', '🍽️', 'Local food and delicacies'),
   ('Souvenirs', 'souvenirs', '🎁', 'Memorable souvenirs'),
   ('Weavings', 'weavings', '🧵', 'Traditional woven products'),
-  ('Art', 'art', '🎨', 'Artistic creations');
+  ('Art', 'art', '🎨', 'Artistic creations')
+on conflict (slug) do nothing;
 
 -- Enable Row Level Security
 alter table shop_sellers enable row level security;
