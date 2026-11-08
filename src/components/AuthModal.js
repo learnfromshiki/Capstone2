@@ -39,8 +39,25 @@ export default function AuthModal({ isOpen, onClose, mode: initialMode = 'login'
       }
 
       if (mode === 'login') {
-        const { error } = await signIn(email, password);
+        const { data, error } = await signIn(email, password);
         if (error) throw error;
+
+        // Check if user is a seller and redirect to seller dashboard
+        if (data?.user) {
+          const { data: sellerData } = await supabase
+            .from('shop_sellers')
+            .select('*')
+            .eq('user_id', data.user.id)
+            .single();
+
+          if (sellerData) {
+            // User is a seller - redirect to seller dashboard
+            router.push('/shop/seller/dashboard');
+            return;
+          }
+        }
+
+        // User is a buyer - just close modal and stay on shop page
         onClose();
       } else {
         // Sign up user
