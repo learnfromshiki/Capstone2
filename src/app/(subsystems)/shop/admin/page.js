@@ -9,7 +9,16 @@ export default function ShopAdminPage() {
   const [products, setProducts] = useState([]);
   const [orders, setOrders] = useState([]);
   const [categories, setCategories] = useState([]);
-  const [activeTab, setActiveTab] = useState('products');
+  const [sellers, setSellers] = useState([]);
+  const [customers, setCustomers] = useState([]);
+  const [stats, setStats] = useState({
+    totalOrders: 0,
+    totalCustomers: 0,
+    totalSellers: 0,
+    totalSales: 0,
+    pendingSellers: 0
+  });
+  const [activeTab, setActiveTab] = useState('dashboard');
   const [loading, setLoading] = useState(true);
   const [showAddProduct, setShowAddProduct] = useState(false);
   const [showAddCategory, setShowAddCategory] = useState(false);
@@ -159,7 +168,41 @@ export default function ShopAdminPage() {
   const fetchData = async () => {
     setLoading(true);
     try {
-      if (activeTab === 'products') {
+      if (activeTab === 'dashboard') {
+        // Fetch all stats for dashboard
+        const [ordersRes, customersRes, sellersRes] = await Promise.all([
+          supabase.from('shop_orders').select('total_amount', { count: 'exact' }),
+          supabase.from('profiles').select('id', { count: 'exact' }),
+          supabase.from('shop_sellers').select('is_approved', { count: 'exact' })
+        ]);
+
+        const totalSales = ordersRes.data?.reduce((sum, order) => sum + (order.total_amount || 0), 0) || 0;
+        const pendingSellers = sellersRes.data?.filter(s => !s.is_approved).length || 0;
+
+        setStats({
+          totalOrders: ordersRes.count || 0,
+          totalCustomers: customersRes.count || 0,
+          totalSellers: sellersRes.count || 0,
+          totalSales: totalSales,
+          pendingSellers: pendingSellers
+        });
+      } else if (activeTab === 'sellers') {
+        const { data, error } = await supabase
+          .from('shop_sellers')
+          .select('*')
+          .order('created_at', { ascending: false });
+
+        if (error) throw error;
+        setSellers(data || []);
+      } else if (activeTab === 'customers') {
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('*')
+          .order('created_at', { ascending: false });
+
+        if (error) throw error;
+        setCustomers(data || []);
+      } else if (activeTab === 'products') {
         const { data, error } = await supabase
           .from('shop_products')
           .select('*')
@@ -466,36 +509,66 @@ export default function ShopAdminPage() {
 
         {/* Tabs */}
         <div className="bg-white rounded-xl shadow-sm mb-6 border border-gray-100">
-          <div className="flex border-b">
+          <div className="flex border-b overflow-x-auto">
+            <button
+              onClick={() => setActiveTab('dashboard')}
+              className={`flex-1 py-4 px-6 font-semibold transition-all whitespace-nowrap ${
+                activeTab === 'dashboard'
+                  ? 'border-b-2 border-blue-600 text-blue-600 bg-blue-50'
+                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+              }`}
+            >
+              📊 Dashboard
+            </button>
+            <button
+              onClick={() => setActiveTab('sellers')}
+              className={`flex-1 py-4 px-6 font-semibold transition-all whitespace-nowrap ${
+                activeTab === 'sellers'
+                  ? 'border-b-2 border-blue-600 text-blue-600 bg-blue-50'
+                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+              }`}
+            >
+              🏪 Manage Sellers
+            </button>
+            <button
+              onClick={() => setActiveTab('customers')}
+              className={`flex-1 py-4 px-6 font-semibold transition-all whitespace-nowrap ${
+                activeTab === 'customers'
+                  ? 'border-b-2 border-blue-600 text-blue-600 bg-blue-50'
+                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+              }`}
+            >
+              👥 Manage Customers
+            </button>
             <button
               onClick={() => setActiveTab('products')}
-              className={`flex-1 py-4 px-6 font-semibold transition-all ${
+              className={`flex-1 py-4 px-6 font-semibold transition-all whitespace-nowrap ${
                 activeTab === 'products'
                   ? 'border-b-2 border-blue-600 text-blue-600 bg-blue-50'
                   : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
               }`}
             >
-              Products
+              📦 Manage Products
             </button>
             <button
               onClick={() => setActiveTab('categories')}
-              className={`flex-1 py-4 px-6 font-semibold transition-all ${
+              className={`flex-1 py-4 px-6 font-semibold transition-all whitespace-nowrap ${
                 activeTab === 'categories'
                   ? 'border-b-2 border-blue-600 text-blue-600 bg-blue-50'
                   : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
               }`}
             >
-              Categories
+              🏷️ Categories
             </button>
             <button
               onClick={() => setActiveTab('orders')}
-              className={`flex-1 py-4 px-6 font-semibold transition-all ${
+              className={`flex-1 py-4 px-6 font-semibold transition-all whitespace-nowrap ${
                 activeTab === 'orders'
                   ? 'border-b-2 border-blue-600 text-blue-600 bg-blue-50'
                   : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
               }`}
             >
-              Orders
+              🛒 Manage Orders
             </button>
           </div>
         </div>
@@ -506,6 +579,168 @@ export default function ShopAdminPage() {
             <div className="text-center">
               <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
               <p className="text-gray-600">Loading...</p>
+            </div>
+          </div>
+        ) : activeTab === 'dashboard' ? (
+          <div>
+            {/* Dashboard Stats */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
+              <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-gray-600">Total Orders</p>
+                    <h3 className="text-3xl font-bold text-gray-900 mt-2">{stats.totalOrders}</h3>
+                  </div>
+                  <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
+                    <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
+                    </svg>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-gray-600">Total Customers</p>
+                    <h3 className="text-3xl font-bold text-gray-900 mt-2">{stats.totalCustomers}</h3>
+                  </div>
+                  <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
+                    <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+                    </svg>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-gray-600">Total Sellers</p>
+                    <h3 className="text-3xl font-bold text-gray-900 mt-2">{stats.totalSellers}</h3>
+                    {stats.pendingSellers > 0 && (
+                      <p className="text-xs text-orange-600 mt-1">{stats.pendingSellers} pending approval</p>
+                    )}
+                  </div>
+                  <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
+                    <svg className="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                    </svg>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-gray-600">Total Sales</p>
+                    <h3 className="text-3xl font-bold text-gray-900 mt-2">₱{stats.totalSales.toLocaleString()}</h3>
+                  </div>
+                  <div className="w-12 h-12 bg-yellow-100 rounded-lg flex items-center justify-center">
+                    <svg className="w-6 h-6 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Quick Overview */}
+            <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+              <h3 className="text-lg font-bold mb-4">Admin Overview</h3>
+              <div className="space-y-3 text-sm">
+                <p className="text-gray-600">✅ View total orders, customers, sellers, and sales</p>
+                <p className="text-gray-600">✅ Approve, reject, or suspend seller accounts</p>
+                <p className="text-gray-600">✅ View and manage buyer accounts</p>
+                <p className="text-gray-600">✅ Review and remove product listings</p>
+                <p className="text-gray-600">✅ Monitor customer orders and delivery status</p>
+                <p className="text-gray-600">✅ Manage website settings and admin account</p>
+              </div>
+            </div>
+          </div>
+        ) : activeTab === 'sellers' ? (
+          <div>
+            <div className="bg-white rounded-xl shadow-sm overflow-hidden border border-gray-100">
+              <table className="w-full">
+                <thead className="bg-gray-50 border-b border-gray-200">
+                  <tr>
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase">Business Name</th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase">Email</th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase">Phone</th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase">Status</th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200">
+                  {sellers.map((seller) => (
+                    <tr key={seller.id} className="hover:bg-gray-50">
+                      <td className="px-6 py-4 font-semibold">{seller.business_name}</td>
+                      <td className="px-6 py-4 text-sm text-gray-600">{seller.contact_email}</td>
+                      <td className="px-6 py-4 text-sm text-gray-600">{seller.contact_phone || '-'}</td>
+                      <td className="px-6 py-4">
+                        <span className={`px-3 py-1 text-xs font-semibold rounded-full ${
+                          seller.is_approved && seller.is_active
+                            ? 'bg-green-100 text-green-700'
+                            : !seller.is_approved
+                            ? 'bg-yellow-100 text-yellow-700'
+                            : 'bg-red-100 text-red-700'
+                        }`}>
+                          {seller.is_approved && seller.is_active ? 'Approved' : !seller.is_approved ? 'Pending' : 'Suspended'}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="flex gap-2">
+                          {!seller.is_approved && (
+                            <button
+                              onClick={async () => {
+                                await supabase.from('shop_sellers').update({ is_approved: true }).eq('id', seller.id);
+                                fetchData();
+                              }}
+                              className="px-3 py-1.5 text-xs font-medium rounded-lg bg-green-100 text-green-700 hover:bg-green-200"
+                            >
+                              Approve
+                            </button>
+                          )}
+                          <button
+                            onClick={async () => {
+                              await supabase.from('shop_sellers').update({ is_active: !seller.is_active }).eq('id', seller.id);
+                              fetchData();
+                            }}
+                            className="px-3 py-1.5 text-xs font-medium rounded-lg bg-orange-100 text-orange-700 hover:bg-orange-200"
+                          >
+                            {seller.is_active ? 'Suspend' : 'Activate'}
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        ) : activeTab === 'customers' ? (
+          <div>
+            <div className="bg-white rounded-xl shadow-sm overflow-hidden border border-gray-100">
+              <table className="w-full">
+                <thead className="bg-gray-50 border-b border-gray-200">
+                  <tr>
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase">Full Name</th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase">Email</th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase">Reward Points</th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase">Joined</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200">
+                  {customers.map((customer) => (
+                    <tr key={customer.id} className="hover:bg-gray-50">
+                      <td className="px-6 py-4 font-semibold">{customer.full_name}</td>
+                      <td className="px-6 py-4 text-sm text-gray-600">{customer.email}</td>
+                      <td className="px-6 py-4 text-sm font-medium text-blue-600">{customer.reward_points || 0} pts</td>
+                      <td className="px-6 py-4 text-sm text-gray-600">{new Date(customer.created_at).toLocaleDateString()}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </div>
         ) : activeTab === 'products' ? (
