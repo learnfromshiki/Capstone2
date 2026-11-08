@@ -177,11 +177,12 @@ export default function ShopAdminPage() {
     setLoading(true);
     try {
       if (activeTab === 'dashboard') {
-        // Fetch all stats for dashboard
-        const [ordersRes, customersRes, sellersRes] = await Promise.all([
+        // Fetch all stats AND recent orders for dashboard
+        const [ordersRes, customersRes, sellersRes, recentOrdersRes] = await Promise.all([
           supabase.from('shop_orders').select('total_amount', { count: 'exact' }),
           supabase.from('profiles').select('id', { count: 'exact' }),
-          supabase.from('shop_sellers').select('is_approved', { count: 'exact' })
+          supabase.from('shop_sellers').select('is_approved', { count: 'exact' }),
+          supabase.from('shop_orders').select('*, shop_order_items(*)').order('created_at', { ascending: false }).limit(10)
         ]);
 
         const totalSales = ordersRes.data?.reduce((sum, order) => sum + (order.total_amount || 0), 0) || 0;
@@ -194,6 +195,7 @@ export default function ShopAdminPage() {
           totalSales: totalSales,
           pendingSellers: pendingSellers
         });
+        setOrders(recentOrdersRes.data || []);
       } else if (activeTab === 'sellers') {
         const { data, error } = await supabase
           .from('shop_sellers')
@@ -426,9 +428,9 @@ export default function ShopAdminPage() {
   return (
     <div className="flex h-screen bg-gray-50">
       {/* LEFT SIDEBAR */}
-      <aside className="w-64 bg-gradient-to-b from-blue-600 to-blue-800 text-white flex flex-col shadow-xl">
+      <aside className="w-64 bg-gradient-to-b from-purple-700 to-purple-900 text-white flex flex-col shadow-xl">
         {/* Logo */}
-        <div className="p-6 border-b border-blue-800">
+        <div className="p-6 border-b border-purple-800">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-white/10 rounded-lg flex items-center justify-center">
               <svg className="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 20 20">
@@ -448,8 +450,8 @@ export default function ShopAdminPage() {
             onClick={() => setActiveTab('dashboard')}
             className={`w-full flex items-center gap-3 px-6 py-3 text-left transition-colors ${
               activeTab === 'dashboard'
-                ? 'bg-blue-700 border-l-4 border-white font-semibold'
-                : 'hover:bg-blue-700/50'
+                ? 'bg-purple-800 border-l-4 border-white font-semibold'
+                : 'hover:bg-purple-800/50'
             }`}
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -462,8 +464,8 @@ export default function ShopAdminPage() {
             onClick={() => setActiveTab('orders')}
             className={`w-full flex items-center gap-3 px-6 py-3 text-left transition-colors ${
               activeTab === 'orders'
-                ? 'bg-blue-700 border-l-4 border-white font-semibold'
-                : 'hover:bg-blue-700/50'
+                ? 'bg-purple-800 border-l-4 border-white font-semibold'
+                : 'hover:bg-purple-800/50'
             }`}
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -481,8 +483,8 @@ export default function ShopAdminPage() {
             onClick={() => setActiveTab('products')}
             className={`w-full flex items-center gap-3 px-6 py-3 text-left transition-colors ${
               activeTab === 'products'
-                ? 'bg-blue-700 border-l-4 border-white font-semibold'
-                : 'hover:bg-blue-700/50'
+                ? 'bg-purple-800 border-l-4 border-white font-semibold'
+                : 'hover:bg-purple-800/50'
             }`}
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -495,8 +497,8 @@ export default function ShopAdminPage() {
             onClick={() => setActiveTab('sellers')}
             className={`w-full flex items-center gap-3 px-6 py-3 text-left transition-colors ${
               activeTab === 'sellers'
-                ? 'bg-blue-700 border-l-4 border-white font-semibold'
-                : 'hover:bg-blue-700/50'
+                ? 'bg-purple-800 border-l-4 border-white font-semibold'
+                : 'hover:bg-purple-800/50'
             }`}
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -509,8 +511,8 @@ export default function ShopAdminPage() {
             onClick={() => setActiveTab('customers')}
             className={`w-full flex items-center gap-3 px-6 py-3 text-left transition-colors ${
               activeTab === 'customers'
-                ? 'bg-blue-700 border-l-4 border-white font-semibold'
-                : 'hover:bg-blue-700/50'
+                ? 'bg-purple-800 border-l-4 border-white font-semibold'
+                : 'hover:bg-purple-800/50'
             }`}
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -523,8 +525,8 @@ export default function ShopAdminPage() {
             onClick={() => setActiveTab('categories')}
             className={`w-full flex items-center gap-3 px-6 py-3 text-left transition-colors ${
               activeTab === 'categories'
-                ? 'bg-blue-700 border-l-4 border-white font-semibold'
-                : 'hover:bg-blue-700/50'
+                ? 'bg-purple-800 border-l-4 border-white font-semibold'
+                : 'hover:bg-purple-800/50'
             }`}
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -537,8 +539,8 @@ export default function ShopAdminPage() {
             onClick={() => setActiveTab('transactions')}
             className={`w-full flex items-center gap-3 px-6 py-3 text-left transition-colors ${
               activeTab === 'transactions'
-                ? 'bg-blue-700 border-l-4 border-white font-semibold'
-                : 'hover:bg-blue-700/50'
+                ? 'bg-purple-800 border-l-4 border-white font-semibold'
+                : 'hover:bg-purple-800/50'
             }`}
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -551,8 +553,8 @@ export default function ShopAdminPage() {
             onClick={() => setActiveTab('reports')}
             className={`w-full flex items-center gap-3 px-6 py-3 text-left transition-colors ${
               activeTab === 'reports'
-                ? 'bg-blue-700 border-l-4 border-white font-semibold'
-                : 'hover:bg-blue-700/50'
+                ? 'bg-purple-800 border-l-4 border-white font-semibold'
+                : 'hover:bg-purple-800/50'
             }`}
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -565,8 +567,8 @@ export default function ShopAdminPage() {
             onClick={() => setActiveTab('settings')}
             className={`w-full flex items-center gap-3 px-6 py-3 text-left transition-colors ${
               activeTab === 'settings'
-                ? 'bg-blue-700 border-l-4 border-white font-semibold'
-                : 'hover:bg-blue-700/50'
+                ? 'bg-purple-800 border-l-4 border-white font-semibold'
+                : 'hover:bg-purple-800/50'
             }`}
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -690,8 +692,8 @@ export default function ShopAdminPage() {
               <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm font-medium text-gray-600">Total Sales</p>
-                    <h3 className="text-3xl font-bold text-gray-900 mt-2">₱{stats.totalSales.toLocaleString()}</h3>
+                    <p className="text-sm font-medium text-gray-600">Total Revenue</p>
+                    <h3 className="text-3xl font-bold text-gray-900 mt-2">₱{stats.totalSales.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</h3>
                   </div>
                   <div className="w-12 h-12 bg-yellow-100 rounded-lg flex items-center justify-center">
                     <svg className="w-6 h-6 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
