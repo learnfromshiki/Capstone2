@@ -15,6 +15,7 @@ export default function ShopPage() {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('all');
   const [showCart, setShowCart] = useState(false);
+  const [checkoutRequest, setCheckoutRequest] = useState(0);
 
   // Open the cart when arriving from the buyer dashboard "My Cart" link
   useEffect(() => {
@@ -176,6 +177,23 @@ export default function ShopPage() {
         entry.id === productId ? { ...entry, quantity } : entry
       )
     );
+  };
+
+  // Buy Now puts the item in the cart, opens the drawer and jumps into checkout
+  const buyNow = (product) => {
+    if (!user) {
+      setShowAuthModal(true);
+      return;
+    }
+
+    if (!product.stock || product.stock <= 0) {
+      alert('Sorry, this product is out of stock.');
+      return;
+    }
+
+    addToCart(product);
+    setShowCart(true);
+    setCheckoutRequest((request) => request + 1);
   };
 
   const clearCart = () => {
@@ -413,6 +431,7 @@ export default function ShopPage() {
                 key={product.id}
                 product={product}
                 onAddToCart={addToCart}
+                onBuyNow={buyNow}
                 sellerInfo={sellers[product.seller_id]}
               />
             ))}
@@ -424,6 +443,7 @@ export default function ShopPage() {
       <Cart
         cart={cart}
         isOpen={showCart}
+        checkoutRequest={checkoutRequest}
         onClose={() => setShowCart(false)}
         onUpdateQuantity={updateQuantity}
         onRemoveItem={removeFromCart}

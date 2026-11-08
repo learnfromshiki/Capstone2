@@ -1,6 +1,6 @@
 'use client';
 
-export default function ProductCard({ product, onAddToCart, sellerInfo }) {
+export default function ProductCard({ product, onAddToCart, onBuyNow, sellerInfo }) {
   const categoryIcons = {
     handicrafts: '🧺',
     food: '🍽️',
@@ -108,32 +108,39 @@ export default function ProductCard({ product, onAddToCart, sellerInfo }) {
           </div>
         </div>
 
-        {/* Add to Cart Button */}
-        <button
-          onClick={() => onAddToCart(product)}
-          disabled={product.stock <= 0}
-          className={`w-full py-3.5 rounded-lg font-bold transition-all flex items-center justify-center gap-2 ${
-            product.stock > 0
-              ? 'bg-gradient-to-r from-blue-600 to-blue-700 text-white hover:from-blue-700 hover:to-blue-800 shadow-md hover:shadow-xl transform hover:scale-105 active:scale-95'
-              : 'bg-gray-200 text-gray-400 cursor-not-allowed'
-          }`}
-        >
-          {product.stock > 0 ? (
-            <>
+        {/* Buy now + Add to cart */}
+        {product.stock > 0 ? (
+          <div className="flex gap-2">
+            <button
+              onClick={() => onAddToCart(product)}
+              className="flex-1 py-3.5 rounded-lg font-bold border-2 border-blue-600 text-blue-600 hover:bg-blue-50 transition-all flex items-center justify-center gap-2 active:scale-95"
+            >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
               </svg>
               Add to Cart
-            </>
-          ) : (
-            <>
+            </button>
+            <button
+              onClick={() => (onBuyNow ? onBuyNow(product) : onAddToCart(product))}
+              className="flex-1 py-3.5 rounded-lg font-bold bg-gradient-to-r from-blue-600 to-blue-700 text-white hover:from-blue-700 hover:to-blue-800 shadow-md hover:shadow-xl transition-all flex items-center justify-center gap-2 transform hover:scale-105 active:scale-95"
+            >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
               </svg>
-              Out of Stock
-            </>
-          )}
-        </button>
+              Buy Now
+            </button>
+          </div>
+        ) : (
+          <button
+            disabled
+            className="w-full py-3.5 rounded-lg font-bold bg-gray-200 text-gray-400 cursor-not-allowed flex items-center justify-center gap-2"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+            Out of Stock
+          </button>
+        )}
       </div>
     </div>
   );

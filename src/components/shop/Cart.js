@@ -1,10 +1,25 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import CheckoutModal from './CheckoutModal';
 
-export default function Cart({ cart, isOpen, onClose, onUpdateQuantity, onRemoveItem, total, onClearCart }) {
+export default function Cart({ cart, isOpen, onClose, onUpdateQuantity, onRemoveItem, total, onClearCart, checkoutRequest = 0 }) {
   const [showCheckout, setShowCheckout] = useState(false);
+
+  // "Buy Now" on a product card asks the open cart to jump straight to checkout
+  const handledCheckoutRequest = useRef(0);
+
+  useEffect(() => {
+    if (
+      checkoutRequest &&
+      checkoutRequest !== handledCheckoutRequest.current &&
+      isOpen &&
+      cart.length > 0
+    ) {
+      handledCheckoutRequest.current = checkoutRequest;
+      setShowCheckout(true);
+    }
+  }, [checkoutRequest, isOpen, cart.length]);
 
   const handleCheckoutSuccess = () => {
     setShowCheckout(false);
