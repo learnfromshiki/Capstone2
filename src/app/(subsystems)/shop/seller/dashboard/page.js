@@ -290,7 +290,7 @@ export default function SellerDashboard() {
           </div>
           <h2 className="text-2xl font-bold text-gray-900 mb-2">Pending Approval</h2>
           <p className="text-gray-600 mb-6">
-            Your seller account is awaiting admin approval. You'll be able to access your dashboard once approved.
+            Your seller account is awaiting admin approval. You&apos;ll be able to access your dashboard once approved.
           </p>
           <button
             onClick={handleLogout}
