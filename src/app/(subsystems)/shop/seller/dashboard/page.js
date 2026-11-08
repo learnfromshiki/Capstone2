@@ -304,140 +304,459 @@ export default function SellerDashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <div className="bg-white border-b border-gray-200 sticky top-0 z-40">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <div className="flex items-center gap-4">
-              <Link href="/shop" className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
-                CONNECT-Daet
-              </Link>
-              <span className="px-3 py-1 bg-purple-100 text-purple-700 text-xs font-semibold rounded-full">
-                Seller Portal
-              </span>
+    <div className="flex h-screen bg-gray-50">
+      {/* LEFT SIDEBAR */}
+      <aside className="w-64 bg-purple-900 text-white flex flex-col">
+        {/* Logo */}
+        <div className="p-6 border-b border-purple-800">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-white/10 rounded-lg flex items-center justify-center">
+              <svg className="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 20 20">
+                <path d="M3 1a1 1 0 000 2h1.22l.305 1.222a.997.997 0 00.01.042l1.358 5.43-.893.892C3.74 11.846 4.632 14 6.414 14H15a1 1 0 000-2H6.414l1-1H14a1 1 0 00.894-.553l3-6A1 1 0 0017 3H6.28l-.31-1.243A1 1 0 005 1H3zM16 16.5a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0zM6.5 18a1.5 1.5 0 100-3 1.5 1.5 0 000 3z" />
+              </svg>
             </div>
-            <div className="flex items-center gap-4">
+            <div>
+              <h1 className="font-bold text-white">ShopEase</h1>
+              <p className="text-xs text-purple-300">Seller Portal</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Navigation */}
+        <nav className="flex-1 overflow-y-auto py-4">
+          <button
+            onClick={() => setActiveTab('dashboard')}
+            className={`w-full flex items-center gap-3 px-6 py-3 text-left transition-colors ${
+              activeTab === 'dashboard'
+                ? 'bg-purple-800 border-l-4 border-purple-400'
+                : 'hover:bg-purple-800/50'
+            }`}
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+            </svg>
+            <span className="font-medium">Dashboard</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('products')}
+            className={`w-full flex items-center gap-3 px-6 py-3 text-left transition-colors ${
+              activeTab === 'products'
+                ? 'bg-purple-800 border-l-4 border-purple-400'
+                : 'hover:bg-purple-800/50'
+            }`}
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+            </svg>
+            <span className="font-medium">My Products</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('orders')}
+            className={`w-full flex items-center gap-3 px-6 py-3 text-left transition-colors ${
+              activeTab === 'orders'
+                ? 'bg-purple-800 border-l-4 border-purple-400'
+                : 'hover:bg-purple-800/50'
+            }`}
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
+            </svg>
+            <span className="font-medium">Orders</span>
+            {stats.totalOrders > 0 && (
+              <span className="ml-auto px-2 py-0.5 bg-purple-600 text-white text-xs font-bold rounded-full">
+                {stats.totalOrders}
+              </span>
+            )}
+          </button>
+
+          <button
+            onClick={() => setActiveTab('earnings')}
+            className={`w-full flex items-center gap-3 px-6 py-3 text-left transition-colors ${
+              activeTab === 'earnings'
+                ? 'bg-purple-800 border-l-4 border-purple-400'
+                : 'hover:bg-purple-800/50'
+            }`}
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+            </svg>
+            <span className="font-medium">Sales & Earnings</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('settings')}
+            className={`w-full flex items-center gap-3 px-6 py-3 text-left transition-colors ${
+              activeTab === 'settings'
+                ? 'bg-purple-800 border-l-4 border-purple-400'
+                : 'hover:bg-purple-800/50'
+            }`}
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+            </svg>
+            <span className="font-medium">Shop Settings</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('profile')}
+            className={`w-full flex items-center gap-3 px-6 py-3 text-left transition-colors ${
+              activeTab === 'profile'
+                ? 'bg-purple-800 border-l-4 border-purple-400'
+                : 'hover:bg-purple-800/50'
+            }`}
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+            </svg>
+            <span className="font-medium">Profile</span>
+          </button>
+        </nav>
+
+        {/* Logout Button */}
+        <div className="p-4 border-t border-purple-800">
+          <button
+            onClick={handleLogout}
+            className="w-full flex items-center gap-3 px-4 py-3 text-left bg-purple-800 hover:bg-purple-700 rounded-lg transition-colors"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+            </svg>
+            <span className="font-medium">Log Out</span>
+          </button>
+        </div>
+      </aside>
+
+      {/* MAIN CONTENT AREA */}
+      <div className="flex-1 flex flex-col overflow-hidden">
+        {/* Top Header */}
+        <header className="bg-white border-b px-8 py-4 flex items-center justify-between">
+          <div className="flex-1">
+            <div className="relative max-w-md">
+              <input
+                type="text"
+                placeholder="Search my products, orders..."
+                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+              />
+              <svg className="w-5 h-5 text-gray-400 absolute left-3 top-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+            </div>
+          </div>
+          <div className="flex items-center gap-4">
+            <button className="relative p-2 text-gray-600 hover:text-gray-900">
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+              </svg>
+              <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
+            </button>
+            <div className="flex items-center gap-2">
+              <div className="w-10 h-10 bg-purple-100 rounded-full flex items-center justify-center">
+                <svg className="w-6 h-6 text-purple-700" fill="currentColor" viewBox="0 0 20 20">
+                  <path d="M3 1a1 1 0 000 2h1.22l.305 1.222a.997.997 0 00.01.042l1.358 5.43-.893.892C3.74 11.846 4.632 14 6.414 14H15a1 1 0 000-2H6.414l1-1H14a1 1 0 00.894-.553l3-6A1 1 0 0017 3H6.28l-.31-1.243A1 1 0 005 1H3zM16 16.5a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0zM6.5 18a1.5 1.5 0 100-3 1.5 1.5 0 000 3z" />
+                </svg>
+              </div>
               <div className="text-right">
                 <p className="text-sm font-semibold text-gray-900">{seller.business_name}</p>
-                <p className="text-xs text-gray-600">{user.email}</p>
+                <p className="text-xs text-gray-600">Seller</p>
               </div>
-              <button
-                onClick={handleLogout}
-                className="px-4 py-2 text-sm font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
-              >
-                Log Out
-              </button>
             </div>
           </div>
-        </div>
-      </div>
+        </header>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Welcome Header */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">
-            Welcome back, {seller.business_name}! 👋
-          </h1>
-          <p className="text-gray-600">Manage your shop, products, and orders here.</p>
-        </div>
-
-        {/* Tabs */}
-        <div className="bg-white rounded-xl shadow-sm mb-6 border border-gray-100">
-          <div className="flex border-b overflow-x-auto">
-            <button
-              onClick={() => setActiveTab('dashboard')}
-              className={`flex-1 py-4 px-6 font-semibold transition-all whitespace-nowrap ${
-                activeTab === 'dashboard'
-                  ? 'border-b-2 border-blue-600 text-blue-600 bg-blue-50'
-                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
-              }`}
-            >
-              📊 Dashboard
-            </button>
-            <button
-              onClick={() => setActiveTab('products')}
-              className={`flex-1 py-4 px-6 font-semibold transition-all whitespace-nowrap ${
-                activeTab === 'products'
-                  ? 'border-b-2 border-blue-600 text-blue-600 bg-blue-50'
-                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
-              }`}
-            >
-              📦 My Products
-            </button>
-            <button
-              onClick={() => setActiveTab('orders')}
-              className={`flex-1 py-4 px-6 font-semibold transition-all whitespace-nowrap ${
-                activeTab === 'orders'
-                  ? 'border-b-2 border-blue-600 text-blue-600 bg-blue-50'
-                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
-              }`}
-            >
-              🛒 Orders
-            </button>
-            <button
-              onClick={() => setActiveTab('earnings')}
-              className={`flex-1 py-4 px-6 font-semibold transition-all whitespace-nowrap ${
-                activeTab === 'earnings'
-                  ? 'border-b-2 border-blue-600 text-blue-600 bg-blue-50'
-                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
-              }`}
-            >
-              📈 Sales & Earnings
-            </button>
-            <button
-              onClick={() => setActiveTab('settings')}
-              className={`flex-1 py-4 px-6 font-semibold transition-all whitespace-nowrap ${
-                activeTab === 'settings'
-                  ? 'border-b-2 border-blue-600 text-blue-600 bg-blue-50'
-                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
-              }`}
-            >
-              ⚙️ Shop Settings
-            </button>
+        {/* Scrollable Content */}
+        <main className="flex-1 overflow-y-auto p-8">
+          {/* Date Display */}
+          <div className="flex justify-end mb-4">
+            <div className="flex items-center gap-2 text-sm text-gray-600">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+              </svg>
+              {new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+            </div>
           </div>
-        </div>
 
-        {/* Content */}
-        {activeTab === 'dashboard' && (
-          <div>
-            {/* Stats Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
-              <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-gray-600">Total Products</p>
-                    <h3 className="text-3xl font-bold text-gray-900 mt-2">{stats.totalProducts}</h3>
+          {/* Content */}
+          {activeTab === 'dashboard' && (
+            <div>
+              {/* Welcome Message */}
+              <div className="mb-6">
+                <h1 className="text-2xl font-bold text-gray-900 mb-1">
+                  Welcome back, {seller.business_name}! 👋
+                </h1>
+                <p className="text-gray-600">Manage your shop, products, and orders here.</p>
+              </div>
+
+              {/* Stats Cards */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
+                <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
+                      <svg className="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                      </svg>
+                    </div>
                   </div>
-                  <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
-                    <svg className="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-                    </svg>
+                  <p className="text-sm font-medium text-gray-600 mb-1">Total Products</p>
+                  <h3 className="text-3xl font-bold text-gray-900 mb-1">{stats.totalProducts}</h3>
+                  <p className="text-xs text-green-600">+4 added this week</p>
+                </div>
+
+                <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
+                      <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
+                      </svg>
+                    </div>
+                  </div>
+                  <p className="text-sm font-medium text-gray-600 mb-1">Total Orders</p>
+                  <h3 className="text-3xl font-bold text-gray-900 mb-1">{stats.totalOrders}</h3>
+                  <p className="text-xs text-green-600">+12 from last week</p>
+                </div>
+
+                <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
+                      <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                    </div>
+                  </div>
+                  <p className="text-sm font-medium text-gray-600 mb-1">Total Sales</p>
+                  <h3 className="text-3xl font-bold text-gray-900 mb-1">₱{stats.totalSales.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</h3>
+                  <p className="text-xs text-green-600">+18% from last week</p>
+                </div>
+
+                <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="w-12 h-12 bg-yellow-100 rounded-lg flex items-center justify-center">
+                      <svg className="w-6 h-6 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
+                      </svg>
+                    </div>
+                  </div>
+                  <p className="text-sm font-medium text-gray-600 mb-1">Earnings</p>
+                  <h3 className="text-3xl font-bold text-gray-900 mb-1">₱{stats.earnings.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</h3>
+                  <p className="text-xs text-gray-600">(after fees)</p>
+                </div>
+              </div>
+
+              {/* Sales Overview & Quick Actions Row */}
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+                {/* Sales Overview Chart */}
+                <div className="lg:col-span-2 bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-lg font-bold">Sales Overview</h3>
+                    <select className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm">
+                      <option>Last 7 Days</option>
+                      <option>Last 30 Days</option>
+                      <option>Last 90 Days</option>
+                    </select>
+                  </div>
+                  <div className="h-48 flex items-center justify-center bg-gradient-to-br from-purple-50 to-blue-50 rounded-lg">
+                    <div className="text-center">
+                      <svg className="w-16 h-16 text-purple-400 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z" />
+                      </svg>
+                      <p className="text-gray-600 font-medium">Sales Chart</p>
+                      <p className="text-xs text-gray-500 mt-1">Coming Soon</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Quick Actions */}
+                <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                  <h3 className="text-lg font-bold mb-4">Quick Actions</h3>
+                  <div className="space-y-3">
+                    <button
+                      onClick={() => setActiveTab('products')}
+                      className="w-full flex items-center justify-between p-3 bg-purple-50 hover:bg-purple-100 rounded-lg transition-colors"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 bg-purple-600 rounded-lg flex items-center justify-center">
+                          <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                          </svg>
+                        </div>
+                        <span className="font-semibold text-gray-900 text-sm">Add Product</span>
+                      </div>
+                    </button>
+
+                    <button
+                      onClick={() => setActiveTab('products')}
+                      className="w-full flex items-center justify-between p-3 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center">
+                          <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                          </svg>
+                        </div>
+                        <span className="font-semibold text-gray-900 text-sm">Manage Products</span>
+                      </div>
+                    </button>
+
+                    <button
+                      onClick={() => setActiveTab('orders')}
+                      className="w-full flex items-center justify-between p-3 bg-green-50 hover:bg-green-100 rounded-lg transition-colors"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 bg-green-600 rounded-lg flex items-center justify-center">
+                          <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
+                          </svg>
+                        </div>
+                        <span className="font-semibold text-gray-900 text-sm">View Orders</span>
+                      </div>
+                    </button>
+
+                    <button
+                      onClick={() => setActiveTab('earnings')}
+                      className="w-full flex items-center justify-between p-3 bg-yellow-50 hover:bg-yellow-100 rounded-lg transition-colors"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 bg-yellow-600 rounded-lg flex items-center justify-center">
+                          <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                          </svg>
+                        </div>
+                        <span className="font-semibold text-gray-900 text-sm">View Sales</span>
+                      </div>
+                    </button>
                   </div>
                 </div>
               </div>
 
-              <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-gray-600">Total Orders</p>
-                    <h3 className="text-3xl font-bold text-gray-900 mt-2">{stats.totalOrders}</h3>
+              {/* Recent Orders & Shop Information Row */}
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                {/* Recent Orders */}
+                <div className="lg:col-span-2 bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                  <div className="p-6 border-b border-gray-200">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-lg font-bold">Recent Orders</h3>
+                      <button
+                        onClick={() => setActiveTab('orders')}
+                        className="text-sm font-semibold text-blue-600 hover:text-blue-700 flex items-center gap-1"
+                      >
+                        View All Orders
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                        </svg>
+                      </button>
+                    </div>
                   </div>
-                  <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-                    <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
-                    </svg>
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead className="bg-gray-50 border-b border-gray-200">
+                        <tr>
+                          <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Order ID</th>
+                          <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Customer</th>
+                          <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Total</th>
+                          <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Status</th>
+                          <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Date</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-200">
+                        {orders.slice(0, 4).map((order) => (
+                          <tr key={order.id} className="hover:bg-gray-50">
+                            <td className="px-6 py-4 text-sm font-semibold text-blue-600">#{order.id.slice(0, 8).toUpperCase()}</td>
+                            <td className="px-6 py-4 text-sm text-gray-900">{order.customer_name}</td>
+                            <td className="px-6 py-4 text-sm font-semibold text-gray-900">₱{order.total_amount?.toLocaleString()}</td>
+                            <td className="px-6 py-4">
+                              <span className={`px-3 py-1 text-xs font-semibold rounded-full ${
+                                order.status === 'delivered' ? 'bg-green-100 text-green-700' :
+                                order.status === 'shipped' ? 'bg-blue-100 text-blue-700' :
+                                order.status === 'confirmed' ? 'bg-yellow-100 text-yellow-700' :
+                                'bg-gray-100 text-gray-700'
+                              }`}>
+                                {order.status === 'confirmed' ? 'To Ship' : order.status?.charAt(0).toUpperCase() + order.status?.slice(1)}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4 text-sm text-gray-600">
+                              {new Date(order.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                            </td>
+                          </tr>
+                        ))}
+                        {orders.length === 0 && (
+                          <tr>
+                            <td colSpan="5" className="px-6 py-8 text-center text-gray-500">
+                              No orders yet
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* Shop Information */}
+                <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                  <h3 className="text-lg font-bold mb-4">Shop Information</h3>
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-3 p-3 bg-purple-50 rounded-lg">
+                      <div className="w-12 h-12 bg-purple-600 rounded-lg flex items-center justify-center">
+                        <svg className="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 20 20">
+                          <path d="M3 1a1 1 0 000 2h1.22l.305 1.222a.997.997 0 00.01.042l1.358 5.43-.893.892C3.74 11.846 4.632 14 6.414 14H15a1 1 0 000-2H6.414l1-1H14a1 1 0 00.894-.553l3-6A1 1 0 0017 3H6.28l-.31-1.243A1 1 0 005 1H3zM16 16.5a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0zM6.5 18a1.5 1.5 0 100-3 1.5 1.5 0 000 3z" />
+                        </svg>
+                      </div>
+                      <div className="flex-1">
+                        <p className="font-bold text-gray-900">{seller.business_name}</p>
+                        <div className="flex items-center gap-1 mt-1">
+                          <span className="px-2 py-0.5 bg-green-100 text-green-700 text-xs font-semibold rounded">+ Active</span>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => setActiveTab('settings')}
+                        className="text-gray-400 hover:text-gray-600"
+                      >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                        </svg>
+                      </button>
+                    </div>
+
+                    <div className="space-y-2 text-sm">
+                      <div className="flex items-center justify-between py-2 border-b border-gray-100">
+                        <div className="flex items-center gap-2 text-gray-600">
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                          </svg>
+                          <span>Products</span>
+                        </div>
+                        <span className="font-bold text-gray-900">{stats.totalProducts}</span>
+                      </div>
+
+                      <div className="flex items-center justify-between py-2 border-b border-gray-100">
+                        <div className="flex items-center gap-2 text-gray-600">
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
+                          </svg>
+                          <span>Orders</span>
+                        </div>
+                        <span className="font-bold text-gray-900">{stats.totalOrders}</span>
+                      </div>
+
+                      <div className="flex items-center justify-between py-2">
+                        <div className="flex items-center gap-2 text-gray-600">
+                          <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                            <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                          </svg>
+                          <span>Shop Rating</span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <span className="font-bold text-gray-900">4.8</span>
+                          <span className="text-yellow-500">★</span>
+                          <span className="text-xs text-gray-500">(125 reviews)</span>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
-
-              <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-gray-600">Total Sales</p>
-                    <h3 className="text-3xl font-bold text-gray-900 mt-2">₱{stats.totalSales.toLocaleString()}</h3>
-                  </div>
-                  <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
+            </div>
+          )}
                     <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
                     </svg>
@@ -713,9 +1032,102 @@ export default function SellerDashboard() {
             </div>
           </div>
         )}
-      </div>
 
-      {/* Add Product Modal */}
+        {activeTab === 'profile' && (
+          <div>
+            <h2 className="text-2xl font-bold text-gray-900 mb-6">Profile</h2>
+            <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+              <div className="space-y-6">
+                <div className="flex items-center gap-6">
+                  <div className="w-24 h-24 bg-purple-100 rounded-full flex items-center justify-center">
+                    <svg className="w-12 h-12 text-purple-600" fill="currentColor" viewBox="0 0 20 20">
+                      <path d="M3 1a1 1 0 000 2h1.22l.305 1.222a.997.997 0 00.01.042l1.358 5.43-.893.892C3.74 11.846 4.632 14 6.414 14H15a1 1 0 000-2H6.414l1-1H14a1 1 0 00.894-.553l3-6A1 1 0 0017 3H6.28l-.31-1.243A1 1 0 005 1H3zM16 16.5a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0zM6.5 18a1.5 1.5 0 100-3 1.5 1.5 0 000 3z" />
+                    </svg>
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-bold text-gray-900">{seller.business_name}</h3>
+                    <p className="text-gray-600">{user.email}</p>
+                    <div className="flex items-center gap-2 mt-2">
+                      <span className="px-3 py-1 bg-green-100 text-green-700 text-xs font-semibold rounded-full">Active</span>
+                      <span className="px-3 py-1 bg-purple-100 text-purple-700 text-xs font-semibold rounded-full">Verified Seller</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-6 border-t">
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">Business Name</label>
+                    <input
+                      type="text"
+                      value={seller.business_name}
+                      disabled
+                      className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl bg-gray-50"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">Contact Email</label>
+                    <input
+                      type="email"
+                      value={seller.contact_email}
+                      disabled
+                      className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl bg-gray-50"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">Contact Phone</label>
+                    <input
+                      type="tel"
+                      value={seller.contact_phone || 'Not provided'}
+                      disabled
+                      className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl bg-gray-50"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">Member Since</label>
+                    <input
+                      type="text"
+                      value={new Date(seller.created_at).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+                      disabled
+                      className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl bg-gray-50"
+                    />
+                  </div>
+                </div>
+
+                <div className="pt-6 border-t">
+                  <h4 className="font-semibold text-gray-900 mb-4">Business Statistics</h4>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div className="text-center p-4 bg-purple-50 rounded-lg">
+                      <p className="text-2xl font-bold text-purple-600">{stats.totalProducts}</p>
+                      <p className="text-sm text-gray-600 mt-1">Products</p>
+                    </div>
+                    <div className="text-center p-4 bg-blue-50 rounded-lg">
+                      <p className="text-2xl font-bold text-blue-600">{stats.totalOrders}</p>
+                      <p className="text-sm text-gray-600 mt-1">Orders</p>
+                    </div>
+                    <div className="text-center p-4 bg-green-50 rounded-lg">
+                      <p className="text-2xl font-bold text-green-600">₱{stats.totalSales.toLocaleString()}</p>
+                      <p className="text-sm text-gray-600 mt-1">Sales</p>
+                    </div>
+                    <div className="text-center p-4 bg-yellow-50 rounded-lg">
+                      <p className="text-2xl font-bold text-yellow-600">4.8</p>
+                      <p className="text-sm text-gray-600 mt-1">Rating</p>
+                    </div>
+                  </div>
+                </div>
+
+                <p className="text-sm text-gray-600 bg-gray-50 p-4 rounded-lg">
+                  💡 <strong>Note:</strong> To update your seller information, please contact the administrator.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+        </main>
+      </div>
+    </div>
+  );
+}
+
       {showAddProduct && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
