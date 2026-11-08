@@ -10,7 +10,7 @@ I've just completed implementing ALL the features you requested:
 
 ### 1. ✅ Admin Password Protection
 - **Status:** IMPLEMENTED
-- **Password:** `admin123`
+- **Password:** `shiki1234`
 - **Login Page:** Professional with password protection
 
 ### 2. ✅ Add Products Feature
@@ -40,7 +40,7 @@ npm run dev
 ### Step 2: Access Admin Panel
 1. Open browser: `http://localhost:3000/shop/admin`
 2. You'll see a login screen
-3. Enter password: `admin123`
+3. Enter password: `shiki1234`
 4. Click "Access Admin Panel"
 
 ### Step 3: Add Your First Product
@@ -185,7 +185,7 @@ Once logged in, you can:
 
 ### "Can't login to admin"
 **Solution:**
-- Password is: `admin123` (lowercase, no spaces)
+- Password is: `shiki1234` (lowercase, no spaces)
 - Clear browser cache and try again
 - Check console for errors (F12)
 
@@ -202,7 +202,7 @@ Once logged in, you can:
 
 ### Test Admin:
 - [ ] Visit `/shop/admin`
-- [ ] Login with `admin123`
+- [ ] Login with `shiki1234`
 - [ ] See dashboard with stats
 - [ ] Click "Add Product"
 - [ ] Fill form and submit
@@ -316,7 +316,7 @@ To verify everything is working:
    ```
    ✓ Can access /shop/admin
    ✓ Login screen appears
-   ✓ Password "admin123" works
+   ✓ Password "shiki1234" works
    ✓ Dashboard loads with stats
    ✓ Can click "Add Product"
    ✓ Modal opens with form
@@ -370,7 +370,7 @@ npm run dev
 http://localhost:3000/shop/admin
 
 # 3. Login with
-Password: admin123
+Password: shiki1234
 
 # 4. Click "Add Product"
 

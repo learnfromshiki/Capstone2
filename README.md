@@ -67,7 +67,7 @@ npm run dev
 ### 5. Access the System
 - **Shop**: http://localhost:3000/shop
 - **Seller Portal**: http://localhost:3000/shop/seller
-- **Admin Panel**: http://localhost:3000/shop/admin (password: `admin123`)
+- **Admin Panel**: http://localhost:3000/shop/admin (password: `shiki1234`)
 
 ## 📁 Structure
 
@@ -103,7 +103,7 @@ src/
 | `/shop` | Customer shop | Public (cart requires login) |
 | `/shop/seller` | Seller login/signup | Public |
 | `/shop/seller/dashboard` | Seller dashboard | Sellers only |
-| `/shop/admin` | Admin panel | Password: `admin123` |
+| `/shop/admin` | Admin panel | Password: `shiki1234` |
 
 ## 🏪 User Journeys
 

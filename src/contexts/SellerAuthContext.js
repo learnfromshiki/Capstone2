@@ -53,13 +53,44 @@ export const SellerAuthProvider = ({ children }) => {
         .from('shop_sellers')
         .select('*')
         .eq('user_id', userId)
-        .single();
+        .maybeSingle();
 
       if (error && error.code !== 'PGRST116') { // PGRST116 = no rows returned
         throw error;
       }
 
-      setSeller(data || null);
+      let sellerRow = data || null;
+
+      // Seller signup while email confirmation was pending: the row could not be
+      // written then (no session). Finish it now that the user is authenticated.
+      if (!sellerRow) {
+        const { data: { session } } = await supabase.auth.getSession();
+        const intent = session?.user?.user_metadata;
+
+        if (intent?.account_type === 'seller' && intent.business_name) {
+          const { data: created, error: createError } = await supabase
+            .from('shop_sellers')
+            .insert({
+              user_id: userId,
+              business_name: intent.business_name,
+              contact_email: session.user.email,
+              contact_phone: intent.contact_phone || null,
+              address: intent.address || null,
+              is_approved: false,
+              is_active: true,
+            })
+            .select()
+            .maybeSingle();
+
+          if (createError) {
+            console.error('Could not complete the seller profile:', createError);
+          } else {
+            sellerRow = created;
+          }
+        }
+      }
+
+      setSeller(sellerRow);
     } catch (error) {
       console.error('Error fetching seller profile:', error);
       setSeller(null);
@@ -77,13 +108,18 @@ export const SellerAuthProvider = ({ children }) => {
         options: {
           data: {
             full_name: sellerData.businessName,
+            account_type: 'seller',
+            business_name: sellerData.businessName,
+            contact_phone: sellerData.phone || null,
+            address: sellerData.address || null,
           }
         }
       });
 
       if (authError) throw authError;
 
-      // Create seller profile
+      // Create seller profile. With email confirmation pending there is no session
+      // yet, so the insert is expected to be deferred to the first sign-in.
       if (authData.user) {
         const { data: sellerProfile, error: sellerError } = await supabase
           .from('shop_sellers')
@@ -96,11 +132,13 @@ export const SellerAuthProvider = ({ children }) => {
             description: sellerData.description || null,
           })
           .select()
-          .single();
+          .maybeSingle();
 
-        if (sellerError) throw sellerError;
-
-        setSeller(sellerProfile);
+        if (sellerError) {
+          console.warn('Seller profile deferred until first sign-in:', sellerError.message);
+        } else if (sellerProfile) {
+          setSeller(sellerProfile);
+        }
       }
 
       return { data: authData, error: null };

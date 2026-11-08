@@ -18,7 +18,7 @@
 
 **Access:**
 - URL: `http://localhost:3000/shop/admin`
-- Password: `admin123`
+- Password: `shiki1234`
 - Session stored in browser sessionStorage
 
 **Security:**
@@ -132,7 +132,7 @@
 1. **Access Admin Panel:**
    ```
    http://localhost:3000/shop/admin
-   Password: admin123
+   Password: shiki1234
    ```
 
 2. **Add Products:**
@@ -305,7 +305,7 @@ All new features work on:
 ### Admin Credentials:
 ```
 URL: /shop/admin
-Password: admin123
+Password: shiki1234
 ```
 
 ### Customer Test Account:

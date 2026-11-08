@@ -26,6 +26,10 @@ export default function AuthModal({ isOpen, onClose, mode: initialMode = 'login'
     setError('');
     setLoading(true);
 
+    // A previous admin session must never authorize this login attempt
+    sessionStorage.removeItem('admin_authenticated');
+    sessionStorage.removeItem('admin_email');
+
     try {
       // Demo admin account (see ADMIN-LOGIN-FLOW.md) goes straight to the admin dashboard
       if (mode === 'login' && email.trim().toLowerCase() === DEMO_ADMIN_EMAIL && password === DEMO_ADMIN_PASSWORD) {
@@ -79,32 +83,49 @@ export default function AuthModal({ isOpen, onClose, mode: initialMode = 'login'
 
         onClose();
       } else {
-        // Sign up user
-        const { data, error } = await signUp(email, password, fullName);
+        // Seller details ride along in the auth metadata so they survive email
+        // confirmation, when there is no session to write a seller row with yet
+        const sellerMetadata = accountType === 'seller'
+          ? {
+              account_type: 'seller',
+              business_name: businessName,
+              contact_phone: contactPhone || null,
+              address: address || null,
+            }
+          : {};
+
+        const { data, error } = await signUp(email, password, fullName, sellerMetadata);
         if (error) throw error;
 
         // If signing up as seller, create seller record
         if (accountType === 'seller' && data?.user) {
-          const { error: sellerError } = await supabase
-            .from('shop_sellers')
-            .insert([{
-              user_id: data.user.id,
-              business_name: businessName,
-              contact_email: email,
-              contact_phone: contactPhone || null,
-              address: address || null,
-              is_approved: false, // Requires admin approval
-              is_active: true
-            }]);
-
-          if (sellerError) {
-            console.error('Error creating seller account:', sellerError);
-            setError('Account created but seller profile failed. Please contact support.');
+          if (!data.session) {
+            // No session: the seller row is created automatically on first sign-in
+            setError('✅ Seller account created! Confirm your email, then sign in — your shop profile is completed automatically. Awaiting admin approval.');
           } else {
-            setError('✅ Seller account created! Awaiting admin approval. Check your email to confirm.');
+            const { error: sellerError } = await supabase
+              .from('shop_sellers')
+              .insert([{
+                user_id: data.user.id,
+                business_name: businessName,
+                contact_email: email,
+                contact_phone: contactPhone || null,
+                address: address || null,
+                is_approved: false, // Requires admin approval
+                is_active: true
+              }]);
+
+            if (sellerError) {
+              console.error('Error creating seller account:', sellerError);
+              setError('✅ Account created! Sign in to finish setting up your shop (awaiting admin approval).');
+            } else {
+              setError('✅ Seller account created! Awaiting admin approval.');
+            }
           }
         } else {
-          setError('Check your email to confirm your account!');
+          setError(data?.session
+            ? '✅ Account created! You are now signed in.'
+            : 'Check your email to confirm your account!');
         }
 
         setTimeout(() => {

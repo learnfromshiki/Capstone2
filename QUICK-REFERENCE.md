@@ -10,7 +10,7 @@ npm run dev
 |-----------|-----|-------------|
 | **Customer** | http://localhost:3000/shop | Create account or login |
 | **Seller** | http://localhost:3000/shop/seller | Create seller account |
-| **Admin** | http://localhost:3000/shop/admin | Password: `admin123` |
+| **Admin** | http://localhost:3000/shop/admin | Password: `shiki1234` |
 
 ## 📊 User Capabilities
 

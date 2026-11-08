@@ -81,6 +81,7 @@ export default function ShopAdminPage() {
     toFulfill: 0
   });
   const [activeTab, setActiveTab] = useState('dashboard');
+  const [salesDaily, setSalesDaily] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showAddProduct, setShowAddProduct] = useState(false);
   const [showAddCategory, setShowAddCategory] = useState(false);
@@ -149,14 +150,24 @@ export default function ShopAdminPage() {
             sessionStorage.setItem('admin_email', session.user.email || '');
             return;
           }
+
+          // Somebody else is signed in (buyer/seller): the demo flag must not
+          // authorize them, so clear it and stay locked out.
+          sessionStorage.removeItem('admin_authenticated');
+          sessionStorage.removeItem('admin_email');
+          return;
         }
       } catch (error) {
         console.error('Error verifying admin access:', error);
       }
 
-      if (sessionStorage.getItem('admin_authenticated') === 'true') {
+      // No Supabase session at all: only the documented demo admin may use the flag
+      if (
+        sessionStorage.getItem('admin_authenticated') === 'true' &&
+        sessionStorage.getItem('admin_email') === DEMO_ADMIN_EMAIL
+      ) {
         setIsAuthenticated(true);
-        setAdminEmail(sessionStorage.getItem('admin_email') || DEMO_ADMIN_EMAIL);
+        setAdminEmail(DEMO_ADMIN_EMAIL);
       }
     };
 
@@ -332,9 +343,9 @@ export default function ShopAdminPage() {
       if (activeTab === 'dashboard') {
         // Fetch all stats AND recent orders for dashboard
         const [ordersRes, customersRes, sellersRes, recentOrdersRes] = await Promise.all([
-          supabase.from('shop_orders').select('total_amount, status', { count: 'exact' }),
-          supabase.from('profiles').select('id', { count: 'exact' }),
-          supabase.from('shop_sellers').select('is_approved', { count: 'exact' }),
+          supabase.from('shop_orders').select('total_amount, status, created_at', { count: 'exact' }),
+          supabase.from('profiles').select('id, user_type'),
+          supabase.from('shop_sellers').select('is_approved, user_id', { count: 'exact' }),
           supabase.from('shop_orders').select('*, shop_order_items(*)').order('created_at', { ascending: false }).limit(10)
         ]);
 
@@ -344,9 +355,34 @@ export default function ShopAdminPage() {
         const pendingSellers = sellersRes.data?.filter(s => !s.is_approved).length || 0;
         const toFulfill = paidOrders.filter(order => ['pending', 'confirmed', 'processing'].includes(order.status)).length;
 
+        // Customers are profiles that are neither sellers nor admins
+        const sellerUserIds = new Set((sellersRes.data || []).map(s => s.user_id).filter(Boolean));
+        const totalCustomers = (customersRes.data || [])
+          .filter(profile => profile.user_type !== 'admin' && !sellerUserIds.has(profile.id))
+          .length;
+
+        // Last 7 days of revenue for the dashboard chart
+        const days = [];
+        for (let offset = 6; offset >= 0; offset -= 1) {
+          const date = new Date();
+          date.setDate(date.getDate() - offset);
+          days.push({
+            key: date.toLocaleDateString('en-CA'),
+            label: date.toLocaleDateString('en-US', { weekday: 'short' }),
+            total: 0
+          });
+        }
+
+        paidOrders.forEach(order => {
+          const key = new Date(order.created_at).toLocaleDateString('en-CA');
+          const day = days.find(entry => entry.key === key);
+          if (day) day.total += Number(order.total_amount) || 0;
+        });
+
+        setSalesDaily(days);
         setStats({
           totalOrders: ordersRes.count || 0,
-          totalCustomers: customersRes.count || 0,
+          totalCustomers: totalCustomers,
           totalSellers: sellersRes.count || 0,
           totalSales: totalSales,
           pendingSellers: pendingSellers,
@@ -1281,16 +1317,39 @@ export default function ShopAdminPage() {
 
               {/* Sales Overview Chart Placeholder */}
               <div className="lg:col-span-2 bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-                <h3 className="text-lg font-bold mb-4">Sales Overview</h3>
-                <div className="h-48 flex items-center justify-center bg-gray-50 rounded-lg">
-                  <div className="text-center">
-                    <svg className="w-16 h-16 text-gray-400 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                    </svg>
-                    <p className="text-gray-600 font-medium">Sales Chart</p>
-                    <p className="text-xs text-gray-500 mt-1">Coming Soon</p>
-                  </div>
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-bold">Sales Overview</h3>
+                  <span className="text-xs text-gray-500">Last 7 days</span>
                 </div>
+
+                {salesDaily.every(day => day.total === 0) ? (
+                  <div className="h-48 flex items-center justify-center bg-gray-50 rounded-lg">
+                    <div className="text-center">
+                      <p className="text-gray-600 font-medium">No sales in the last 7 days</p>
+                      <p className="text-xs text-gray-500 mt-1">Revenue from new orders appears here</p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="h-48 flex items-end gap-2">
+                    {salesDaily.map((day) => {
+                      const peak = Math.max(...salesDaily.map(entry => entry.total), 1);
+                      const height = Math.round((day.total / peak) * 100);
+
+                      return (
+                        <div key={day.key} className="flex-1 flex flex-col items-center justify-end h-full">
+                          <span className="text-[10px] text-gray-600 mb-1">
+                            {day.total > 0 ? `₱${day.total.toLocaleString()}` : ''}
+                          </span>
+                          <div
+                            className="w-full bg-blue-500 rounded-t"
+                            style={{ height: `${Math.max(height, 2)}%` }}
+                          />
+                          <span className="text-[10px] text-gray-500 mt-1">{day.label}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             </div>
 

@@ -145,7 +145,7 @@ Or create an admin interface to toggle `is_approved` status.
 - **Product Cards**: Show seller information
 
 ### Admin Routes:
-- **Admin Panel**: `/shop/admin` (password: `admin123`)
+- **Admin Panel**: `/shop/admin` (password: `shiki1234`)
 
 ## Commission System
 

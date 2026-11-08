@@ -97,7 +97,7 @@ export default function ProductCard({ product, onAddToCart, sellerInfo }) {
           <div>
             <p className="text-xs text-gray-500 mb-1">Price</p>
             <span className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
-              ₱{product.price.toFixed(2)}
+              ₱{Number(product.price || 0).toFixed(2)}
             </span>
           </div>
           <div className="text-right">

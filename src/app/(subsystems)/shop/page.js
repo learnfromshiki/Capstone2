@@ -146,9 +146,8 @@ export default function ShopPage() {
       return [...prevCart, { ...product, quantity: 1 }];
     });
     
-    // Show cart briefly when item added
+    // Open the cart so the customer sees what was just added
     setShowCart(true);
-    setTimeout(() => setShowCart(false), 2000);
   };
 
   const removeFromCart = (productId) => {
@@ -156,13 +155,24 @@ export default function ShopPage() {
   };
 
   const updateQuantity = (productId, quantity) => {
+    const item = cart.find((entry) => entry.id === productId);
+
+    if (!item) return;
+
     if (quantity <= 0) {
       removeFromCart(productId);
       return;
     }
+
+    const maxStock = Number(item.stock) || 0;
+    if (quantity > maxStock) {
+      alert(`Only ${maxStock} of ${item.name} in stock.`);
+      return;
+    }
+
     setCart((prevCart) =>
-      prevCart.map((item) =>
-        item.id === productId ? { ...item, quantity } : item
+      prevCart.map((entry) =>
+        entry.id === productId ? { ...entry, quantity } : entry
       )
     );
   };

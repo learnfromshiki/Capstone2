@@ -23,6 +23,8 @@ export default function CheckoutModal({ cart, total, onClose, onSuccess }) {
 
   const handleSubmitOrder = async () => {
     setLoading(true);
+    let createdOrderId = null;
+
     try {
       // Get current user
       const { data: { user } } = await supabase.auth.getUser();
@@ -65,6 +67,8 @@ export default function CheckoutModal({ cart, total, onClose, onSuccess }) {
 
       if (orderError) throw orderError;
 
+      createdOrderId = order.id;
+
       // Create order items
       const orderItems = cart.map((item) => ({
         order_id: order.id,
@@ -97,13 +101,19 @@ export default function CheckoutModal({ cart, total, onClose, onSuccess }) {
         }
 
         // Update stock
-        const { error: stockError } = await supabase
+        const { data: updated, error: stockError } = await supabase
           .from('shop_products')
           .update({ stock: currentProduct.stock - item.quantity })
           .eq('id', item.id)
-          .eq('stock', currentProduct.stock); // Optimistic locking
+          .eq('stock', currentProduct.stock) // Optimistic locking
+          .select('id');
 
         if (stockError) throw stockError;
+
+        // Another buyer took the stock between our check and this update
+        if (!updated || updated.length === 0) {
+          throw new Error(`${item.name} was just sold out. Please review your cart and try again.`);
+        }
       });
 
       // Wait for all stock updates to complete
@@ -118,7 +128,20 @@ export default function CheckoutModal({ cart, total, onClose, onSuccess }) {
       setStep(3);
     } catch (error) {
       console.error('Error creating order:', error);
-      alert('Failed to place order. Please try again.');
+
+      // Roll back a half-created order so nobody sees an empty order in their history
+      if (createdOrderId) {
+        const { error: cleanupError } = await supabase
+          .from('shop_order_items')
+          .delete()
+          .eq('order_id', createdOrderId);
+
+        if (!cleanupError) {
+          await supabase.from('shop_orders').delete().eq('id', createdOrderId);
+        }
+      }
+
+      alert('Failed to place order: ' + (error.message || 'Please try again.'));
     } finally {
       setLoading(false);
     }
