@@ -102,7 +102,7 @@ export default function BuyerDashboard() {
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center gap-4">
               <Link href="/shop" className="text-2xl font-bold">
-                ShopEase
+                CONNECT-Daet
               </Link>
               <span className="px-3 py-1 bg-white/20 text-white text-xs font-semibold rounded-full">
                 Buyer
@@ -151,7 +151,7 @@ export default function BuyerDashboard() {
                   onClick={() => setActiveTab('home')}
                   className={`flex items-center gap-3 px-6 py-4 text-left font-medium transition-colors ${
                     activeTab === 'home'
-                      ? 'bg-purple-50 text-purple-600 border-l-4 border-purple-600'
+                      ? 'bg-blue-50 text-blue-600 border-l-4 border-blue-600'
                       : 'text-gray-700 hover:bg-gray-50'
                   }`}
                 >
@@ -165,7 +165,7 @@ export default function BuyerDashboard() {
                   onClick={() => setActiveTab('orders')}
                   className={`flex items-center gap-3 px-6 py-4 text-left font-medium transition-colors ${
                     activeTab === 'orders'
-                      ? 'bg-purple-50 text-purple-600 border-l-4 border-purple-600'
+                      ? 'bg-blue-50 text-blue-600 border-l-4 border-blue-600'
                       : 'text-gray-700 hover:bg-gray-50'
                   }`}
                 >
@@ -174,7 +174,7 @@ export default function BuyerDashboard() {
                   </svg>
                   My Orders
                   {orders.length > 0 && (
-                    <span className="ml-auto px-2 py-1 bg-purple-100 text-purple-600 text-xs font-bold rounded-full">
+                    <span className="ml-auto px-2 py-1 bg-blue-100 text-blue-600 text-xs font-bold rounded-full">
                       {orders.length}
                     </span>
                   )}
@@ -194,7 +194,7 @@ export default function BuyerDashboard() {
                   onClick={() => setActiveTab('wishlist')}
                   className={`flex items-center gap-3 px-6 py-4 text-left font-medium transition-colors ${
                     activeTab === 'wishlist'
-                      ? 'bg-purple-50 text-purple-600 border-l-4 border-purple-600'
+                      ? 'bg-blue-50 text-blue-600 border-l-4 border-blue-600'
                       : 'text-gray-700 hover:bg-gray-50'
                   }`}
                 >
@@ -208,7 +208,7 @@ export default function BuyerDashboard() {
                   onClick={() => setActiveTab('reviews')}
                   className={`flex items-center gap-3 px-6 py-4 text-left font-medium transition-colors ${
                     activeTab === 'reviews'
-                      ? 'bg-purple-50 text-purple-600 border-l-4 border-purple-600'
+                      ? 'bg-blue-50 text-blue-600 border-l-4 border-blue-600'
                       : 'text-gray-700 hover:bg-gray-50'
                   }`}
                 >
@@ -222,7 +222,7 @@ export default function BuyerDashboard() {
                   onClick={() => setActiveTab('profile')}
                   className={`flex items-center gap-3 px-6 py-4 text-left font-medium transition-colors ${
                     activeTab === 'profile'
-                      ? 'bg-purple-50 text-purple-600 border-l-4 border-purple-600'
+                      ? 'bg-blue-50 text-blue-600 border-l-4 border-blue-600'
                       : 'text-gray-700 hover:bg-gray-50'
                   }`}
                 >
@@ -236,7 +236,7 @@ export default function BuyerDashboard() {
                   onClick={() => setActiveTab('settings')}
                   className={`flex items-center gap-3 px-6 py-4 text-left font-medium transition-colors ${
                     activeTab === 'settings'
-                      ? 'bg-purple-50 text-purple-600 border-l-4 border-purple-600'
+                      ? 'bg-blue-50 text-blue-600 border-l-4 border-blue-600'
                       : 'text-gray-700 hover:bg-gray-50'
                   }`}
                 >
@@ -271,7 +271,7 @@ export default function BuyerDashboard() {
                     <p className="text-xl mb-4">Up to 50% OFF</p>
                     <Link
                       href="/shop"
-                      className="inline-block px-6 py-3 bg-white text-purple-600 font-bold rounded-lg hover:bg-gray-100 transition-colors"
+                      className="inline-block px-6 py-3 bg-white text-blue-600 font-bold rounded-lg hover:bg-gray-100 transition-colors"
                     >
                       Shop Now →
                     </Link>
@@ -287,7 +287,7 @@ export default function BuyerDashboard() {
                 <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
                   <div className="flex justify-between items-center mb-4">
                     <h3 className="text-lg font-bold text-gray-900">My Order Status</h3>
-                    <Link href="#" onClick={() => setActiveTab('orders')} className="text-purple-600 text-sm font-medium hover:text-purple-700">
+                    <Link href="#" onClick={() => setActiveTab('orders')} className="text-blue-600 text-sm font-medium hover:text-blue-700">
                       View All Orders →
                     </Link>
                   </div>
@@ -313,8 +313,8 @@ export default function BuyerDashboard() {
                     </div>
 
                     <div className="text-center">
-                      <div className="w-16 h-16 mx-auto mb-2 bg-purple-100 rounded-full flex items-center justify-center">
-                        <svg className="w-8 h-8 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <div className="w-16 h-16 mx-auto mb-2 bg-blue-100 rounded-full flex items-center justify-center">
+                        <svg className="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path d="M9 17a2 2 0 11-4 0 2 2 0 014 0zM19 17a2 2 0 11-4 0 2 2 0 014 0z" />
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16V6a1 1 0 00-1-1H4a1 1 0 00-1 1v10a1 1 0 001 1h1m8-1a1 1 0 01-1 1H9m4-1V8a1 1 0 011-1h2.586a1 1 0 01.707.293l3.414 3.414a1 1 0 01.293.707V16a1 1 0 01-1 1h-1m-6-1a1 1 0 001 1h1M5 17a2 2 0 104 0m-4 0a2 2 0 114 0m6 0a2 2 0 104 0m-4 0a2 2 0 114 0" />
                         </svg>
@@ -339,12 +339,12 @@ export default function BuyerDashboard() {
                 <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
                   <div className="flex justify-between items-center mb-4">
                     <h3 className="text-lg font-bold text-gray-900">Recommended For You</h3>
-                    <Link href="/shop" className="text-purple-600 text-sm font-medium hover:text-purple-700">
+                    <Link href="/shop" className="text-blue-600 text-sm font-medium hover:text-blue-700">
                       See More →
                     </Link>
                   </div>
                   <div className="text-center py-8 text-gray-500">
-                    <Link href="/shop" className="inline-block px-6 py-3 bg-purple-600 text-white font-semibold rounded-lg hover:bg-purple-700 transition-colors">
+                    <Link href="/shop" className="inline-block px-6 py-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition-colors">
                       Browse Products
                     </Link>
                   </div>
@@ -372,10 +372,10 @@ export default function BuyerDashboard() {
                   ) : (
                     <div className="space-y-4">
                       {orders.map((order) => (
-                        <div key={order.id} className="border border-gray-200 rounded-lg p-6 hover:border-purple-300 transition-colors">
+                        <div key={order.id} className="border border-gray-200 rounded-lg p-6 hover:border-blue-300 transition-colors">
                           <div className="flex justify-between items-start mb-4">
                             <div>
-                              <p className="text-sm text-gray-600">Order ID: <span className="font-mono font-semibold text-purple-600">#{order.id.slice(0, 8)}</span></p>
+                              <p className="text-sm text-gray-600">Order ID: <span className="font-mono font-semibold text-blue-600">#{order.id.slice(0, 8)}</span></p>
                               <p className="text-sm text-gray-600">Placed on {new Date(order.created_at).toLocaleDateString()}</p>
                             </div>
                             <span className={`px-3 py-1 text-xs font-semibold rounded-full ${getStatusColor(order.status)}`}>
@@ -396,7 +396,7 @@ export default function BuyerDashboard() {
                           <div className="border-t mt-4 pt-4 flex justify-between items-center">
                             <div>
                               <p className="text-sm text-gray-600">Total Amount</p>
-                              <p className="text-2xl font-bold text-purple-600">₱{order.total_amount.toFixed(2)}</p>
+                              <p className="text-2xl font-bold text-blue-600">₱{order.total_amount.toFixed(2)}</p>
                             </div>
                             <div className="text-sm text-gray-600">
                               <p>Payment: <span className="font-semibold">{order.payment_method?.toUpperCase()}</span></p>
@@ -466,7 +466,7 @@ export default function BuyerDashboard() {
                     <p className="text-gray-600 mb-4">Save your favorite products here!</p>
                     <Link
                       href="/shop"
-                      className="inline-block px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 font-medium transition-colors"
+                      className="inline-block px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition-colors"
                     >
                       Start Shopping
                     </Link>
@@ -489,7 +489,7 @@ export default function BuyerDashboard() {
                     <p className="text-gray-600 mb-4">Rate and review your purchased products</p>
                     <button
                       onClick={() => setActiveTab('orders')}
-                      className="inline-block px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 font-medium transition-colors"
+                      className="inline-block px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition-colors"
                     >
                       View Orders
                     </button>

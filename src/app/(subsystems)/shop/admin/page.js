@@ -419,9 +419,9 @@ export default function ShopAdminPage() {
   return (
     <div className="flex h-screen bg-gray-50">
       {/* LEFT SIDEBAR */}
-      <aside className="w-64 bg-purple-900 text-white flex flex-col">
+      <aside className="w-64 bg-gradient-to-b from-blue-600 to-blue-800 text-white flex flex-col shadow-xl">
         {/* Logo */}
-        <div className="p-6 border-b border-purple-800">
+        <div className="p-6 border-b border-blue-800">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-white/10 rounded-lg flex items-center justify-center">
               <svg className="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 20 20">
@@ -429,8 +429,8 @@ export default function ShopAdminPage() {
               </svg>
             </div>
             <div>
-              <h1 className="font-bold text-white">ShopEase</h1>
-              <p className="text-xs text-purple-300">Admin Panel</p>
+              <h1 className="font-bold text-white">CONNECT-Daet</h1>
+              <p className="text-xs text-blue-200">Admin Panel</p>
             </div>
           </div>
         </div>
@@ -441,8 +441,8 @@ export default function ShopAdminPage() {
             onClick={() => setActiveTab('dashboard')}
             className={`w-full flex items-center gap-3 px-6 py-3 text-left transition-colors ${
               activeTab === 'dashboard'
-                ? 'bg-purple-800 border-l-4 border-purple-400'
-                : 'hover:bg-purple-800/50'
+                ? 'bg-blue-700 border-l-4 border-white font-semibold'
+                : 'hover:bg-blue-700/50'
             }`}
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -455,8 +455,8 @@ export default function ShopAdminPage() {
             onClick={() => setActiveTab('orders')}
             className={`w-full flex items-center gap-3 px-6 py-3 text-left transition-colors ${
               activeTab === 'orders'
-                ? 'bg-purple-800 border-l-4 border-purple-400'
-                : 'hover:bg-purple-800/50'
+                ? 'bg-blue-700 border-l-4 border-white font-semibold'
+                : 'hover:bg-blue-700/50'
             }`}
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -474,8 +474,8 @@ export default function ShopAdminPage() {
             onClick={() => setActiveTab('products')}
             className={`w-full flex items-center gap-3 px-6 py-3 text-left transition-colors ${
               activeTab === 'products'
-                ? 'bg-purple-800 border-l-4 border-purple-400'
-                : 'hover:bg-purple-800/50'
+                ? 'bg-blue-700 border-l-4 border-white font-semibold'
+                : 'hover:bg-blue-700/50'
             }`}
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -488,8 +488,8 @@ export default function ShopAdminPage() {
             onClick={() => setActiveTab('sellers')}
             className={`w-full flex items-center gap-3 px-6 py-3 text-left transition-colors ${
               activeTab === 'sellers'
-                ? 'bg-purple-800 border-l-4 border-purple-400'
-                : 'hover:bg-purple-800/50'
+                ? 'bg-blue-700 border-l-4 border-white font-semibold'
+                : 'hover:bg-blue-700/50'
             }`}
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -502,8 +502,8 @@ export default function ShopAdminPage() {
             onClick={() => setActiveTab('customers')}
             className={`w-full flex items-center gap-3 px-6 py-3 text-left transition-colors ${
               activeTab === 'customers'
-                ? 'bg-purple-800 border-l-4 border-purple-400'
-                : 'hover:bg-purple-800/50'
+                ? 'bg-blue-700 border-l-4 border-white font-semibold'
+                : 'hover:bg-blue-700/50'
             }`}
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -516,8 +516,8 @@ export default function ShopAdminPage() {
             onClick={() => setActiveTab('categories')}
             className={`w-full flex items-center gap-3 px-6 py-3 text-left transition-colors ${
               activeTab === 'categories'
-                ? 'bg-purple-800 border-l-4 border-purple-400'
-                : 'hover:bg-purple-800/50'
+                ? 'bg-blue-700 border-l-4 border-white font-semibold'
+                : 'hover:bg-blue-700/50'
             }`}
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -530,8 +530,8 @@ export default function ShopAdminPage() {
             onClick={() => setActiveTab('transactions')}
             className={`w-full flex items-center gap-3 px-6 py-3 text-left transition-colors ${
               activeTab === 'transactions'
-                ? 'bg-purple-800 border-l-4 border-purple-400'
-                : 'hover:bg-purple-800/50'
+                ? 'bg-blue-700 border-l-4 border-white font-semibold'
+                : 'hover:bg-blue-700/50'
             }`}
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -544,8 +544,8 @@ export default function ShopAdminPage() {
             onClick={() => setActiveTab('reports')}
             className={`w-full flex items-center gap-3 px-6 py-3 text-left transition-colors ${
               activeTab === 'reports'
-                ? 'bg-purple-800 border-l-4 border-purple-400'
-                : 'hover:bg-purple-800/50'
+                ? 'bg-blue-700 border-l-4 border-white font-semibold'
+                : 'hover:bg-blue-700/50'
             }`}
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -558,8 +558,8 @@ export default function ShopAdminPage() {
             onClick={() => setActiveTab('settings')}
             className={`w-full flex items-center gap-3 px-6 py-3 text-left transition-colors ${
               activeTab === 'settings'
-                ? 'bg-purple-800 border-l-4 border-purple-400'
-                : 'hover:bg-purple-800/50'
+                ? 'bg-blue-700 border-l-4 border-white font-semibold'
+                : 'hover:bg-blue-700/50'
             }`}
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
