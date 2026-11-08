@@ -15,6 +15,8 @@ create table if not exists profiles (
   id uuid primary key references auth.users(id) on delete cascade,
   full_name text,
   email text,
+  phone text,
+  address text,
   avatar_url text,
   points integer default 0,
   user_type text default 'tourist',
@@ -25,6 +27,8 @@ create table if not exists profiles (
 -- Upgrade a profiles table created by an older script
 alter table profiles add column if not exists email text;
 alter table profiles add column if not exists avatar_url text;
+alter table profiles add column if not exists phone text;
+alter table profiles add column if not exists address text;
 alter table profiles add column if not exists points integer default 0;
 alter table profiles add column if not exists user_type text default 'tourist';
 alter table profiles add column if not exists updated_at timestamp with time zone default now();

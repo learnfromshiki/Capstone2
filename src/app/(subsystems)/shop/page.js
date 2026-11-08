@@ -15,6 +15,13 @@ export default function ShopPage() {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('all');
   const [showCart, setShowCart] = useState(false);
+
+  // Open the cart when arriving from the buyer dashboard "My Cart" link
+  useEffect(() => {
+    if (typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('cart') === '1') {
+      setShowCart(true);
+    }
+  }, []);
   const [searchQuery, setSearchQuery] = useState('');
   const [showAuthModal, setShowAuthModal] = useState(false);
   const { user, signOut } = useAuth();
@@ -221,7 +228,9 @@ export default function ShopPage() {
                     <svg className="w-4 h-4 text-blue-600" fill="currentColor" viewBox="0 0 20 20">
                       <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" />
                     </svg>
-                    <span className="text-sm font-medium text-gray-700">{user.email}</span>
+                    <Link href="/shop/buyer" className="text-sm font-medium text-gray-700 hover:text-blue-600">
+                      My Account
+                    </Link>
                   </div>
                   <button
                     onClick={signOut}

@@ -70,10 +70,10 @@ export default function AuthModal({ isOpen, onClose, mode: initialMode = 'login'
           }
         }
 
-        // Buyers are routed to the buyer dashboard
+        // Buyers land on the shopping homepage; the buyer dashboard is reachable from there
         if (data?.user) {
           setLoading(false);
-          window.location.href = '/shop/buyer';
+          window.location.href = '/shop';
           return;
         }
 
