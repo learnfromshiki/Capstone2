@@ -44,16 +44,24 @@ export default function AuthModal({ isOpen, onClose, mode: initialMode = 'login'
 
         // Check if user is a seller and redirect to seller dashboard
         if (data?.user) {
-          const { data: sellerData } = await supabase
+          console.log('Login successful, checking seller profile for user:', data.user.id);
+          
+          const { data: sellerData, error: sellerError } = await supabase
             .from('shop_sellers')
             .select('*')
             .eq('user_id', data.user.id)
-            .single();
+            .maybeSingle(); // Use maybeSingle instead of single to avoid error if not found
+
+          console.log('Seller query result:', { sellerData, sellerError });
 
           if (sellerData) {
+            console.log('User is a seller, redirecting to dashboard...');
             // User is a seller - redirect to seller dashboard
-            router.push('/shop/seller/dashboard');
+            setLoading(false); // Stop loading state
+            window.location.href = '/shop/seller/dashboard'; // Use hard redirect to ensure navigation
             return;
+          } else {
+            console.log('User is a buyer, staying on shop page');
           }
         }
 
