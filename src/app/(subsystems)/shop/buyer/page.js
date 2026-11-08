@@ -21,6 +21,7 @@ export default function BuyerDashboard() {
     } else {
       fetchData();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, router]);
 
   const fetchData = async () => {

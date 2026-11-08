@@ -48,6 +48,7 @@ export default function SellerDashboard() {
         fetchData();
       }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, seller, authLoading, router, activeTab]);
 
   const fetchCategories = async () => {

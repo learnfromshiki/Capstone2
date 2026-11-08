@@ -74,6 +74,7 @@ export default function ShopAdminPage() {
       fetchCategories();
       fetchData();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, isAuthenticated]);
 
   const fetchCategories = async () => {
