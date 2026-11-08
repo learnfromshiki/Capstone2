@@ -130,7 +130,9 @@ export default function SellerDashboard() {
   const fetchData = async () => {
     if (!seller) return;
     
-    setLoading(true);
+    // Only the first load (loading starts as true) shows the full-page spinner.
+    // Tab switches keep the layout mounted, so clicking a sidebar item no longer
+    // unmounts the dashboard and flashes an empty screen.
     try {
       if (activeTab === 'products') {
         await fetchProducts();
@@ -496,7 +498,7 @@ export default function SellerDashboard() {
 
   if (authLoading || loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
       </div>
     );
