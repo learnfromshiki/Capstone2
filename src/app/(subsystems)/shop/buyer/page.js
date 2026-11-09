@@ -980,7 +980,9 @@ export default function BuyerDashboard() {
                   <div className="p-4 border border-gray-200 rounded-lg">
                     <h3 className="font-semibold text-gray-900 mb-2">Account Details</h3>
                     <p className="text-sm text-gray-600">Email: {user?.email}</p>
-                    <p className="text-sm text-gray-600">Account type: Buyer</p>
+                    <p className="text-sm text-gray-600">
+                    Account type: {profile?.user_type === 'admin' ? 'Admin' : profile?.user_type === 'seller' ? 'Seller' : 'Buyer'}
+                  </p>
                     {profile?.created_at && (
                       <p className="text-sm text-gray-600">
                         Member since {new Date(profile.created_at).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}

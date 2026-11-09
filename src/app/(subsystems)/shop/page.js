@@ -142,7 +142,6 @@ export default function ShopPage() {
       setSellers(sellerMap);
       setProducts(visibleProducts);
 
-      console.log(`Successfully loaded ${visibleProducts.length} products`);
     } catch (error) {
       console.error('Error fetching products:', error?.message || JSON.stringify(error));
     } finally {

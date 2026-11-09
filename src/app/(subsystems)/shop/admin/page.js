@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { supabase } from '@/lib/supabaseClient';
-import { uploadProductImage, deleteProductImage } from '@/lib/imageUpload';
+import { supabaseAdmin as supabase } from '@/lib/supabaseAdminClient';
+import { uploadProductImage } from '@/lib/imageUpload';
 import { getAccountRole } from '@/lib/roles';
 import { getAllowedStatuses, STATUS_LABELS, transitionOrderStatus } from '@/lib/orders';
 import Link from 'next/link';
@@ -143,7 +143,7 @@ export default function ShopAdminPage() {
 
         if (!session?.user) return;
 
-        const role = await getAccountRole(session.user.id);
+        const role = await getAccountRole(session.user.id, supabase);
 
         if (role === 'admin') {
           setIsAuthenticated(true);
@@ -219,7 +219,7 @@ export default function ShopAdminPage() {
         return;
       }
 
-      const role = await getAccountRole(data.user.id);
+      const role = await getAccountRole(data.user.id, supabase);
 
       if (role !== 'admin') {
         // Signed in, but this account is a buyer or seller - do not grant admin access
@@ -257,7 +257,7 @@ export default function ShopAdminPage() {
 
     setUploadingImage(true);
     try {
-      const { url, error } = await uploadProductImage(file, 'admin');
+      const { url, error } = await uploadProductImage(file);
       
       if (error) throw error;
       
@@ -540,6 +540,86 @@ export default function ShopAdminPage() {
     } catch (error) {
       console.error('Error deleting product:', error);
       alert('Failed to delete product: ' + (error.message || 'unknown error'));
+    }
+  };
+
+  const toggleCategoryActive = async (category) => {
+    try {
+      const { data, error } = await supabase
+        .from('shop_categories')
+        .update({ is_active: !category.is_active, updated_at: new Date().toISOString() })
+        .eq('id', category.id)
+        .select('id');
+
+      if (error) throw error;
+
+      if (!data || data.length === 0) {
+        showToast('That category could not be updated. Refresh and try again.', 'error');
+        return;
+      }
+
+      showToast(
+        `Category "${category.name}" ${category.is_active ? 'deactivated' : 'activated'}.`,
+        'success'
+      );
+      fetchCategories();
+      fetchData();
+    } catch (error) {
+      console.error('Error updating category:', error);
+      showToast('Failed to update category: ' + (error.message || 'unknown error'), 'error');
+    }
+  };
+
+  const deleteCategory = async (category) => {
+    // "All Products" is a real row but it is the storefront's fallback tab.
+    if (category.slug === 'all') {
+      alert('The "All Products" tab is built into the storefront and cannot be deleted.');
+      return;
+    }
+
+    try {
+      const { count, error: countError } = await supabase
+        .from('shop_products')
+        .select('id', { count: 'exact', head: true })
+        .eq('category', category.slug);
+
+      if (countError) throw countError;
+
+      // Products store the slug, so deleting a used category would orphan their tab.
+      if ((count || 0) > 0) {
+        alert(`"${category.name}" still has ${count} product(s). Move or delete those products first.`);
+        return;
+      }
+    } catch (error) {
+      console.error('Error counting products in category:', error);
+      showToast('Could not check the products in this category.', 'error');
+      return;
+    }
+
+    if (!confirm(`Delete the category "${category.name}"?\n\nThe tab disappears from the storefront. This cannot be undone.`)) {
+      return;
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('shop_categories')
+        .delete()
+        .eq('id', category.id)
+        .select('id');
+
+      if (error) throw error;
+
+      if (!data || data.length === 0) {
+        showToast('That category could not be deleted. Refresh and try again.', 'error');
+        return;
+      }
+
+      showToast(`Category "${category.name}" deleted.`, 'success');
+      fetchCategories();
+      fetchData();
+    } catch (error) {
+      console.error('Error deleting category:', error);
+      showToast('Failed to delete category: ' + (error.message || 'unknown error'), 'error');
     }
   };
 
@@ -1948,6 +2028,7 @@ export default function ShopAdminPage() {
                     <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wide">Description</th>
                     <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wide">Order</th>
                     <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wide">Status</th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wide">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200">
@@ -1964,6 +2045,28 @@ export default function ShopAdminPage() {
                         }`}>
                           {category.is_active ? 'Active' : 'Inactive'}
                         </span>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => toggleCategoryActive(category)}
+                            className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors ${
+                              category.is_active
+                                ? 'bg-red-50 text-red-700 hover:bg-red-100'
+                                : 'bg-green-50 text-green-700 hover:bg-green-100'
+                            }`}
+                          >
+                            {category.is_active ? 'Deactivate' : 'Activate'}
+                          </button>
+                          <button
+                            onClick={() => deleteCategory(category)}
+                            disabled={category.slug === 'all'}
+                            title={category.slug === 'all' ? 'The storefront fallback tab cannot be deleted' : `Delete ${category.name}`}
+                            className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-red-600 text-white hover:bg-red-700 transition-colors disabled:cursor-not-allowed disabled:opacity-40"
+                          >
+                            Delete
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}

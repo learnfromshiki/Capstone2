@@ -3,7 +3,7 @@ import { supabase } from './supabaseClient';
 /**
  * Upload image to Supabase Storage
  * @param {File} file - Image file to upload
- * @param {string} userId - User ID for folder organization
+ * @param {string} [userId] - User ID for folder organization (defaults to the signed-in user)
  * @returns {Promise<{url: string, error: null} | {url: null, error: Error}>}
  */
 export const uploadProductImage = async (file, userId = 'public') => {
@@ -20,11 +20,20 @@ export const uploadProductImage = async (file, userId = 'public') => {
       throw new Error('File size too large. Maximum size is 5MB.');
     }
 
+    // Storage policies only let a user delete files inside a folder named after
+    // their auth uid, so always prefer the signed-in user over a role label.
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(userId || '');
+    let folder = isUuid ? userId : null;
+    if (!folder) {
+      const { data: authData } = await supabase.auth.getUser();
+      folder = authData?.user?.id || userId || 'public';
+    }
+
     // Generate unique filename
     const timestamp = Date.now();
     const randomString = Math.random().toString(36).substring(2, 15);
     const fileExt = file.name.split('.').pop();
-    const fileName = `${userId}/${timestamp}-${randomString}.${fileExt}`;
+    const fileName = `${folder}/${timestamp}-${randomString}.${fileExt}`;
 
     // Upload to Supabase Storage
     const { data, error } = await supabase.storage

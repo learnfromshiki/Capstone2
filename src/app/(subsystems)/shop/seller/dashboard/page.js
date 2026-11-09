@@ -585,7 +585,7 @@ export default function SellerDashboard() {
 
     setUploadingLogo(true);
     try {
-      const { url, error } = await uploadProductImage(file, seller.id);
+      const { url, error } = await uploadProductImage(file);
       if (error) throw error;
       setProfileForm((prev) => ({ ...prev, logo_url: url }));
     } catch (error) {
