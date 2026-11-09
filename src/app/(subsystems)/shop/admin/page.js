@@ -93,6 +93,7 @@ export default function ShopAdminPage() {
   const [adminName, setAdminName] = useState('Admin');
   const [adminPassword, setAdminPassword] = useState('');
   const [loginError, setLoginError] = useState('');
+  const [loginLoading, setLoginLoading] = useState(false);
   const [websiteSettings, setWebsiteSettings] = useState({
     siteName: 'Daet Local Shop',
     contactEmail: 'support@connect-daet.ph',
@@ -205,7 +206,7 @@ export default function ShopAdminPage() {
   const handleLogin = async (e) => {
     e.preventDefault();
     setLoginError('');
-    setLoading(true);
+    setLoginLoading(true);
 
     try {
       const { data, error } = await supabase.auth.signInWithPassword({
@@ -234,7 +235,7 @@ export default function ShopAdminPage() {
       console.error('Admin login error:', error);
       setLoginError('Unable to sign in right now. Please try again.');
     } finally {
-      setLoading(false);
+      setLoginLoading(false);
     }
   };
 
@@ -1083,9 +1084,10 @@ export default function ShopAdminPage() {
 
               <button
                 type="submit"
-                className="w-full bg-gradient-to-r from-blue-600 to-blue-700 text-white py-3.5 rounded-xl font-bold hover:from-blue-700 hover:to-blue-800 transition-all shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
+                disabled={loginLoading}
+                className="w-full bg-gradient-to-r from-blue-600 to-blue-700 text-white py-3.5 rounded-xl font-bold hover:from-blue-700 hover:to-blue-800 transition-all shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
               >
-                Access Admin Panel
+                {loginLoading ? 'Signing in...' : 'Access Admin Panel'}
               </button>
 
               <div className="text-center">

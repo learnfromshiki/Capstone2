@@ -75,6 +75,7 @@ export default function SellerDashboard() {
   const [newCategoryName, setNewCategoryName] = useState('');
   const [savingCategory, setSavingCategory] = useState(false);
   const [editingProductId, setEditingProductId] = useState(null);
+  const [savingProduct, setSavingProduct] = useState(false);
   const [activeTab, setActiveTab] = useState('dashboard');
   const [uploadingImage, setUploadingImage] = useState(false);
   const [imagePreview, setImagePreview] = useState('');
@@ -413,7 +414,7 @@ export default function SellerDashboard() {
       return;
     }
 
-    setLoading(true);
+    setSavingProduct(true);
 
     try {
       const payload = {
@@ -449,7 +450,7 @@ export default function SellerDashboard() {
       console.error('Error adding product:', error);
       alert('Failed to add product: ' + error.message);
     } finally {
-      setLoading(false);
+      setSavingProduct(false);
     }
   };
 
@@ -1810,10 +1811,10 @@ export default function SellerDashboard() {
               <div className="flex gap-3 pt-4">
                 <button
                   type="submit"
-                  disabled={loading || uploadingImage}
+                  disabled={savingProduct || uploadingImage}
                   className="flex-1 bg-blue-600 text-white py-3 rounded-xl font-bold hover:bg-blue-700 disabled:opacity-50"
                 >
-                  {loading ? 'Saving...' : editingProductId ? 'Save Changes' : 'Add Product'}
+                  {savingProduct ? 'Saving...' : editingProductId ? 'Save Changes' : 'Add Product'}
                 </button>
                 <button
                   type="button"
