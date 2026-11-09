@@ -1,3 +1,11 @@
+-- ============================================================================
+-- !! DO NOT RUN AGAINST THE LIVE DATABASE !!
+-- Contains open-access "for testing" policies ("Anyone can view products",
+-- "Anyone can update products (for testing)", "Anyone can create orders",
+-- "Anyone can create seller account" ...). supabase-security-hardening.sql owns
+-- the live permissions and drops every one of them, so re-running this file
+-- silently re-opens read AND write access for anyone with the public anon key.
+-- ============================================================================
 -- =====================================================
 -- CONNECT-Daet.ph - Shop System Database Schema (STANDALONE)
 -- Local Artisan and Product E-commerce Platform

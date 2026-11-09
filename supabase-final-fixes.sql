@@ -1,3 +1,11 @@
+-- ============================================================================
+-- !! DO NOT RUN AGAINST THE LIVE DATABASE !!
+-- Every policy below is `using (true)` (unrestricted settings writes, and
+-- unrestricted deletes on profiles / shop_sellers / shop_products), added only
+-- to make a browser-only demo admin work. That admin now signs in through
+-- supabase.auth, so these are obsolete. supabase-security-hardening.sql drops
+-- and replaces them; re-running this file silently re-opens the holes.
+-- ============================================================================
 -- =====================================================
 -- FINAL FIXES — run once in the Supabase SQL Editor
 -- =====================================================

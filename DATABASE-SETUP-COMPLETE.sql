@@ -1,3 +1,10 @@
+-- ============================================================================
+-- !! DO NOT RUN AGAINST THE LIVE DATABASE !!
+-- The RLS policies in this file are open-access "for testing" policies: anyone
+-- holding the public anon key can READ and WRITE profiles / orders / products.
+-- supabase-security-hardening.sql now owns these permissions and drops every
+-- one of them, so re-running this file silently re-opens those holes.
+-- ============================================================================
 -- =====================================================
 -- CONNECT-Daet.ph - COMPLETE DATABASE SETUP
 -- Run this file to set up all tables for the shop system

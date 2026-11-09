@@ -1,3 +1,10 @@
+-- ============================================================================
+-- !! SUPERSEDED — DO NOT RUN !!
+-- Replaces the approved-sellers-only policy with `using (true)`, exposing every
+-- seller row (including contact_email) to the public anon key.
+-- supabase-security-hardening.sql replaces this with
+-- shop_sellers_select_public_or_own_or_admin.
+-- ============================================================================
 -- =====================================================
 -- FIX: Admin Cannot See Sellers in Dashboard
 -- This script updates RLS policies to allow viewing all sellers

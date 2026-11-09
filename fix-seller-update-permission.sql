@@ -1,3 +1,10 @@
+-- ============================================================================
+-- !! SUPERSEDED — DO NOT RUN !!
+-- Creates "Allow updates for admin testing" for update using (true), letting
+-- anyone with the public anon key approve/suspend any seller.
+-- supabase-security-hardening.sql replaces this with
+-- shop_sellers_update_own_or_admin (checked via is_admin()).
+-- ============================================================================
 -- =====================================================
 -- FIX: Admin Cannot Approve/Suspend Sellers
 -- This script adds RLS policies to allow admins to update sellers

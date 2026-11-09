@@ -1,3 +1,12 @@
+-- ============================================================================
+-- !! DO NOT RUN AGAINST THE LIVE DATABASE !!
+-- Contains "for admin testing" policies such as
+--   create policy "Anyone can read profiles" for select using (true);
+--   create policy "Allow profile updates for admin testing" for update using (true);
+-- which expose every profile to anyone with the public anon key (and allow
+-- self-promotion to user_type = 'admin'). supabase-security-hardening.sql
+-- drops and replaces them, so re-running this file silently re-opens the holes.
+-- ============================================================================
 -- =====================================================
 -- CONNECT-Daet.ph - Admin permissions, seller rejection
 -- and shared website settings

@@ -339,12 +339,12 @@ declare
   pol record;
 begin
   for pol in
-    select schemaname, tablename, polname
+    select schemaname, tablename, policyname
     from pg_policies
     where schemaname = 'public'
       and tablename = any(target_tables)
   loop
-    execute format('drop policy if exists %I on %I.%I', pol.polname, pol.schemaname, pol.tablename);
+    execute format('drop policy if exists %I on %I.%I', pol.policyname, pol.schemaname, pol.tablename);
   end loop;
 end;
 $$;
