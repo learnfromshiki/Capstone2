@@ -1,0 +1,8 @@
+npm notice run connect-daet-app@0.1.0 npx
+npm notice run next start -p 3200
+   ▲ Next.js 15.5.23
+   - Local:        http://localhost:3200
+   - Network:      http://192.168.1.10:3200
+
+ ✓ Starting...
+ ✓ Ready in 650ms
