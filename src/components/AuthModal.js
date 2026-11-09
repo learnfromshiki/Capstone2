@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabaseClient';
 import { getAccountRole } from '@/lib/roles';
-import { ensureSellerProfile, isSellerRegistration } from '@/lib/sellerProfile';
+import { ensureSellerProfile } from '@/lib/sellerProfile';
 import { ensureProfileRow } from '@/lib/profile';
 
 export default function AuthModal({ isOpen, onClose, mode: initialMode = 'login' }) {
@@ -62,9 +62,9 @@ export default function AuthModal({ isOpen, onClose, mode: initialMode = 'login'
           }
         }
 
-        // An approved shop opens its seller dashboard. An account that registered
-        // as a seller goes there too and sees the pending-approval screen, so a
-        // seller registration never turns into a buyer login.
+        // An approved shop opens its seller dashboard. A pending application stays
+        // usable for shopping and is reviewed from the seller portal, where the
+        // pending-approval screen waits.
         if (data?.user) {
           const sellerData = await ensureSellerProfile(data.user);
 
@@ -76,7 +76,7 @@ export default function AuthModal({ isOpen, onClose, mode: initialMode = 'login'
               return;
             }
 
-            if (sellerData.is_approved || isSellerRegistration(data.user)) {
+            if (sellerData.is_approved) {
               setLoading(false);
               window.location.href = '/shop/seller/dashboard';
               return;
