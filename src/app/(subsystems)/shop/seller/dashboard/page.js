@@ -106,8 +106,12 @@ export default function SellerDashboard() {
 
   useEffect(() => {
     if (!authLoading) {
-      if (!user || !seller) {
+      if (!user) {
         if (!loggingOut) router.push('/shop/seller');
+      } else if (!seller) {
+        // Signed in without a shop: this is a buyer account, so it belongs in the
+        // shop rather than on the seller login form.
+        if (!loggingOut) router.push('/shop');
       } else if (!seller.is_approved) {
         setLoading(false);
       } else {

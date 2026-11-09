@@ -96,9 +96,11 @@ export const SellerAuthProvider = ({ children }) => {
       }
 
       setSeller(sellerRow);
+      return sellerRow;
     } catch (error) {
       console.error('Error fetching seller profile:', error);
       setSeller(null);
+      return null;
     } finally {
       setLoading(false);
     }
@@ -139,12 +141,15 @@ export const SellerAuthProvider = ({ children }) => {
           .select()
           .maybeSingle();
 
+        // Record the account as a seller even when the shop row has to wait for the
+        // first sign-in (email confirmation pending), so it is never a buyer account.
+        await ensureProfileRow(authData.user);
+        await ensureSellerProfile(authData.user);
+
         if (sellerError) {
           console.warn('Seller profile deferred until first sign-in:', sellerError.message);
         } else if (sellerProfile) {
           setSeller(sellerProfile);
-          // Flag the profile as a seller so it never shows up under Customers
-          if (authData.session) await ensureSellerProfile(authData.user);
         }
       }
 
@@ -163,6 +168,8 @@ export const SellerAuthProvider = ({ children }) => {
 
       if (error) throw error;
 
+      let sellerRow = null;
+
       if (data.user) {
         if (!(await checkAccountIsActive(data.user.id))) {
           await supabase.auth.signOut();
@@ -170,10 +177,11 @@ export const SellerAuthProvider = ({ children }) => {
         }
 
         await ensureProfileRow(data.user);
-        await fetchSellerProfile(data.user.id);
+        sellerRow = await fetchSellerProfile(data.user.id);
       }
 
-      return { data, error: null };
+      // The caller needs the seller row to tell a real shop apart from a buyer account
+      return { data, error: null, seller: sellerRow };
     } catch (error) {
       return { data: null, error };
     }

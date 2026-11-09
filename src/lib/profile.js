@@ -11,15 +11,31 @@ export const ensureProfileRow = async (user) => {
   if (!user?.id) return null;
 
   try {
+    const metadata = user.user_metadata || {};
+    const isSellerAccount = metadata.account_type === 'seller';
+
     const { data: existing } = await supabase
       .from('profiles')
-      .select('id')
+      .select('id, user_type')
       .eq('id', user.id)
       .maybeSingle();
 
-    if (existing) return existing;
+    if (existing) {
+      // A seller whose profiles row was created before the shop was registered must
+      // not stay flagged as a buyer, or the account is treated as a customer.
+      if (isSellerAccount && existing.user_type !== 'seller' && existing.user_type !== 'admin') {
+        const { error: promoteError } = await supabase
+          .from('profiles')
+          .update({ user_type: 'seller' })
+          .eq('id', user.id);
 
-    const metadata = user.user_metadata || {};
+        if (promoteError) {
+          console.warn('Could not flag the profile as a seller:', promoteError.message);
+        }
+      }
+
+      return existing;
+    }
 
     const { data: created, error } = await supabase
       .from('profiles')
@@ -27,7 +43,7 @@ export const ensureProfileRow = async (user) => {
         id: user.id,
         email: user.email,
         full_name: metadata.full_name || (user.email || '').split('@')[0] || 'Customer',
-        user_type: metadata.account_type === 'seller' ? 'seller' : 'tourist',
+        user_type: isSellerAccount ? 'seller' : 'tourist',
         points: 0,
       })
       .select()

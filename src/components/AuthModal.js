@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabaseClient';
 import { getAccountRole } from '@/lib/roles';
-import { ensureSellerProfile } from '@/lib/sellerProfile';
+import { ensureSellerProfile, isSellerRegistration } from '@/lib/sellerProfile';
 import { ensureProfileRow } from '@/lib/profile';
 
 export default function AuthModal({ isOpen, onClose, mode: initialMode = 'login' }) {
@@ -62,23 +62,25 @@ export default function AuthModal({ isOpen, onClose, mode: initialMode = 'login'
           }
         }
 
-        // Only an approved seller goes straight to the seller dashboard. A pending
-        // or rejected application must not stop the same account shopping as a buyer.
-        // A seller signup that could not write its shop profile still completes here.
+        // An approved shop opens its seller dashboard. An account that registered
+        // as a seller goes there too and sees the pending-approval screen, so a
+        // seller registration never turns into a buyer login.
         if (data?.user) {
           const sellerData = await ensureSellerProfile(data.user);
 
-          if (sellerData?.is_approved && sellerData?.is_active !== false) {
-            setLoading(false);
-            window.location.href = '/shop/seller/dashboard';
-            return;
-          }
+          if (sellerData) {
+            if (sellerData.is_active === false) {
+              await supabase.auth.signOut();
+              setError('This seller account has been suspended. Please contact CONNECT-Daet support.');
+              setLoading(false);
+              return;
+            }
 
-          if (sellerData?.is_approved && sellerData?.is_active === false) {
-            await supabase.auth.signOut();
-            setError('This seller account has been suspended. Please contact CONNECT-Daet support.');
-            setLoading(false);
-            return;
+            if (sellerData.is_approved || isSellerRegistration(data.user)) {
+              setLoading(false);
+              window.location.href = '/shop/seller/dashboard';
+              return;
+            }
           }
         }
 
@@ -122,14 +124,22 @@ export default function AuthModal({ isOpen, onClose, mode: initialMode = 'login'
 
           if (sellerError) {
             console.error('Error creating seller account:', sellerError);
-            setNotice('Account created! Sign in to finish setting up your shop (awaiting admin approval).');
-          } else {
-            // Also flag the profile as a seller so it never lands in Customers
-            await ensureSellerProfile(data.user);
-            setNotice(data.session
-              ? 'Seller account created! Awaiting admin approval.'
-              : 'Seller account created! Confirm your email, then sign in — awaiting admin approval.');
           }
+
+          // Record the account as a seller in profiles as well. Without this the
+          // same account is listed as a buyer in Customers and routed like one.
+          await ensureProfileRow(data.user);
+          await ensureSellerProfile(data.user);
+
+          if (data.session) {
+            // Already signed in: open the seller portal, where the pending-approval
+            // screen waits until an admin approves the shop.
+            setLoading(false);
+            window.location.href = '/shop/seller/dashboard';
+            return;
+          }
+
+          setNotice('Seller account created! Confirm your email, then sign in — awaiting admin approval.');
         } else {
           setNotice(data?.session
             ? 'Account created! You are now signed in.'

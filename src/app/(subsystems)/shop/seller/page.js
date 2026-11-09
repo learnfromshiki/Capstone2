@@ -19,7 +19,7 @@ export default function SellerLoginPage() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
-  const { signIn, signUp, seller, user } = useSellerAuth();
+  const { signIn, signUp, signOut, seller, user } = useSellerAuth();
   const router = useRouter();
 
   // Redirect if already logged in
@@ -42,11 +42,20 @@ export default function SellerLoginPage() {
 
     try {
       if (mode === 'login') {
-        const { error } = await signIn(formData.email, formData.password);
+        const { error, seller: sellerRow } = await signIn(formData.email, formData.password);
         if (error) throw error;
+
+        // A buyer account does not own a shop: send it back to the shop instead of
+        // leaving it bouncing between this form and the dashboard guard.
+        if (!sellerRow) {
+          await signOut();
+          setError('This is a buyer account. Sign in from the shop to keep shopping, or create a seller account here to open a shop.');
+          return;
+        }
+
         router.push('/shop/seller/dashboard');
       } else {
-        const { error } = await signUp(formData.email, formData.password, {
+        const { data: signUpData, error } = await signUp(formData.email, formData.password, {
           businessName: formData.businessName,
           phone: formData.phone,
           address: formData.address,
@@ -54,6 +63,14 @@ export default function SellerLoginPage() {
         });
         
         if (error) throw error;
+
+        // Confirmation turned off means the seller is signed in already: open the
+        // seller portal so the new account is never mistaken for a buyer.
+        if (signUpData?.session) {
+          setMode('login');
+          router.push('/shop/seller/dashboard');
+          return;
+        }
         
         setSuccess('Account created! Please check your email to verify your account. You can now sign in.');
         setMode('login');
