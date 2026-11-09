@@ -7,23 +7,65 @@ const AuthContext = createContext({});
 
 export const useAuth = () => useContext(AuthContext);
 
+const fetchProfile = async (userId) => {
+  if (!userId) return null;
+
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('id, full_name, email, user_type, is_suspended, points')
+    .eq('id', userId)
+    .maybeSingle();
+
+  if (error && error.code !== 'PGRST116') {
+    console.error('Error loading the signed-in profile:', error.message);
+    return null;
+  }
+
+  return data || null;
+};
+
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
+  const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    let active = true;
+
     // Check active session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null);
-      setLoading(false);
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (!active) return;
+
+      const sessionUser = session?.user ?? null;
+      setUser(sessionUser);
+
+      if (sessionUser) {
+        const sessionProfile = await fetchProfile(sessionUser.id);
+        if (active) setProfile(sessionProfile);
+      }
+
+      if (active) setLoading(false);
     });
 
     // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null);
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      if (!active) return;
+
+      const sessionUser = session?.user ?? null;
+      setUser(sessionUser);
+
+      if (sessionUser) {
+        const sessionProfile = await fetchProfile(sessionUser.id);
+        if (active) setProfile(sessionProfile);
+      } else {
+        setProfile(null);
+      }
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      active = false;
+      subscription.unsubscribe();
+    };
   }, []);
 
   const signUp = async (email, password, fullName, metadata = {}) => {
@@ -52,6 +94,12 @@ export const AuthProvider = ({ children }) => {
         password,
       });
       if (error) throw error;
+
+      if (data?.user) {
+        setUser(data.user);
+        setProfile(await fetchProfile(data.user.id));
+      }
+
       return { data, error: null };
     } catch (error) {
       return { data: null, error };
@@ -65,16 +113,15 @@ export const AuthProvider = ({ children }) => {
     } catch (error) {
       console.error('Error signing out:', error);
     } finally {
-      // Never leave the demo admin flag behind for the next person who signs in
-      if (typeof window !== 'undefined') {
-        sessionStorage.removeItem('admin_authenticated');
-        sessionStorage.removeItem('admin_email');
-      }
+      setUser(null);
+      setProfile(null);
     }
   };
 
   const value = {
     user,
+    profile,
+    isSuspended: Boolean(profile?.is_suspended),
     loading,
     signUp,
     signIn,

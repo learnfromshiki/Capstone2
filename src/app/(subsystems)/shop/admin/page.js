@@ -3,7 +3,8 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import { uploadProductImage, deleteProductImage } from '@/lib/imageUpload';
-import { DEMO_ADMIN_EMAIL, DEMO_ADMIN_PASSWORD, getAccountRole } from '@/lib/roles';
+import { getAccountRole } from '@/lib/roles';
+import { getAllowedStatuses, STATUS_LABELS, transitionOrderStatus } from '@/lib/orders';
 import Link from 'next/link';
 import Toast from '@/components/Toast';
 
@@ -133,41 +134,23 @@ export default function ShopAdminPage() {
     description: ''
   });
 
-  // Verify admin access: a Supabase account with the admin role, or the demo admin session
+  // Verify admin access: a real Supabase account with the admin role.
   useEffect(() => {
     const verifyAdminAccess = async () => {
       try {
         const { data: { session } } = await supabase.auth.getSession();
 
-        if (session?.user) {
-          const role = await getAccountRole(session.user.id);
+        if (!session?.user) return;
 
-          if (role === 'admin') {
-            setIsAuthenticated(true);
-            setAdminEmail(session.user.email || '');
-            setAdminName(session.user.user_metadata?.full_name || 'Admin');
-            sessionStorage.setItem('admin_authenticated', 'true');
-            sessionStorage.setItem('admin_email', session.user.email || '');
-            return;
-          }
+        const role = await getAccountRole(session.user.id);
 
-          // Somebody else is signed in (buyer/seller): the demo flag must not
-          // authorize them, so clear it and stay locked out.
-          sessionStorage.removeItem('admin_authenticated');
-          sessionStorage.removeItem('admin_email');
-          return;
+        if (role === 'admin') {
+          setIsAuthenticated(true);
+          setAdminEmail(session.user.email || '');
+          setAdminName(session.user.user_metadata?.full_name || 'Admin');
         }
       } catch (error) {
         console.error('Error verifying admin access:', error);
-      }
-
-      // No Supabase session at all: only the documented demo admin may use the flag
-      if (
-        sessionStorage.getItem('admin_authenticated') === 'true' &&
-        sessionStorage.getItem('admin_email') === DEMO_ADMIN_EMAIL
-      ) {
-        setIsAuthenticated(true);
-        setAdminEmail(DEMO_ADMIN_EMAIL);
       }
     };
 
@@ -225,20 +208,6 @@ export default function ShopAdminPage() {
     setLoading(true);
 
     try {
-      // 1. Demo admin account (documented demo login)
-      if (
-        adminEmail.trim().toLowerCase() === DEMO_ADMIN_EMAIL &&
-        adminPassword === DEMO_ADMIN_PASSWORD
-      ) {
-        setIsAuthenticated(true);
-        setAdminName('Admin');
-        setAdminEmail(DEMO_ADMIN_EMAIL);
-        sessionStorage.setItem('admin_authenticated', 'true');
-        sessionStorage.setItem('admin_email', DEMO_ADMIN_EMAIL);
-        return;
-      }
-
-      // 2. Real admin account: Supabase login + admin role on the profile
       const { data, error } = await supabase.auth.signInWithPassword({
         email: adminEmail.trim(),
         password: adminPassword
@@ -261,8 +230,6 @@ export default function ShopAdminPage() {
       setIsAuthenticated(true);
       setAdminName(data.user.user_metadata?.full_name || 'Admin');
       setAdminEmail(data.user.email || adminEmail.trim());
-      sessionStorage.setItem('admin_authenticated', 'true');
-      sessionStorage.setItem('admin_email', data.user.email || adminEmail.trim());
     } catch (error) {
       console.error('Admin login error:', error);
       setLoginError('Unable to sign in right now. Please try again.');
@@ -273,8 +240,6 @@ export default function ShopAdminPage() {
 
   const handleLogout = async () => {
     setIsAuthenticated(false);
-    sessionStorage.removeItem('admin_authenticated');
-    sessionStorage.removeItem('admin_email');
 
     try {
       await supabase.auth.signOut();
@@ -311,15 +276,37 @@ export default function ShopAdminPage() {
     setLoading(true);
 
     try {
-      const slug = newCategory.name.toLowerCase().replace(/\s+/g, '-');
-      
+      const name = newCategory.name.trim();
+      const icon = newCategory.icon.trim() || '📦';
+      const slug = name
+        .toLowerCase()
+        .normalize('NFKD')
+        .replace(/[^\w\s-]/g, '')
+        .trim()
+        .replace(/[\s_-]+/g, '-')
+        .replace(/^-+|-+$/g, '');
+
+      if (!name || !slug) {
+        alert('Please enter a category name with letters or numbers.');
+        return;
+      }
+
+      const duplicate = categories.some(
+        (category) => category.slug === slug || (category.name || '').toLowerCase() === name.toLowerCase()
+      );
+
+      if (duplicate) {
+        alert(`The category "${name}" already exists.`);
+        return;
+      }
+
       const { error } = await supabase
         .from('shop_categories')
         .insert([{
-          name: newCategory.name,
-          slug: slug,
-          icon: newCategory.icon,
-          description: newCategory.description,
+          name,
+          slug,
+          icon,
+          description: newCategory.description.trim() || null,
           display_order: categories.length
         }]);
 
@@ -328,10 +315,10 @@ export default function ShopAdminPage() {
       setNewCategory({ name: '', icon: '📦', description: '' });
       setShowAddCategory(false);
       fetchCategories();
-      alert('Category added successfully!');
+      showToast('Category added successfully.', 'success');
     } catch (error) {
       console.error('Error adding category:', error);
-      alert('Failed to add category: ' + error.message);
+      showToast('Failed to add category: ' + (error.message || 'unknown error'), 'error');
     } finally {
       setLoading(false);
     }
@@ -345,14 +332,14 @@ export default function ShopAdminPage() {
         const [ordersRes, customersRes, sellersRes, recentOrdersRes] = await Promise.all([
           supabase.from('shop_orders').select('total_amount, status, created_at', { count: 'exact' }),
           supabase.from('profiles').select('id, user_type'),
-          supabase.from('shop_sellers').select('is_approved, user_id', { count: 'exact' }),
+          supabase.from('shop_sellers').select('is_approved, is_rejected, user_id', { count: 'exact' }),
           supabase.from('shop_orders').select('*, shop_order_items(*)').order('created_at', { ascending: false }).limit(10)
         ]);
 
         // Cancelled orders are refunds, not revenue
         const paidOrders = ordersRes.data?.filter(order => order.status !== 'cancelled') || [];
         const totalSales = paidOrders.reduce((sum, order) => sum + (Number(order.total_amount) || 0), 0);
-        const pendingSellers = sellersRes.data?.filter(s => !s.is_approved).length || 0;
+        const pendingSellers = sellersRes.data?.filter(s => !s.is_approved && !s.is_rejected).length || 0;
         const toFulfill = paidOrders.filter(order => ['pending', 'confirmed', 'processing'].includes(order.status)).length;
 
         // Customers are profiles that are neither sellers nor admins
@@ -453,19 +440,23 @@ export default function ShopAdminPage() {
     setLoading(true);
     
     try {
-      // Validate price and stock
-      const price = parseFloat(newProduct.price);
-      const stock = parseInt(newProduct.stock);
-      
-      if (price <= 0) {
-        alert('Price must be greater than 0');
-        setLoading(false);
+      const name = newProduct.name.trim();
+      const description = newProduct.description.trim();
+      const price = Number(newProduct.price);
+      const stock = Number(newProduct.stock);
+
+      if (!name || !description) {
+        alert('Product name and description are required.');
         return;
       }
-      
-      if (stock < 0) {
-        alert('Stock cannot be negative');
-        setLoading(false);
+
+      if (!Number.isFinite(price) || price <= 0 || price > 99999999.99) {
+        alert('Price must be a number greater than 0.');
+        return;
+      }
+
+      if (!Number.isInteger(stock) || stock < 0) {
+        alert('Stock must be a whole number of 0 or more.');
         return;
       }
 
@@ -475,13 +466,13 @@ export default function ShopAdminPage() {
       const { error } = await supabase
         .from('shop_products')
         .insert([{
-          name: newProduct.name,
-          description: newProduct.description,
-          price: price,
-          stock: stock,
+          name,
+          description,
+          price,
+          stock,
           category: newProduct.category,
           image_url: imageUrl,
-          artisan_name: newProduct.artisan_name || null,
+          artisan_name: newProduct.artisan_name.trim() || null,
           available: true
         }]);
 
@@ -630,17 +621,61 @@ export default function ShopAdminPage() {
   };
 
   const updateOrderStatus = async (orderId, newStatus) => {
-    try {
-      const { error} = await supabase
-        .from('shop_orders')
-        .update({ status: newStatus, updated_at: new Date().toISOString() })
-        .eq('id', orderId);
+    const order = orders.find((entry) => entry.id === orderId);
 
-      if (error) throw error;
+    if (!order || order.status === newStatus) return;
+
+    if (
+      newStatus === 'cancelled' &&
+      !confirm('Cancel this order? The items will be returned to stock and the order cannot be reopened.')
+    ) {
+      return;
+    }
+
+    try {
+      const result = await transitionOrderStatus(orderId, newStatus);
+
+      showToast(
+        result.restoredItems > 0
+          ? `Order cancelled and ${result.restoredItems} product stock level(s) restored.`
+          : `Order marked ${STATUS_LABELS[newStatus] || newStatus}.`,
+        'success'
+      );
       fetchData();
     } catch (error) {
       console.error('Error updating order:', error);
-      alert('Failed to update order');
+      showToast('Failed to update order: ' + (error.message || 'unknown error'), 'error');
+      fetchData();
+    }
+  };
+
+  const approveSeller = async (seller) => {
+    if (!confirm(`Approve "${seller.business_name}" as a seller?`)) return;
+
+    try {
+      const { data, error } = await supabase
+        .from('shop_sellers')
+        .update({
+          is_approved: true,
+          is_rejected: false,
+          is_active: true,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', seller.id)
+        .select('id');
+
+      if (error) throw error;
+
+      if (!data || data.length === 0) {
+        showToast('Could not approve this seller — the database blocked the change. Run supabase-security-hardening.sql.', 'error');
+        return;
+      }
+
+      showToast(`Seller "${seller.business_name}" approved successfully.`, 'success');
+      fetchData();
+    } catch (error) {
+      console.error('Error approving seller:', error);
+      showToast('Failed to approve seller: ' + (error.message || 'unknown error'), 'error');
     }
   };
 
@@ -707,17 +742,22 @@ export default function ShopAdminPage() {
   const orderTotals = orders.reduce(
     (acc, order) => {
       const amount = Number(order.total_amount) || 0;
+      const isCancelled = order.status === 'cancelled';
 
       if (order.status === 'delivered') acc.completed += amount;
-      else if (order.status === 'cancelled') acc.refunded += amount;
+      else if (isCancelled) acc.refunded += amount;
       else acc.pending += amount;
 
-      if (order.payment_method === 'cod') acc.cod += amount;
-      if (order.payment_method === 'gcash') acc.gcash += amount;
+      // Cancelled orders were refunded, so they are not money received.
+      if (!isCancelled) {
+        if (order.payment_method === 'cod') acc.cod += amount;
+        if (order.payment_method === 'gcash') acc.gcash += amount;
+        if (order.payment_method === 'bank') acc.bank += amount;
+      }
 
       return acc;
     },
-    { completed: 0, pending: 0, refunded: 0, cod: 0, gcash: 0 }
+    { completed: 0, pending: 0, refunded: 0, cod: 0, gcash: 0, bank: 0 }
   );
 
   const generateReport = async (type) => {
@@ -894,7 +934,7 @@ export default function ShopAdminPage() {
       const { data: { session } } = await supabase.auth.getSession();
 
       if (!session?.user) {
-        showToast('Demo admin session: sign in with a Supabase admin account to edit the profile.', 'error');
+        showToast('Your session has expired. Please sign in again.', 'error');
         return;
       }
 
@@ -955,7 +995,7 @@ export default function ShopAdminPage() {
       const { data: { session } } = await supabase.auth.getSession();
 
       if (!session?.user?.email) {
-        showToast('Demo admin session: no Supabase password is stored for this account.', 'error');
+        showToast('Your session has expired. Please sign in again.', 'error');
         return;
       }
 
@@ -1062,11 +1102,11 @@ export default function ShopAdminPage() {
 
   // Main Admin Dashboard with Sidebar
   return (
-    <div className="flex h-screen bg-gray-50">
+    <div className="flex h-screen flex-col overflow-hidden bg-gray-50 lg:flex-row">
       {/* LEFT SIDEBAR */}
-      <aside className="w-64 bg-gradient-to-b from-blue-700 to-blue-900 text-white flex flex-col shadow-xl">
+      <aside className="flex w-full flex-shrink-0 flex-col bg-gradient-to-b from-blue-700 to-blue-900 text-white shadow-xl lg:w-64">
         {/* Logo */}
-        <div className="p-6 border-b border-blue-800">
+        <div className="border-b border-blue-800 px-4 py-3 lg:p-6">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-white/10 rounded-lg flex items-center justify-center">
               <svg className="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 20 20">
@@ -1081,10 +1121,10 @@ export default function ShopAdminPage() {
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 overflow-y-auto py-4">
+        <nav className="flex flex-1 overflow-x-auto py-2 lg:flex-col lg:overflow-y-auto lg:py-4">
           <button
             onClick={() => setActiveTab('dashboard')}
-            className={`w-full flex items-center gap-3 px-6 py-3 text-left transition-colors ${
+            className={`flex w-auto flex-shrink-0 items-center gap-3 px-4 py-3 text-left transition-colors lg:w-full lg:flex-shrink lg:px-6 ${
               activeTab === 'dashboard'
                 ? 'bg-blue-800 border-l-4 border-white font-semibold'
                 : 'hover:bg-blue-800/50'
@@ -1098,7 +1138,7 @@ export default function ShopAdminPage() {
 
           <button
             onClick={() => setActiveTab('orders')}
-            className={`w-full flex items-center gap-3 px-6 py-3 text-left transition-colors ${
+            className={`flex w-auto flex-shrink-0 items-center gap-3 px-4 py-3 text-left transition-colors lg:w-full lg:flex-shrink lg:px-6 ${
               activeTab === 'orders'
                 ? 'bg-blue-800 border-l-4 border-white font-semibold'
                 : 'hover:bg-blue-800/50'
@@ -1108,16 +1148,16 @@ export default function ShopAdminPage() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
             </svg>
             <span className="font-medium">Orders</span>
-            {orders.length > 0 && (
+            {stats.totalOrders > 0 && (
               <span className="ml-auto px-2 py-0.5 bg-blue-600 text-white text-xs font-bold rounded-full">
-                {orders.length}
+                {stats.totalOrders}
               </span>
             )}
           </button>
 
           <button
             onClick={() => setActiveTab('products')}
-            className={`w-full flex items-center gap-3 px-6 py-3 text-left transition-colors ${
+            className={`flex w-auto flex-shrink-0 items-center gap-3 px-4 py-3 text-left transition-colors lg:w-full lg:flex-shrink lg:px-6 ${
               activeTab === 'products'
                 ? 'bg-blue-800 border-l-4 border-white font-semibold'
                 : 'hover:bg-blue-800/50'
@@ -1131,7 +1171,7 @@ export default function ShopAdminPage() {
 
           <button
             onClick={() => setActiveTab('sellers')}
-            className={`w-full flex items-center gap-3 px-6 py-3 text-left transition-colors ${
+            className={`flex w-auto flex-shrink-0 items-center gap-3 px-4 py-3 text-left transition-colors lg:w-full lg:flex-shrink lg:px-6 ${
               activeTab === 'sellers'
                 ? 'bg-blue-800 border-l-4 border-white font-semibold'
                 : 'hover:bg-blue-800/50'
@@ -1145,7 +1185,7 @@ export default function ShopAdminPage() {
 
           <button
             onClick={() => setActiveTab('customers')}
-            className={`w-full flex items-center gap-3 px-6 py-3 text-left transition-colors ${
+            className={`flex w-auto flex-shrink-0 items-center gap-3 px-4 py-3 text-left transition-colors lg:w-full lg:flex-shrink lg:px-6 ${
               activeTab === 'customers'
                 ? 'bg-blue-800 border-l-4 border-white font-semibold'
                 : 'hover:bg-blue-800/50'
@@ -1159,7 +1199,7 @@ export default function ShopAdminPage() {
 
           <button
             onClick={() => setActiveTab('categories')}
-            className={`w-full flex items-center gap-3 px-6 py-3 text-left transition-colors ${
+            className={`flex w-auto flex-shrink-0 items-center gap-3 px-4 py-3 text-left transition-colors lg:w-full lg:flex-shrink lg:px-6 ${
               activeTab === 'categories'
                 ? 'bg-blue-800 border-l-4 border-white font-semibold'
                 : 'hover:bg-blue-800/50'
@@ -1173,7 +1213,7 @@ export default function ShopAdminPage() {
 
           <button
             onClick={() => setActiveTab('transactions')}
-            className={`w-full flex items-center gap-3 px-6 py-3 text-left transition-colors ${
+            className={`flex w-auto flex-shrink-0 items-center gap-3 px-4 py-3 text-left transition-colors lg:w-full lg:flex-shrink lg:px-6 ${
               activeTab === 'transactions'
                 ? 'bg-blue-800 border-l-4 border-white font-semibold'
                 : 'hover:bg-blue-800/50'
@@ -1187,7 +1227,7 @@ export default function ShopAdminPage() {
 
           <button
             onClick={() => setActiveTab('reports')}
-            className={`w-full flex items-center gap-3 px-6 py-3 text-left transition-colors ${
+            className={`flex w-auto flex-shrink-0 items-center gap-3 px-4 py-3 text-left transition-colors lg:w-full lg:flex-shrink lg:px-6 ${
               activeTab === 'reports'
                 ? 'bg-blue-800 border-l-4 border-white font-semibold'
                 : 'hover:bg-blue-800/50'
@@ -1201,7 +1241,7 @@ export default function ShopAdminPage() {
 
           <button
             onClick={() => setActiveTab('settings')}
-            className={`w-full flex items-center gap-3 px-6 py-3 text-left transition-colors ${
+            className={`flex w-auto flex-shrink-0 items-center gap-3 px-4 py-3 text-left transition-colors lg:w-full lg:flex-shrink lg:px-6 ${
               activeTab === 'settings'
                 ? 'bg-blue-800 border-l-4 border-white font-semibold'
                 : 'hover:bg-blue-800/50'
@@ -1216,7 +1256,7 @@ export default function ShopAdminPage() {
         </nav>
 
         {/* Logout Button */}
-        <div className="p-4 border-t border-blue-800">
+        <div className="hidden border-t border-blue-800 p-4 lg:block">
           <button
             onClick={handleLogout}
             className="w-full flex items-center gap-3 px-4 py-3 text-left bg-blue-800 hover:bg-blue-700 rounded-lg transition-colors"
@@ -1230,36 +1270,42 @@ export default function ShopAdminPage() {
       </aside>
 
       {/* MAIN CONTENT AREA */}
-      <div className="flex-1 flex flex-col overflow-hidden">
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
         {/* Top Header */}
-        <header className="bg-white border-b px-8 py-4 flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">Welcome back, Admin! 👋</h1>
-            <p className="text-sm text-gray-600">Here&apos;s what&apos;s happening with your e-commerce platform today.</p>
+        <header className="flex items-center justify-between gap-3 border-b bg-white px-4 py-3 lg:px-8 lg:py-4">
+          <div className="min-w-0">
+            <h1 className="truncate text-lg font-bold text-gray-900 lg:text-2xl">Welcome back, Admin! 👋</h1>
+            <p className="hidden text-sm text-gray-600 sm:block">Here&apos;s what&apos;s happening with your e-commerce platform today.</p>
           </div>
-          <div className="flex items-center gap-4">
-            <button className="relative p-2 text-gray-600 hover:text-gray-900">
+          <div className="flex flex-shrink-0 items-center gap-2 lg:gap-4">
+            <button className="relative hidden p-2 text-gray-600 hover:text-gray-900 sm:block" aria-label="Notifications">
               <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
               </svg>
               <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
             </button>
             <div className="flex items-center gap-2">
-              <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
-                <span className="text-blue-700 font-bold">A</span>
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-100">
+                <span className="font-bold text-blue-700">A</span>
               </div>
-              <div className="text-right">
-                <p className="text-sm font-semibold text-gray-900">{adminName}</p>
-                <p className="text-xs text-gray-600">{adminEmail || 'Administrator'}</p>
+              <div className="hidden text-right sm:block">
+                <p className="max-w-[180px] truncate text-sm font-semibold text-gray-900">{adminName}</p>
+                <p className="max-w-[180px] truncate text-xs text-gray-600">{adminEmail || 'Administrator'}</p>
               </div>
             </div>
+            <button
+              onClick={handleLogout}
+              className="flex min-h-[44px] items-center rounded-lg px-3 text-sm font-semibold text-red-600 hover:bg-red-50 lg:hidden"
+            >
+              Log Out
+            </button>
           </div>
         </header>
 
         {/* Scrollable Content */}
-        <main className="flex-1 overflow-y-auto p-8">
+        <main className="flex-1 overflow-y-auto p-4 lg:p-8">
           {/* Date Display */}
-          <div className="flex justify-end mb-4">
+          <div className="mb-4 hidden justify-end sm:flex">
             <div className="flex items-center gap-2 text-sm text-gray-600">
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
@@ -1495,7 +1541,7 @@ export default function ShopAdminPage() {
                 </div>
               </div>
               <div className="overflow-x-auto">
-                <table className="w-full">
+                <table className="w-full min-w-[720px]">
                   <thead className="bg-gray-50 border-b border-gray-200">
                     <tr>
                       <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Order ID</th>
@@ -1522,11 +1568,11 @@ export default function ShopAdminPage() {
                         <td className="px-6 py-4">
                           <span className={`px-3 py-1 text-xs font-semibold rounded-full ${
                             order.status === 'delivered' ? 'bg-green-100 text-green-700' :
-                            order.status === 'confirmed' ? 'bg-blue-100 text-blue-700' :
+                            order.status === 'cancelled' ? 'bg-red-100 text-red-700' :
                             order.status === 'pending' ? 'bg-yellow-100 text-yellow-700' :
-                            'bg-red-100 text-red-700'
+                            'bg-blue-100 text-blue-700'
                           }`}>
-                            {order.status?.charAt(0).toUpperCase() + order.status?.slice(1)}
+                            {STATUS_LABELS[order.status] || order.status || 'Unknown'}
                           </span>
                         </td>
                         <td className="px-6 py-4 text-sm text-gray-600">
@@ -1548,8 +1594,8 @@ export default function ShopAdminPage() {
           </div>
         ) : activeTab === 'sellers' ? (
           <div>
-            <div className="bg-white rounded-xl shadow-sm overflow-hidden border border-gray-100">
-              <table className="w-full">
+            <div className="bg-white rounded-xl shadow-sm overflow-x-auto border border-gray-100">
+              <table className="w-full min-w-[720px]">
                 <thead className="bg-gray-50 border-b border-gray-200">
                   <tr>
                     <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wide">Business Name</th>
@@ -1588,26 +1634,7 @@ export default function ShopAdminPage() {
                         <div className="flex gap-2">
                           {!seller.is_approved ? (
                             <button
-                              onClick={async () => {
-                                try {
-                                  const { error } = await supabase
-                                    .from('shop_sellers')
-                                    .update({ is_approved: true, is_active: true, updated_at: new Date().toISOString() })
-                                    .eq('id', seller.id);
-                                  
-                                  if (error) {
-                                    console.error('Error approving seller:', error);
-                                    showToast('Failed to approve seller: ' + error.message, 'error');
-                                    return;
-                                  }
-                                  
-                                  showToast(`Seller "${seller.business_name}" approved successfully!`, 'success');
-                                  fetchData();
-                                } catch (err) {
-                                  console.error('Error:', err);
-                                  showToast('Failed to approve seller', 'error');
-                                }
-                              }}
+                              onClick={() => approveSeller(seller)}
                               className="px-4 py-2 text-sm font-medium rounded-lg bg-green-600 text-white hover:bg-green-700 transition-colors shadow-sm"
                             >
                               Approve
@@ -1677,8 +1704,8 @@ export default function ShopAdminPage() {
           </div>
         ) : activeTab === 'customers' ? (
           <div>
-            <div className="bg-white rounded-xl shadow-sm overflow-hidden border border-gray-100">
-              <table className="w-full">
+            <div className="bg-white rounded-xl shadow-sm overflow-x-auto border border-gray-100">
+              <table className="w-full min-w-[720px]">
                 <thead className="bg-gray-50 border-b border-gray-200">
                   <tr>
                     <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wide">Full Name</th>
@@ -1761,8 +1788,8 @@ export default function ShopAdminPage() {
               </button>
             </div>
 
-            <div className="bg-white rounded-xl shadow-sm overflow-hidden border border-gray-100">
-              <table className="w-full">
+            <div className="bg-white rounded-xl shadow-sm overflow-x-auto border border-gray-100">
+              <table className="w-full min-w-[720px]">
                 <thead className="bg-gray-50 border-b border-gray-200">
                   <tr>
                     <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wide">Product</th>
@@ -1872,21 +1899,23 @@ export default function ShopAdminPage() {
                     ))}
                   </div>
 
-                  <div className="flex gap-3 items-center">
+                  <div className="flex flex-wrap gap-3 items-center">
                     <span className="text-sm font-medium">Status:</span>
                     <select
                       value={order.status}
                       onChange={(e) => updateOrderStatus(order.id, e.target.value)}
-                      className="px-4 py-2 border rounded-lg"
+                      disabled={['cancelled', 'delivered'].includes(order.status)}
+                      className="min-h-[44px] px-4 py-2 border rounded-lg disabled:bg-gray-100 disabled:text-gray-500"
                     >
-                      <option value="pending">Pending</option>
-                      <option value="confirmed">Confirmed</option>
-                      <option value="processing">Processing</option>
-                      <option value="shipped">Shipped</option>
-                      <option value="delivered">Delivered</option>
-                      <option value="cancelled">Cancelled</option>
+                      {getAllowedStatuses(order.status).map((status) => (
+                        <option key={status} value={status}>
+                          {STATUS_LABELS[status] || status}
+                        </option>
+                      ))}
                     </select>
-                    <span className="text-sm text-gray-600">Payment: {order.payment_method?.toUpperCase()}</span>
+                    <span className="text-sm text-gray-600">
+                      Payment: {(order.payment_method || 'unknown').toUpperCase()}
+                    </span>
                   </div>
                 </div>
               ))}
@@ -1907,8 +1936,8 @@ export default function ShopAdminPage() {
               </button>
             </div>
 
-            <div className="bg-white rounded-xl shadow-sm overflow-hidden border border-gray-100">
-              <table className="w-full">
+            <div className="bg-white rounded-xl shadow-sm overflow-x-auto border border-gray-100">
+              <table className="w-full min-w-[720px]">
                 <thead className="bg-gray-50 border-b border-gray-200">
                   <tr>
                     <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wide">Icon</th>
@@ -1948,7 +1977,7 @@ export default function ShopAdminPage() {
             </div>
 
             {/* Transaction Stats */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-6">
+            <div className="grid grid-cols-1 gap-6 mb-6 sm:grid-cols-2 xl:grid-cols-6">
               <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
                 <div className="flex items-center gap-3 mb-2">
                   <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
@@ -2022,6 +2051,22 @@ export default function ShopAdminPage() {
                   </div>
                 </div>
               </div>
+
+              <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                <div className="flex items-center gap-3 mb-2">
+                  <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
+                    <svg className="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 14v3m4-3v3m4-3v3M3 21h18M3 10h18M3 7l9-4 9 4M4 10h16v11H4V10z" />
+                    </svg>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-600 font-medium">Bank Transfer</p>
+                    <p className="text-xl font-bold text-gray-900">
+                      ₱{orderTotals.bank.toLocaleString()}
+                    </p>
+                  </div>
+                </div>
+              </div>
             </div>
 
             {/* Transaction History */}
@@ -2030,7 +2075,7 @@ export default function ShopAdminPage() {
                 <h4 className="font-bold text-lg">Transaction History</h4>
               </div>
               <div className="overflow-x-auto">
-                <table className="w-full">
+                <table className="w-full min-w-[720px]">
                   <thead className="bg-gray-50 border-b border-gray-200">
                     <tr>
                       <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Transaction ID</th>
@@ -2057,10 +2102,11 @@ export default function ShopAdminPage() {
                         <td className="px-6 py-4">
                           <span className={`px-3 py-1 text-xs font-semibold rounded-full ${
                             order.status === 'delivered' ? 'bg-green-100 text-green-700' :
-                            order.status === 'confirmed' ? 'bg-blue-100 text-blue-700' :
-                            'bg-yellow-100 text-yellow-700'
+                            order.status === 'cancelled' ? 'bg-red-100 text-red-700' :
+                            order.status === 'pending' ? 'bg-yellow-100 text-yellow-700' :
+                            'bg-blue-100 text-blue-700'
                           }`}>
-                            {order.status === 'delivered' ? 'Completed' : 'Processing'}
+                            {STATUS_LABELS[order.status] || order.status || 'Unknown'}
                           </span>
                         </td>
                         <td className="px-6 py-4 text-sm text-gray-600">
@@ -2232,7 +2278,7 @@ export default function ShopAdminPage() {
                   </button>
                 </div>
                 <div className="overflow-x-auto">
-                  <table className="w-full">
+                  <table className="w-full min-w-[720px]">
                     <thead className="bg-gray-50 border-b border-gray-200">
                       <tr>
                         {report.columns.map((column) => (
@@ -2312,7 +2358,7 @@ export default function ShopAdminPage() {
                     <label className="block text-sm font-semibold mb-2 text-gray-700">Email</label>
                     <input
                       type="email"
-                      value={adminEmail || DEMO_ADMIN_EMAIL}
+                      value={adminEmail}
                       disabled
                       className="w-full px-4 py-3 border-2 rounded-lg bg-gray-50 text-gray-600"
                     />

@@ -2,44 +2,55 @@
 
 ## Admin Panel Access
 
-There are **TWO WAYS** to access the admin panel:
+Admin access uses a **real Supabase account** with `profiles.user_type = 'admin'`.
+There is no demo password, no hardcoded bypass, and no `sessionStorage` flag.
 
-### Method 1: Direct URL Access (Original)
-**URL:** http://localhost:3001/shop/admin (or http://localhost:3000/shop/admin)
+**URL:** `/shop/admin` (for example `https://your-deployment.vercel.app/shop/admin`)
 
-**Login Credentials:**
+**Current admin account:**
 - **Email:** shiki@gmail.com
 - **Password:** shiki1234
 
-### Method 2: Through Shop Login (New - Automatic Redirect)
-1. Go to the shop: http://localhost:3001/shop
-2. Click **"Sign In"** button
-3. Enter admin credentials:
-   - **Email:** shiki@gmail.com
-   - **Password:** shiki1234
-4. **Automatically redirects to admin panel** ✨
+> Change this password from the Supabase dashboard before sharing the deployment
+> publicly. The password in this document is only for the capstone demo.
+
+## Sign-in flow
+
+1. Open `/shop` and click **Sign In**, or go directly to `/shop/admin`.
+2. Enter the admin email and password.
+3. Supabase authenticates the account.
+4. The app reads `profiles.user_type`. Admin accounts are redirected to
+   `/shop/admin`; other accounts continue to the shop or seller dashboard.
+5. The admin page itself also requires a signed-in session whose profile is
+   `user_type = 'admin'`. Direct URL access without that session shows the
+   login screen.
+
+## Important notes
+
+- Authentication is enforced by Supabase Auth on the server side.
+- The admin session persists through Supabase's normal session refresh and ends
+  on **Log Out** or when the refresh token expires.
+- Suspended accounts are signed out and blocked from dashboards.
+- Do **not** add credentials to source code. If you need another admin, create
+  the auth user in Supabase and run:
+  ```sql
+  update profiles set user_type = 'admin' where email = 'new-admin@example.com';
+  ```
+- Run `supabase-security-hardening.sql` in the Supabase SQL Editor to replace
+  the old permissive testing policies. Until it is applied, database-level
+  admin authorization is not fully enforced.
+
+## What the admin panel can do
+
+- View dashboard statistics (products, orders, revenue, sellers, customers)
+- Add, edit, activate/deactivate and delete products
+- Approve, reject, suspend and restore seller accounts
+- View all orders and move them through valid status transitions
+- Cancel orders with automatic stock restoration
+- View and suspend customer accounts
+- Manage categories, website settings and reports
+- Generate CSV reports
 
 ---
 
-## Important Notes
-
-- The admin panel is protected with email and password authentication
-- Session is stored in browser's sessionStorage
-- You will remain logged in until you logout or close the browser
-- The credentials are hardcoded in the application for security
-- **NEW:** Admin credentials entered in the shop login will automatically redirect to the admin panel instead of regular shop access
-
-## What You Can Do in Admin Panel
-
-✅ View dashboard statistics (products, orders, revenue)
-✅ Add new products with images
-✅ Search and filter products
-✅ Activate/Deactivate products
-✅ Delete products
-✅ View all orders
-✅ Update order status
-✅ View customer information
-
----
-
-**Last Updated:** January 2025
+**Last Updated:** November 2026

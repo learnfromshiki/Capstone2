@@ -27,28 +27,59 @@ export default function ShopPage() {
   }, []);
   const [searchQuery, setSearchQuery] = useState('');
   const [showAuthModal, setShowAuthModal] = useState(false);
-  const { user, signOut } = useAuth();
+  const { user, profile, isSuspended, loading: authLoading, signOut } = useAuth();
+  const cartKey = user ? `shop_cart:${user.id}` : null;
+  const [cartOwner, setCartOwner] = useState(undefined);
 
-  // Load cart from localStorage on mount
+  // Old builds shared one "shop_cart" key between every account on the device.
+  // Remove it so one customer's cart can never appear in another's session.
   useEffect(() => {
-    const savedCart = localStorage.getItem('shop_cart');
-    if (savedCart) {
-      try {
-        setCart(JSON.parse(savedCart));
-      } catch (error) {
-        console.error('Error loading cart:', error);
-      }
+    try {
+      localStorage.removeItem('shop_cart');
+    } catch (error) {
+      console.error('Error clearing the legacy cart:', error);
     }
   }, []);
 
-  // Save cart to localStorage whenever it changes
+  // Load the signed-in customer's own cart. Guests get an empty cart because
+  // adding to the cart already requires an account.
   useEffect(() => {
-    if (cart.length > 0) {
-      localStorage.setItem('shop_cart', JSON.stringify(cart));
-    } else {
-      localStorage.removeItem('shop_cart');
+    if (authLoading) return;
+
+    if (!user || !cartKey) {
+      setCart([]);
+      setCartOwner(null);
+      return;
     }
-  }, [cart]);
+
+    if (cartOwner === cartKey) return;
+
+    try {
+      const savedCart = localStorage.getItem(cartKey);
+      setCart(savedCart ? JSON.parse(savedCart) : []);
+    } catch (error) {
+      console.error('Error loading cart:', error);
+      setCart([]);
+    }
+
+    setCartOwner(cartKey);
+  }, [user, authLoading, cartKey, cartOwner]);
+
+  // Save only after the matching cart has been loaded, so a cart from the
+  // previous account cannot overwrite the new account's cart.
+  useEffect(() => {
+    if (!user || !cartKey || cartOwner !== cartKey) return;
+
+    try {
+      if (cart.length > 0) {
+        localStorage.setItem(cartKey, JSON.stringify(cart));
+      } else {
+        localStorage.removeItem(cartKey);
+      }
+    } catch (error) {
+      console.error('Error saving cart:', error);
+    }
+  }, [cart, user, cartKey, cartOwner]);
 
   useEffect(() => {
     fetchProducts();
@@ -64,55 +95,56 @@ export default function ShopPage() {
         return;
       }
 
-      // First, try to fetch products with seller information
-      let { data, error } = await supabase
+      const { data: productRows, error: productsError } = await supabase
         .from('shop_products')
-        .select(`
-          *,
-          shop_sellers (
-            id,
-            business_name,
-            description
-          )
-        `)
+        .select('*')
         .eq('available', true)
         .order('created_at', { ascending: false });
 
-      // If the query with sellers fails, try without the join
-      if (error) {
-        console.warn('Failed to fetch with sellers, trying without:', error);
-        const result = await supabase
-          .from('shop_products')
-          .select('*')
-          .eq('available', true)
-          .order('created_at', { ascending: false });
-        
-        data = result.data;
-        error = result.error;
+      if (productsError) throw productsError;
+
+      // Only products from approved, active, non-rejected sellers (plus
+      // platform listings with no seller) may appear in the public catalog.
+      // RLS enforces this after the hardening SQL is run; this filter also
+      // protects the current deployment.
+      const loadApprovedSellers = async () => {
+        const baseQuery = () =>
+          supabase
+            .from('shop_sellers')
+            .select('id, business_name, description')
+            .eq('is_approved', true)
+            .eq('is_active', true);
+
+        let result = await baseQuery().eq('is_rejected', false);
+
+        if (result.error && /is_rejected|column .* does not exist/i.test(result.error.message || '')) {
+          result = await baseQuery();
+        }
+
+        return result;
+      };
+
+      const { data: sellerRows, error: sellersError } = await loadApprovedSellers();
+
+      if (sellersError) {
+        console.error('Error loading approved sellers:', sellersError.message);
       }
 
-      if (error) {
-        console.error('Supabase error:', error);
-        throw error;
-      }
-      
-      // Create seller lookup map
       const sellerMap = {};
-      if (data) {
-        data.forEach(product => {
-          if (product.shop_sellers) {
-            sellerMap[product.seller_id] = product.shop_sellers;
-          }
-        });
-      }
-      
+      (sellerRows || []).forEach((seller) => {
+        sellerMap[seller.id] = seller;
+      });
+
+      const visibleProducts = (productRows || []).filter(
+        (product) => !product.seller_id || Boolean(sellerMap[product.seller_id])
+      );
+
       setSellers(sellerMap);
-      setProducts(data || []);
-      
-      console.log(`Successfully loaded ${data?.length || 0} products`);
+      setProducts(visibleProducts);
+
+      console.log(`Successfully loaded ${visibleProducts.length} products`);
     } catch (error) {
       console.error('Error fetching products:', error?.message || JSON.stringify(error));
-      // Don't show alert for now, just log the error
     } finally {
       setLoading(false);
     }
@@ -122,6 +154,11 @@ export default function ShopPage() {
     // Check if user is logged in
     if (!user) {
       setShowAuthModal(true);
+      return;
+    }
+
+    if (isSuspended) {
+      alert('This account has been suspended. Please contact CONNECT-Daet support.');
       return;
     }
 
@@ -188,6 +225,11 @@ export default function ShopPage() {
       return;
     }
 
+    if (isSuspended) {
+      alert('This account has been suspended. Please contact CONNECT-Daet support.');
+      return;
+    }
+
     if (!product.stock || product.stock <= 0) {
       alert('Sorry, this product is out of stock.');
       return;
@@ -251,8 +293,23 @@ export default function ShopPage() {
     return matchesCategory && matchesSearch;
   });
 
-  const cartTotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
-  const cartItemCount = cart.reduce((sum, item) => sum + item.quantity, 0);
+  const cartTotal = cart.reduce(
+    (sum, item) => sum + (Number(item.price) || 0) * (Number(item.quantity) || 0),
+    0
+  );
+  const cartItemCount = cart.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0);
+  const accountHref =
+    profile?.user_type === 'admin'
+      ? '/shop/admin'
+      : profile?.user_type === 'seller'
+      ? '/shop/seller/dashboard'
+      : '/shop/buyer';
+  const accountLabel =
+    profile?.user_type === 'admin'
+      ? 'Admin Panel'
+      : profile?.user_type === 'seller'
+      ? 'Seller Dashboard'
+      : 'My Account';
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -274,7 +331,7 @@ export default function ShopPage() {
             </Link>
 
             {/* Actions */}
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2 sm:gap-4">
               <Link 
                 href="/"
                 className="text-gray-600 hover:text-gray-900 font-medium text-sm hidden sm:block"
@@ -283,18 +340,27 @@ export default function ShopPage() {
               </Link>
               
               {user ? (
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2 sm:gap-3">
+                  <Link
+                    href={accountHref}
+                    aria-label={accountLabel}
+                    className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 sm:hidden"
+                  >
+                    <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" />
+                    </svg>
+                  </Link>
                   <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 bg-blue-50 rounded-lg">
                     <svg className="w-4 h-4 text-blue-600" fill="currentColor" viewBox="0 0 20 20">
                       <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" />
                     </svg>
-                    <Link href="/shop/buyer" className="text-sm font-medium text-gray-700 hover:text-blue-600">
-                      My Account
+                    <Link href={accountHref} className="text-sm font-medium text-gray-700 hover:text-blue-600">
+                      {accountLabel}
                     </Link>
                   </div>
                   <button
                     onClick={signOut}
-                    className="text-sm text-gray-600 hover:text-gray-900 font-medium"
+                    className="min-h-[44px] px-2 text-sm text-gray-600 hover:text-gray-900 font-medium"
                   >
                     Logout
                   </button>
@@ -302,7 +368,7 @@ export default function ShopPage() {
               ) : (
                 <button
                   onClick={() => setShowAuthModal(true)}
-                  className="text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-lg font-medium transition-colors"
+                  className="min-h-[44px] text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 rounded-lg font-medium transition-colors"
                 >
                   Sign In
                 </button>
@@ -310,7 +376,7 @@ export default function ShopPage() {
               
               <button
                 onClick={() => setShowCart(!showCart)}
-                className="relative bg-blue-600 text-white rounded-lg px-4 py-2.5 hover:bg-blue-700 transition-all shadow-sm hover:shadow flex items-center gap-2"
+                className="relative bg-blue-600 text-white rounded-lg px-4 py-3 hover:bg-blue-700 transition-all shadow-sm hover:shadow flex items-center gap-2"
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
@@ -326,6 +392,12 @@ export default function ShopPage() {
           </div>
         </div>
       </header>
+
+      {isSuspended && (
+        <div role="alert" className="border-b-2 border-red-200 bg-red-50 px-4 py-3 text-center text-sm font-semibold text-red-800">
+          This account is suspended. You can browse, but you cannot add items to the cart or place orders.
+        </div>
+      )}
 
       {/* Search and Filter Bar */}
       <div className="bg-white border-b sticky top-16 z-40">
@@ -451,6 +523,10 @@ export default function ShopPage() {
         onUpdateQuantity={updateQuantity}
         onRemoveItem={removeFromCart}
         onClearCart={clearCart}
+        onRequireAuth={() => {
+          setShowCart(false);
+          setShowAuthModal(true);
+        }}
         total={cartTotal}
       />
 

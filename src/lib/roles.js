@@ -1,9 +1,5 @@
 import { supabase } from './supabaseClient';
 
-// Demo admin account kept for the class demo (no Supabase account required)
-export const DEMO_ADMIN_EMAIL = 'shiki@gmail.com';
-export const DEMO_ADMIN_PASSWORD = 'shiki1234';
-
 /**
  * Resolve which dashboard a signed-in user belongs to.
  * @param {string} userId - Supabase auth user UUID

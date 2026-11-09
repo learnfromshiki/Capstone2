@@ -18,11 +18,13 @@ export const SellerAuthProvider = ({ children }) => {
     // Check active session
     checkUser();
 
-    // Listen for auth changes
+    // Listen for auth changes. Supabase warns that awaiting auth calls inside
+    // this callback can deadlock, so defer the profile check to the next tick.
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       if (session?.user) {
-        setUser(session.user);
-        fetchSellerProfile(session.user.id);
+        setTimeout(() => {
+          checkUser();
+        }, 0);
       } else {
         setUser(null);
         setSeller(null);
@@ -34,10 +36,33 @@ export const SellerAuthProvider = ({ children }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const checkAccountIsActive = async (userId) => {
+    const { data: profile, error } = await supabase
+      .from('profiles')
+      .select('is_suspended')
+      .eq('id', userId)
+      .maybeSingle();
+
+    if (error && error.code !== 'PGRST116') {
+      console.warn('Could not check account status:', error.message);
+      return true;
+    }
+
+    return !profile?.is_suspended;
+  };
+
   const checkUser = async () => {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (session?.user) {
+        if (!(await checkAccountIsActive(session.user.id))) {
+          await supabase.auth.signOut();
+          setUser(null);
+          setSeller(null);
+          setLoading(false);
+          return;
+        }
+
         setUser(session.user);
         await fetchSellerProfile(session.user.id);
       } else {
@@ -139,6 +164,11 @@ export const SellerAuthProvider = ({ children }) => {
       if (error) throw error;
 
       if (data.user) {
+        if (!(await checkAccountIsActive(data.user.id))) {
+          await supabase.auth.signOut();
+          throw new Error('This account has been suspended. Please contact CONNECT-Daet support.');
+        }
+
         await ensureProfileRow(data.user);
         await fetchSellerProfile(data.user.id);
       }

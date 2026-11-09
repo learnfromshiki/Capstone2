@@ -19,19 +19,6 @@ const readSellerIntent = (user) => {
   };
 };
 
-// Keep profiles.user_type in step with the seller table so the admin Customers
-// list never shows a seller (it treats every non-seller profile as a customer).
-const promoteProfileRole = async (userId) => {
-  const { error } = await supabase
-    .from('profiles')
-    .update({ user_type: 'seller' })
-    .eq('id', userId);
-
-  if (error) {
-    console.warn('Could not mark the profile as a seller:', error.message);
-  }
-};
-
 /**
  * @param {object} user - Supabase auth user (needs id, email, user_metadata)
  * @returns {Promise<object|null>} the seller row, or null when this user is a buyer
@@ -52,8 +39,6 @@ export const ensureSellerProfile = async (user) => {
     }
 
     if (existing) {
-      // Repair accounts whose seller row exists but whose profile says otherwise
-      await promoteProfileRole(user.id);
       return existing;
     }
 
@@ -79,7 +64,6 @@ export const ensureSellerProfile = async (user) => {
       return null;
     }
 
-    await promoteProfileRole(user.id);
     return created;
   } catch (error) {
     console.error('Seller profile check failed:', error);

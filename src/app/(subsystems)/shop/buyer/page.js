@@ -45,8 +45,9 @@ function StarPicker({ value, onChange }) {
           key={star}
           type="button"
           onClick={() => onChange(star)}
-          className={`text-2xl leading-none ${star <= value ? 'text-yellow-500' : 'text-gray-300'}`}
+          className={`flex min-h-[44px] min-w-[44px] items-center justify-center text-3xl leading-none ${star <= value ? 'text-yellow-500' : 'text-gray-300'}`}
           aria-label={`Rate ${star} star${star > 1 ? 's' : ''}`}
+          aria-pressed={star <= value}
         >
           ★
         </button>
@@ -239,14 +240,34 @@ export default function BuyerDashboard() {
 
   const submitReview = async (item) => {
     const draft = reviewDrafts[item.product_id] || { rating: 5, comment: '' };
+    const rating = Number(draft.rating);
+    const comment = (draft.comment || '').trim();
+
+    if (!Number.isInteger(rating) || rating < 1 || rating > 5) {
+      alert('Please choose a star rating from 1 to 5.');
+      return;
+    }
+
+    if (comment.length > 1000) {
+      alert('Please keep your review under 1,000 characters.');
+      return;
+    }
+
+    // The UI only offers delivered items, but re-check so a stale tab cannot
+    // submit a review for something that was never delivered.
+    if (!reviewableItems.some((entry) => entry.product_id === item.product_id)) {
+      alert('This item is not ready for review. Only delivered items can be reviewed.');
+      return;
+    }
+
     setSavingReview(true);
 
     try {
       const { error } = await supabase.from('shop_reviews').insert({
         product_id: item.product_id,
         user_id: user.id,
-        rating: Number(draft.rating) || 5,
-        comment: draft.comment || null,
+        rating,
+        comment: comment || null,
       });
 
       if (error) throw error;
@@ -342,30 +363,30 @@ export default function BuyerDashboard() {
       {/* Header */}
       <div className="bg-gradient-to-r from-blue-600 to-blue-700 text-white">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <div className="flex items-center gap-4">
-              <Link href="/shop" className="text-2xl font-bold">
+          <div className="flex min-h-16 items-center justify-between gap-3 py-2">
+            <div className="flex items-center gap-2 sm:gap-4">
+              <Link href="/shop" className="text-lg font-bold sm:text-2xl">
                 CONNECT-Daet
               </Link>
-              <span className="px-3 py-1 bg-white/20 text-white text-xs font-semibold rounded-full">
+              <span className="rounded-full bg-white/20 px-2 py-1 text-xs font-semibold text-white sm:px-3">
                 Buyer
               </span>
             </div>
-            <div className="flex items-center gap-4">
-              <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 sm:gap-4">
+              <div className="hidden items-center gap-2 sm:flex">
                 <div className="w-8 h-8 bg-white/20 rounded-full flex items-center justify-center">
                   <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
                     <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" />
                   </svg>
                 </div>
-                <div className="text-right">
-                  <p className="text-sm font-semibold">{profile?.full_name || user?.email}</p>
+                <div className="max-w-[12rem] text-right">
+                  <p className="truncate text-sm font-semibold">{profile?.full_name || user?.email}</p>
                   <p className="text-xs text-white/80">Buyer</p>
                 </div>
               </div>
               <button
                 onClick={handleLogout}
-                className="px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg text-sm font-medium transition-colors"
+                className="min-h-[44px] rounded-lg bg-white/10 px-3 text-sm font-medium transition-colors hover:bg-white/20 sm:px-4"
               >
                 Log Out
               </button>
@@ -389,12 +410,12 @@ export default function BuyerDashboard() {
           {/* Sidebar */}
           <div className="lg:col-span-1">
             <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-              <nav className="flex flex-col">
+              <nav className="flex overflow-x-auto lg:flex-col">
                 <button
                   onClick={() => setActiveTab('home')}
-                  className={`flex items-center gap-3 px-6 py-4 text-left font-medium transition-colors ${
+                  className={`flex min-h-[44px] items-center gap-2 px-4 py-3 text-left text-sm font-medium transition-colors whitespace-nowrap lg:gap-3 lg:px-6 lg:py-4 ${
                     activeTab === 'home'
-                      ? 'bg-blue-50 text-blue-600 border-l-4 border-blue-600'
+                      ? 'bg-blue-50 text-blue-600 border-b-4 border-blue-600 lg:border-b-0 lg:border-l-4'
                       : 'text-gray-700 hover:bg-gray-50'
                   }`}
                 >
@@ -406,9 +427,9 @@ export default function BuyerDashboard() {
 
                 <button
                   onClick={() => setActiveTab('orders')}
-                  className={`flex items-center gap-3 px-6 py-4 text-left font-medium transition-colors ${
+                  className={`flex min-h-[44px] items-center gap-2 px-4 py-3 text-left text-sm font-medium transition-colors whitespace-nowrap lg:gap-3 lg:px-6 lg:py-4 ${
                     activeTab === 'orders'
-                      ? 'bg-blue-50 text-blue-600 border-l-4 border-blue-600'
+                      ? 'bg-blue-50 text-blue-600 border-b-4 border-blue-600 lg:border-b-0 lg:border-l-4'
                       : 'text-gray-700 hover:bg-gray-50'
                   }`}
                 >
@@ -425,7 +446,7 @@ export default function BuyerDashboard() {
 
                 <Link
                   href="/shop?cart=1"
-                  className="flex items-center gap-3 px-6 py-4 text-left font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+                  className="flex min-h-[44px] items-center gap-2 whitespace-nowrap px-4 py-3 text-left text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 lg:gap-3 lg:px-6 lg:py-4"
                 >
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
@@ -435,9 +456,9 @@ export default function BuyerDashboard() {
 
                 <button
                   onClick={() => setActiveTab('wishlist')}
-                  className={`flex items-center gap-3 px-6 py-4 text-left font-medium transition-colors ${
+                  className={`flex min-h-[44px] items-center gap-2 px-4 py-3 text-left text-sm font-medium transition-colors whitespace-nowrap lg:gap-3 lg:px-6 lg:py-4 ${
                     activeTab === 'wishlist'
-                      ? 'bg-blue-50 text-blue-600 border-l-4 border-blue-600'
+                      ? 'bg-blue-50 text-blue-600 border-b-4 border-blue-600 lg:border-b-0 lg:border-l-4'
                       : 'text-gray-700 hover:bg-gray-50'
                   }`}
                 >
@@ -454,9 +475,9 @@ export default function BuyerDashboard() {
 
                 <button
                   onClick={() => setActiveTab('reviews')}
-                  className={`flex items-center gap-3 px-6 py-4 text-left font-medium transition-colors ${
+                  className={`flex min-h-[44px] items-center gap-2 px-4 py-3 text-left text-sm font-medium transition-colors whitespace-nowrap lg:gap-3 lg:px-6 lg:py-4 ${
                     activeTab === 'reviews'
-                      ? 'bg-blue-50 text-blue-600 border-l-4 border-blue-600'
+                      ? 'bg-blue-50 text-blue-600 border-b-4 border-blue-600 lg:border-b-0 lg:border-l-4'
                       : 'text-gray-700 hover:bg-gray-50'
                   }`}
                 >
@@ -468,9 +489,9 @@ export default function BuyerDashboard() {
 
                 <button
                   onClick={() => setActiveTab('profile')}
-                  className={`flex items-center gap-3 px-6 py-4 text-left font-medium transition-colors ${
+                  className={`flex min-h-[44px] items-center gap-2 px-4 py-3 text-left text-sm font-medium transition-colors whitespace-nowrap lg:gap-3 lg:px-6 lg:py-4 ${
                     activeTab === 'profile'
-                      ? 'bg-blue-50 text-blue-600 border-l-4 border-blue-600'
+                      ? 'bg-blue-50 text-blue-600 border-b-4 border-blue-600 lg:border-b-0 lg:border-l-4'
                       : 'text-gray-700 hover:bg-gray-50'
                   }`}
                 >
@@ -482,9 +503,9 @@ export default function BuyerDashboard() {
 
                 <button
                   onClick={() => setActiveTab('settings')}
-                  className={`flex items-center gap-3 px-6 py-4 text-left font-medium transition-colors ${
+                  className={`flex min-h-[44px] items-center gap-2 px-4 py-3 text-left text-sm font-medium transition-colors whitespace-nowrap lg:gap-3 lg:px-6 lg:py-4 ${
                     activeTab === 'settings'
-                      ? 'bg-blue-50 text-blue-600 border-l-4 border-blue-600'
+                      ? 'bg-blue-50 text-blue-600 border-b-4 border-blue-600 lg:border-b-0 lg:border-l-4'
                       : 'text-gray-700 hover:bg-gray-50'
                   }`}
                 >
@@ -497,7 +518,7 @@ export default function BuyerDashboard() {
 
                 <button
                   onClick={handleLogout}
-                  className="flex items-center gap-3 px-6 py-4 text-left font-medium text-red-600 hover:bg-red-50 transition-colors border-t"
+                  className="flex min-h-[44px] items-center gap-2 whitespace-nowrap border-t px-4 py-3 text-left text-sm font-medium text-red-600 transition-colors hover:bg-red-50 lg:gap-3 lg:px-6 lg:py-4"
                 >
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
@@ -513,9 +534,9 @@ export default function BuyerDashboard() {
             {activeTab === 'home' && (
               <div className="space-y-6">
                 {/* Big Deals Banner */}
-                <div className="bg-gradient-to-r from-blue-500 to-blue-600 rounded-2xl p-8 text-white relative overflow-hidden">
+                <div className="bg-gradient-to-r from-blue-500 to-blue-600 rounded-2xl p-6 sm:p-8 text-white relative overflow-hidden">
                   <div className="relative z-10">
-                    <h2 className="text-3xl font-bold mb-2">Big Deals</h2>
+                    <h2 className="text-2xl sm:text-3xl font-bold mb-2">Big Deals</h2>
                     <p className="text-xl mb-4">Up to 50% OFF</p>
                     <Link
                       href="/shop"
@@ -539,7 +560,7 @@ export default function BuyerDashboard() {
                       View All Orders →
                     </button>
                   </div>
-                  <div className="grid grid-cols-4 gap-4">
+                  <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
                     <div className="text-center">
                       <div className="w-16 h-16 mx-auto mb-2 bg-yellow-100 rounded-full flex items-center justify-center">
                         <svg className="w-8 h-8 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -623,7 +644,7 @@ export default function BuyerDashboard() {
                               <button
                                 onClick={() => toggleWishlist(product.id)}
                                 aria-label="Toggle wishlist"
-                                className={`w-9 rounded-lg text-lg leading-none transition-colors ${
+                                className={`flex h-11 w-11 items-center justify-center rounded-lg text-lg leading-none transition-colors ${
                                   wishlist.includes(product.id)
                                     ? 'bg-pink-100 text-pink-600'
                                     : 'bg-gray-100 text-gray-400 hover:text-pink-500'
@@ -663,12 +684,12 @@ export default function BuyerDashboard() {
                     <div className="space-y-4">
                       {orders.map((order) => (
                         <div key={order.id} className="border border-gray-200 rounded-lg p-6 hover:border-blue-300 transition-colors">
-                          <div className="flex justify-between items-start mb-4">
+                          <div className="flex flex-col gap-2 sm:flex-row sm:justify-between sm:items-start mb-4">
                             <div>
                               <p className="text-sm text-gray-600">Order ID: <span className="font-mono font-semibold text-blue-600">#{order.id.slice(0, 8)}</span></p>
                               <p className="text-sm text-gray-600">Placed on {new Date(order.created_at).toLocaleDateString()}</p>
                             </div>
-                            <span className={`px-3 py-1 text-xs font-semibold rounded-full ${getStatusColor(order.status)}`}>
+                            <span className={`self-start px-3 py-1 text-xs font-semibold rounded-full ${getStatusColor(order.status)}`}>
                               {order.status.charAt(0).toUpperCase() + order.status.slice(1)}
                             </span>
                           </div>
@@ -680,7 +701,7 @@ export default function BuyerDashboard() {
                             {order.shop_order_items?.map((item, idx) => (
                               <div key={idx} className="flex justify-between text-sm text-gray-600 mb-1">
                                 <span>{item.product_name} x{item.quantity}</span>
-                                <span className="font-semibold">₱{(item.price * item.quantity).toFixed(2)}</span>
+                                <span className="font-semibold">₱{(Number(item.price) * Number(item.quantity)).toFixed(2)}</span>
                               </div>
                             ))}
                           </div>
@@ -738,13 +759,13 @@ export default function BuyerDashboard() {
                             <div className="flex gap-2 mt-2">
                               <Link
                                 href="/shop"
-                                className="text-xs bg-blue-600 text-white rounded-lg px-3 py-1.5 font-semibold hover:bg-blue-700"
+                                className="inline-flex min-h-[44px] items-center rounded-lg bg-blue-600 px-4 text-xs font-semibold text-white hover:bg-blue-700"
                               >
                                 Shop
                               </Link>
                               <button
                                 onClick={() => toggleWishlist(product.id)}
-                                className="text-xs bg-gray-100 text-gray-700 rounded-lg px-3 py-1.5 font-semibold hover:bg-gray-200"
+                                className="min-h-[44px] rounded-lg bg-gray-100 px-4 text-xs font-semibold text-gray-700 hover:bg-gray-200"
                               >
                                 Remove
                               </button>
@@ -795,17 +816,21 @@ export default function BuyerDashboard() {
                                     [item.product_id]: { ...draft, comment: e.target.value },
                                   }))
                                 }
-                                rows="2"
+                                rows="3"
+                                maxLength={1000}
                                 placeholder="How was the product?"
                                 className="w-full mt-2 px-3 py-2 border-2 border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
                               />
-                              <button
-                                onClick={() => submitReview(item)}
-                                disabled={savingReview}
-                                className="mt-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700 disabled:opacity-50"
-                              >
-                                {savingReview ? 'Saving...' : 'Submit Review'}
-                              </button>
+                              <div className="mt-2 flex items-center justify-between gap-3">
+                                <button
+                                  onClick={() => submitReview(item)}
+                                  disabled={savingReview}
+                                  className="min-h-[44px] px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700 disabled:opacity-50"
+                                >
+                                  {savingReview ? 'Saving...' : 'Submit Review'}
+                                </button>
+                                <span className="text-xs text-gray-500">{(draft.comment || '').length}/1000</span>
+                              </div>
                             </div>
                           );
                         })}
@@ -945,7 +970,7 @@ export default function BuyerDashboard() {
                       />
                       <button
                         onClick={changePassword}
-                        className="px-4 py-2 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors"
+                        className="min-h-[44px] px-4 py-2 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors"
                       >
                         Update Password
                       </button>

@@ -1,80 +1,56 @@
 # Admin Login Flow - How It Works
 
-## 🎯 Automatic Admin Redirect
+## Automatic admin redirect
 
-When you log in with admin credentials **anywhere in the system**, you will be automatically redirected to the admin panel.
+Admin accounts sign in through the same Supabase Auth form as everyone else.
+Role detection happens **after** Supabase authenticates the user.
 
 ---
 
-## ✅ Step-by-Step Process
+## Step-by-step
 
-### 1. Go to the Shop
-- URL: http://localhost:3001/shop
-- Or any page with the login modal
+### 1. Open the shop or admin URL
+- `/shop` → click **Sign In**
+- or go directly to `/shop/admin`
 
-### 2. Click "Sign In"
-- Opens the authentication modal
-
-### 3. Enter Admin Credentials
+### 2. Enter the admin credentials
 - **Email:** shiki@gmail.com
 - **Password:** shiki1234
 
-### 4. Automatic Redirect
-- System detects admin credentials
-- Stores credentials in sessionStorage temporarily
-- **Automatically redirects to /shop/admin**
-- Admin page verifies credentials
-- Logs you into admin dashboard
+### 3. Supabase authenticates the account
+- `AuthContext.signIn()` calls `supabase.auth.signInWithPassword()`.
+- The session is stored and refreshed by the Supabase client (not `sessionStorage`).
+
+### 4. Role is read from the database
+- `getAccountRole(user.id)` reads `profiles.user_type`.
+- If it is `admin`, the browser navigates to `/shop/admin`.
+- Otherwise the app restores the profile row, checks for seller intent, and
+  sends the user to the seller dashboard or `/shop`.
+
+### 5. The admin page verifies the session again
+- `AdminPage` subscribes to `supabase.auth.getSession()`.
+- It loads the current profile and requires `user_type = 'admin'`.
+- It listens for auth changes, so logging out in another tab also locks the panel.
+- A non-admin or signed-out visitor only sees the admin login form.
 
 ---
 
-## 🔐 How It Works Behind the Scenes
+## What was removed
 
-1. **AuthModal checks credentials:**
-   ```javascript
-   if (email === 'shiki@gmail.com' && password === 'shiki1234') {
-     sessionStorage.setItem('admin_redirect_email', email);
-     sessionStorage.setItem('admin_redirect_password', password);
-     window.location.href = '/shop/admin';
-   }
-   ```
+The old flow accepted the hardcoded email/password in the browser and set
+`sessionStorage.setItem('admin_authenticated', 'true')`. Anyone could forge
+that flag, so it has been removed entirely. There is no `DEMO_ADMIN_EMAIL` or
+`DEMO_ADMIN_PASSWORD` constant in the codebase anymore.
 
-2. **Admin page receives the redirect:**
-   ```javascript
-   const redirectEmail = sessionStorage.getItem('admin_redirect_email');
-   const redirectPassword = sessionStorage.getItem('admin_redirect_password');
-   
-   if (redirectEmail === 'shiki@gmail.com' && redirectPassword === 'shiki1234') {
-     setIsAuthenticated(true);
-     sessionStorage.setItem('admin_authenticated', 'true');
-     // Clear temporary credentials
-     sessionStorage.removeItem('admin_redirect_email');
-     sessionStorage.removeItem('admin_redirect_password');
-   }
-   ```
+## Security notes
 
-3. **You're now logged into the admin panel!**
+- Admin authorization is checked against `profiles.user_type`, not email text.
+- Suspended accounts are signed out before any dashboard opens.
+- Run `supabase-security-hardening.sql` so RLS and database triggers also
+  enforce the role, instead of relying only on the UI.
+- Admin actions that change seller approval or customer suspension are protected
+  by profile/seller field guards after the migration is applied.
 
 ---
 
-## 🎉 Benefits
-
-✅ **Single Login System** - No separate admin login page needed
-✅ **Automatic Detection** - System knows when admin credentials are used
-✅ **Seamless Redirect** - Instantly takes you to admin dashboard
-✅ **Secure** - Credentials are verified twice and cleared after use
-✅ **Session Persistence** - Stay logged in until you logout
-
----
-
-## 📝 Notes
-
-- Admin credentials work in **any login form** (shop, homepage, etc.)
-- Regular customer credentials work normally for shopping
-- Admin session persists until logout or browser close
-- Temporary credentials are immediately cleared after verification
-- No changes needed to existing customer login flow
-
----
-
-**Last Updated:** January 2025
+**Last Updated:** November 2026

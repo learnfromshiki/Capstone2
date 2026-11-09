@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabaseClient';
-import { DEMO_ADMIN_EMAIL, DEMO_ADMIN_PASSWORD, getAccountRole } from '@/lib/roles';
+import { getAccountRole } from '@/lib/roles';
 import { ensureSellerProfile } from '@/lib/sellerProfile';
 import { ensureProfileRow } from '@/lib/profile';
 
@@ -19,6 +19,7 @@ export default function AuthModal({ isOpen, onClose, mode: initialMode = 'login'
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
   const { signIn, signUp } = useAuth();
 
   if (!isOpen) return null;
@@ -26,29 +27,16 @@ export default function AuthModal({ isOpen, onClose, mode: initialMode = 'login'
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
+    setNotice('');
     setLoading(true);
 
-    // A previous admin session must never authorize this login attempt
-    sessionStorage.removeItem('admin_authenticated');
-    sessionStorage.removeItem('admin_email');
-
     try {
-      // Demo admin account (see ADMIN-LOGIN-FLOW.md) goes straight to the admin dashboard
-      if (mode === 'login' && email.trim().toLowerCase() === DEMO_ADMIN_EMAIL && password === DEMO_ADMIN_PASSWORD) {
-        sessionStorage.setItem('admin_authenticated', 'true');
-        sessionStorage.setItem('admin_email', DEMO_ADMIN_EMAIL);
-        window.location.href = '/shop/admin';
-        return;
-      }
-
       if (mode === 'login') {
         const { data, error } = await signIn(email, password);
         if (error) throw error;
 
         // Admin accounts go to the admin dashboard, never the buyer/seller views
         if (data?.user && (await getAccountRole(data.user.id)) === 'admin') {
-          sessionStorage.setItem('admin_authenticated', 'true');
-          sessionStorage.setItem('admin_email', data.user.email || '');
           window.location.href = '/shop/admin';
           return;
         }
@@ -80,9 +68,16 @@ export default function AuthModal({ isOpen, onClose, mode: initialMode = 'login'
         if (data?.user) {
           const sellerData = await ensureSellerProfile(data.user);
 
-          if (sellerData?.is_approved) {
+          if (sellerData?.is_approved && sellerData?.is_active !== false) {
             setLoading(false);
             window.location.href = '/shop/seller/dashboard';
+            return;
+          }
+
+          if (sellerData?.is_approved && sellerData?.is_active === false) {
+            await supabase.auth.signOut();
+            setError('This seller account has been suspended. Please contact CONNECT-Daet support.');
+            setLoading(false);
             return;
           }
         }
@@ -127,23 +122,23 @@ export default function AuthModal({ isOpen, onClose, mode: initialMode = 'login'
 
           if (sellerError) {
             console.error('Error creating seller account:', sellerError);
-            setError('✅ Account created! Sign in to finish setting up your shop (awaiting admin approval).');
+            setNotice('Account created! Sign in to finish setting up your shop (awaiting admin approval).');
           } else {
             // Also flag the profile as a seller so it never lands in Customers
             await ensureSellerProfile(data.user);
-            setError(data.session
-              ? '✅ Seller account created! Awaiting admin approval.'
-              : '✅ Seller account created! Confirm your email, then sign in — awaiting admin approval.');
+            setNotice(data.session
+              ? 'Seller account created! Awaiting admin approval.'
+              : 'Seller account created! Confirm your email, then sign in — awaiting admin approval.');
           }
         } else {
-          setError(data?.session
-            ? '✅ Account created! You are now signed in.'
+          setNotice(data?.session
+            ? 'Account created! You are now signed in.'
             : 'Check your email to confirm your account!');
         }
 
         setTimeout(() => {
           setMode('login');
-          setError('');
+          setNotice('');
         }, 4000);
       }
     } catch (err) {
@@ -168,13 +163,14 @@ export default function AuthModal({ isOpen, onClose, mode: initialMode = 'login'
   };
 
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl max-w-md w-full shadow-2xl relative">
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-3 sm:p-4">
+      <div className="bg-white rounded-2xl max-w-md w-full max-h-[90vh] overflow-y-auto shadow-2xl relative">
         {/* Header */}
         <div className="p-5 pb-3 text-center border-b border-gray-100">
           <button
             onClick={onClose}
-            className="absolute top-3 right-3 text-gray-400 hover:text-gray-600 transition-colors"
+            aria-label="Close sign in"
+            className="absolute top-2 right-2 flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -271,7 +267,7 @@ export default function AuthModal({ isOpen, onClose, mode: initialMode = 'login'
                   type="text"
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}
-                  className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-full focus:ring-2 focus:ring-blue-600 focus:border-transparent transition-all text-sm text-gray-900 placeholder-gray-400"
+                  className="w-full min-h-[44px] px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-full focus:ring-2 focus:ring-blue-600 focus:border-transparent transition-all text-sm text-gray-900 placeholder-gray-400"
                   placeholder="Enter your full name"
                   required
                 />
@@ -286,7 +282,7 @@ export default function AuthModal({ isOpen, onClose, mode: initialMode = 'login'
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-full focus:ring-2 focus:ring-blue-600 focus:border-transparent transition-all text-sm text-gray-900 placeholder-gray-400"
+                  className="w-full min-h-[44px] px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-full focus:ring-2 focus:ring-blue-600 focus:border-transparent transition-all text-sm text-gray-900 placeholder-gray-400"
                   placeholder="Enter your email"
                   required
                 />
@@ -302,7 +298,7 @@ export default function AuthModal({ isOpen, onClose, mode: initialMode = 'login'
                     type="text"
                     value={businessName}
                     onChange={(e) => setBusinessName(e.target.value)}
-                    className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-full focus:ring-2 focus:ring-blue-600 focus:border-transparent transition-all text-sm text-gray-900 placeholder-gray-400"
+                    className="w-full min-h-[44px] px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-full focus:ring-2 focus:ring-blue-600 focus:border-transparent transition-all text-sm text-gray-900 placeholder-gray-400"
                     placeholder="Enter your shop name"
                     required
                   />
@@ -321,7 +317,7 @@ export default function AuthModal({ isOpen, onClose, mode: initialMode = 'login'
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-full focus:ring-2 focus:ring-gray-900 focus:border-transparent transition-all text-sm text-gray-900 placeholder-gray-400"
+                className="w-full min-h-[44px] px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-full focus:ring-2 focus:ring-gray-900 focus:border-transparent transition-all text-sm text-gray-900 placeholder-gray-400"
                 placeholder="Enter your email"
                 required
               />
@@ -337,7 +333,7 @@ export default function AuthModal({ isOpen, onClose, mode: initialMode = 'login'
                 type={showPassword ? "text" : "password"}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-full focus:ring-2 focus:ring-gray-900 focus:border-transparent transition-all text-sm text-gray-900 placeholder-gray-400"
+                className="w-full min-h-[44px] px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-full focus:ring-2 focus:ring-gray-900 focus:border-transparent transition-all text-sm text-gray-900 placeholder-gray-400"
                 placeholder="••••••••"
                 required
                 minLength={6}
@@ -346,35 +342,40 @@ export default function AuthModal({ isOpen, onClose, mode: initialMode = 'login'
           </div>
 
           {/* Show Password Checkbox */}
-          <div className="flex items-center">
+          <label htmlFor="showPassword" className="flex min-h-[44px] cursor-pointer items-center">
             <input
               type="checkbox"
               id="showPassword"
               checked={showPassword}
               onChange={(e) => setShowPassword(e.target.checked)}
-              className="w-3.5 h-3.5 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-600 focus:ring-2"
+              className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-600 focus:ring-2"
             />
-            <label htmlFor="showPassword" className="ml-2 text-xs font-medium text-gray-700 cursor-pointer">
+            <span className="ml-2 text-xs font-medium text-gray-700">
               Show password
-            </label>
-          </div>
+            </span>
+          </label>
+
+          {notice && (
+            <div role="status" className="p-3 rounded-lg border-2 bg-green-50 border-green-300 text-green-800">
+              <div className="flex items-start gap-2">
+                <svg className="w-4 h-4 text-green-600 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                </svg>
+                <p className="text-xs font-medium leading-relaxed">{notice}</p>
+              </div>
+            </div>
+          )}
 
           {error && (
-            <div className={`p-3 rounded-lg border-2 ${
-              error.toLowerCase().includes('check your email') 
-                ? 'bg-green-50 border-green-300 text-green-800' 
-                : error.toLowerCase().includes('rate limit') || error.toLowerCase().includes('⚠️')
+            <div role="alert" className={`p-3 rounded-lg border-2 ${
+              error.toLowerCase().includes('rate limit')
                 ? 'bg-yellow-50 border-yellow-300 text-yellow-900'
                 : error.toLowerCase().includes('already registered')
                 ? 'bg-blue-50 border-blue-300 text-blue-800'
                 : 'bg-red-50 border-red-300 text-red-800'
             }`}>
               <div className="flex items-start gap-2">
-                {error.toLowerCase().includes('check your email') ? (
-                  <svg className="w-4 h-4 text-green-600 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                  </svg>
-                ) : error.toLowerCase().includes('rate limit') || error.toLowerCase().includes('⚠️') ? (
+                {error.toLowerCase().includes('rate limit') ? (
                   <svg className="w-5 h-5 text-yellow-600 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
                     <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
                   </svg>
@@ -389,12 +390,13 @@ export default function AuthModal({ isOpen, onClose, mode: initialMode = 'login'
                 )}
                 <div className="flex-1">
                   <p className="text-xs font-medium leading-relaxed">{error}</p>
-                  {(error.toLowerCase().includes('rate limit') || error.toLowerCase().includes('⚠️') || error.toLowerCase().includes('already registered')) && mode === 'signup' && (
+                  {(error.toLowerCase().includes('rate limit') || error.toLowerCase().includes('already registered')) && mode === 'signup' && (
                     <button
                       type="button"
                       onClick={() => {
                         setMode('login');
                         setError('');
+                        setNotice('');
                       }}
                       className="mt-2 text-xs font-bold underline hover:no-underline"
                     >
@@ -409,7 +411,7 @@ export default function AuthModal({ isOpen, onClose, mode: initialMode = 'login'
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-blue-600 text-white py-3 rounded-full font-bold hover:bg-blue-700 transition-all shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+            className="w-full min-h-[44px] bg-blue-600 text-white py-3 rounded-full font-bold hover:bg-blue-700 transition-all shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed text-sm"
           >
             {loading ? 'Please wait...' : mode === 'login' ? 'Log In' : 'Sign Up'}
           </button>
@@ -420,8 +422,9 @@ export default function AuthModal({ isOpen, onClose, mode: initialMode = 'login'
               onClick={() => {
                 setMode(mode === 'login' ? 'signup' : 'login');
                 setError('');
+                setNotice('');
               }}
-              className="text-xs text-gray-600 hover:text-gray-900 font-medium"
+              className="min-h-[44px] px-3 text-xs text-gray-600 hover:text-gray-900 font-medium"
             >
               {mode === 'login' 
                 ? "Don't have an account? Sign Up" 
@@ -433,7 +436,7 @@ export default function AuthModal({ isOpen, onClose, mode: initialMode = 'login'
             <button
               type="button"
               onClick={onClose}
-              className="text-xs text-gray-500 hover:text-gray-700"
+              className="min-h-[44px] px-3 text-xs text-gray-500 hover:text-gray-700"
             >
               Continue as guest
             </button>

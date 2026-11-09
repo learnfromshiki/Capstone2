@@ -5,19 +5,22 @@ import { useRouter } from 'next/navigation';
 import { useSellerAuth } from '@/contexts/SellerAuthContext';
 import { supabase } from '@/lib/supabaseClient';
 import { uploadProductImage } from '@/lib/imageUpload';
+import { getAllowedStatuses, STATUS_LABELS, transitionOrderStatus } from '@/lib/orders';
 import Link from 'next/link';
 
-// Last 7 days of this seller's item totals, used by the dashboard chart
-const buildDailySales = (orders) => {
+// Totals for this seller's items over the selected range, used by the dashboard chart
+const buildDailySales = (orders, daysCount = 7) => {
   const days = [];
 
-  for (let offset = 6; offset >= 0; offset -= 1) {
+  for (let offset = daysCount - 1; offset >= 0; offset -= 1) {
     const date = new Date();
     date.setDate(date.getDate() - offset);
 
     days.push({
       key: date.toLocaleDateString('en-CA'),
-      label: date.toLocaleDateString('en-US', { weekday: 'short' }),
+      label: daysCount <= 7
+        ? date.toLocaleDateString('en-US', { weekday: 'short' })
+        : date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
       total: 0,
     });
   }
@@ -33,6 +36,15 @@ const buildDailySales = (orders) => {
 
   return days;
 };
+
+const SELLER_TABS = [
+  { id: 'dashboard', label: 'Dashboard' },
+  { id: 'products', label: 'Products' },
+  { id: 'orders', label: 'Orders' },
+  { id: 'earnings', label: 'Earnings' },
+  { id: 'settings', label: 'Shop' },
+  { id: 'profile', label: 'Profile' },
+];
 
 // Set while logging out so the auth guard below does not race the redirect
 // and bounce the seller to the login page instead of the shop.
@@ -68,8 +80,10 @@ export default function SellerDashboard() {
   const [imagePreview, setImagePreview] = useState('');
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const [savingProfile, setSavingProfile] = useState(false);
-  const [dailySales, setDailySales] = useState([]);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [salesRange, setSalesRange] = useState('7');
   const [rating, setRating] = useState({ average: null, count: 0 });
+  const [updatingOrderId, setUpdatingOrderId] = useState(null);
   const [profileForm, setProfileForm] = useState({
     business_name: '',
     contact_phone: '',
@@ -271,7 +285,6 @@ export default function SellerDashboard() {
       });
 
       setOrders(orderRows);
-      setDailySales(buildDailySales(salesOrders));
       await fetchRating(myProducts.map((product) => product.id));
     } catch (error) {
       console.error('Error loading seller stats:', error);
@@ -374,26 +387,43 @@ export default function SellerDashboard() {
 
   const handleAddProduct = async (e) => {
     e.preventDefault();
+
+    const name = newProduct.name.trim();
+    const description = newProduct.description.trim();
+    const price = Number(newProduct.price);
+    const stock = Number(newProduct.stock);
+
+    if (!name) {
+      alert('Please enter a product name.');
+      return;
+    }
+
+    if (!description) {
+      alert('Please enter a product description.');
+      return;
+    }
+
+    if (!Number.isFinite(price) || price <= 0) {
+      alert('Price must be greater than zero.');
+      return;
+    }
+
+    if (!Number.isInteger(stock) || stock < 0) {
+      alert('Stock must be a whole number of zero or more.');
+      return;
+    }
+
     setLoading(true);
 
     try {
-      const price = parseFloat(newProduct.price);
-      const stock = parseInt(newProduct.stock);
-
-      if (price <= 0 || stock < 0) {
-        alert('Invalid price or stock');
-        setLoading(false);
-        return;
-      }
-
       const payload = {
-        name: newProduct.name,
-        description: newProduct.description,
-        price: price,
-        stock: stock,
+        name,
+        description,
+        price,
+        stock,
         category: newProduct.category,
         image_url: newProduct.image_url || null,
-        artisan_name: newProduct.artisan_name || null,
+        artisan_name: newProduct.artisan_name.trim() || null,
       };
 
       if (editingProductId) {
@@ -465,17 +495,26 @@ export default function SellerDashboard() {
       return;
     }
 
-    try {
-      const { error } = await supabase
-        .from('shop_orders')
-        .update({ status: newStatus })
-        .eq('id', orderId);
+    const currentOrder = orders.find((order) => order.id === orderId);
+    if (currentOrder && currentOrder.status === newStatus) return;
 
-      if (error) throw error;
-      fetchOrders();
+    if (
+      newStatus === 'cancelled' &&
+      !confirm('Cancel this order? The stock for its items will be returned to the shop.')
+    ) {
+      return;
+    }
+
+    setUpdatingOrderId(orderId);
+    try {
+      await transitionOrderStatus(orderId, newStatus);
+      await fetchDashboardStats();
+      alert(`Order marked as ${STATUS_LABELS[newStatus] || newStatus}.`);
     } catch (error) {
       console.error('Error updating order status:', error);
       alert('Failed to update order: ' + error.message);
+    } finally {
+      setUpdatingOrderId(null);
     }
   };
 
@@ -558,10 +597,96 @@ export default function SellerDashboard() {
     window.location.href = '/shop';
   };
 
+  const searchTerm = searchQuery.trim().toLowerCase();
+  const filteredProducts = searchTerm
+    ? products.filter((product) =>
+        [product.name, product.category, product.artisan_name]
+          .filter(Boolean)
+          .some((value) => String(value).toLowerCase().includes(searchTerm))
+      )
+    : products;
+  const filteredOrders = searchTerm
+    ? orders.filter((order) =>
+        [order.customer_name, order.customer_email, order.customer_phone, order.status, order.id]
+          .filter(Boolean)
+          .some((value) => String(value).toLowerCase().includes(searchTerm))
+      )
+    : orders;
+  const dailySales = buildDailySales(
+    orders.filter((order) => order.status !== 'cancelled'),
+    Number(salesRange)
+  );
+
   if (authLoading || loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
+
+  if (seller?.is_rejected) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-red-50 to-orange-50 flex items-center justify-center p-4">
+        <div className="bg-white p-8 rounded-2xl shadow-xl max-w-md w-full text-center">
+          <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <svg className="w-8 h-8 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M5 19h14a2 2 0 001.84-2.75L13.74 4a2 2 0 00-3.5 0L3.16 16.25A2 2 0 005 19z" />
+            </svg>
+          </div>
+          <h2 className="text-2xl font-bold text-gray-900 mb-2">Application Not Approved</h2>
+          <p className="text-gray-600 mb-4">
+            Your seller application was reviewed and not approved. Please contact CONNECT-Daet support if you need help or want to re-apply.
+          </p>
+          {seller.rejection_reason && (
+            <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 mb-6 text-left">
+              <p className="text-xs font-semibold text-red-700 uppercase tracking-wide mb-1">Reason</p>
+              <p className="text-sm text-red-800 break-words">{seller.rejection_reason}</p>
+            </div>
+          )}
+          <button
+            onClick={() => router.push('/shop')}
+            className="w-full min-h-[44px] bg-blue-600 text-white py-3 rounded-lg font-semibold hover:bg-blue-700 transition-colors"
+          >
+            Back to Shop
+          </button>
+          <button
+            onClick={handleLogout}
+            className="w-full min-h-[44px] mt-2 bg-gray-100 text-gray-700 py-3 rounded-lg font-semibold hover:bg-gray-200 transition-colors"
+          >
+            Log Out
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (seller?.is_approved && seller?.is_active === false) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-red-50 to-gray-100 flex items-center justify-center p-4">
+        <div className="bg-white p-8 rounded-2xl shadow-xl max-w-md w-full text-center">
+          <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <svg className="w-8 h-8 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+            </svg>
+          </div>
+          <h2 className="text-2xl font-bold text-gray-900 mb-2">Shop Suspended</h2>
+          <p className="text-gray-600 mb-6">
+            This seller shop has been suspended by an administrator. Your listings are hidden and you cannot manage orders until it is reactivated.
+          </p>
+          <button
+            onClick={() => router.push('/shop')}
+            className="w-full min-h-[44px] bg-blue-600 text-white py-3 rounded-lg font-semibold hover:bg-blue-700 transition-colors"
+          >
+            Back to Shop
+          </button>
+          <button
+            onClick={handleLogout}
+            className="w-full min-h-[44px] mt-2 bg-gray-100 text-gray-700 py-3 rounded-lg font-semibold hover:bg-gray-200 transition-colors"
+          >
+            Log Out
+          </button>
+        </div>
       </div>
     );
   }
@@ -608,9 +733,9 @@ export default function SellerDashboard() {
   const ratingLabel = rating.count ? `${rating.average} ★ (${rating.count} reviews)` : 'No reviews yet';
 
   return (
-    <div className="flex h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 lg:flex lg:h-screen">
       {/* LEFT SIDEBAR */}
-      <aside className="w-64 bg-gradient-to-b from-blue-700 to-blue-900 text-white flex flex-col shadow-xl">
+      <aside className="hidden w-64 flex-col bg-gradient-to-b from-blue-700 to-blue-900 text-white shadow-xl lg:flex">
         {/* Logo */}
         <div className="p-6 border-b border-blue-800">
           <div className="flex items-center gap-3">
@@ -733,44 +858,72 @@ export default function SellerDashboard() {
       </aside>
 
       {/* MAIN CONTENT AREA */}
-      <div className="flex-1 flex flex-col overflow-hidden">
+      <div className="flex min-h-screen flex-1 flex-col lg:min-h-0 lg:overflow-hidden">
         {/* Top Header */}
-        <header className="bg-white border-b px-8 py-4 flex items-center justify-between">
+        <header className="flex flex-col gap-3 border-b bg-white px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-8 sm:py-4">
           <div className="flex-1">
             <div className="relative max-w-md">
               <input
-                type="text"
+                type="search"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search my products, orders..."
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                aria-label="Search my products and orders"
+                className="w-full min-h-[44px] pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               />
-              <svg className="w-5 h-5 text-gray-400 absolute left-3 top-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-5 h-5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
               </svg>
             </div>
           </div>
-          <div className="flex items-center gap-4">
-            <button className="relative p-2 text-gray-600 hover:text-gray-900">
+          <div className="flex items-center justify-between gap-4 sm:justify-end">
+            <button
+              onClick={() => setActiveTab('orders')}
+              aria-label="View orders that need attention"
+              className="relative flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+            >
               <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
               </svg>
-              <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
+              {stats.toFulfill > 0 && (
+                <span className="absolute right-1 top-1 flex h-5 min-w-[20px] items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">
+                  {stats.toFulfill}
+                </span>
+              )}
             </button>
             <div className="flex items-center gap-2">
-              <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-100">
                 <svg className="w-6 h-6 text-blue-700" fill="currentColor" viewBox="0 0 20 20">
                   <path d="M3 1a1 1 0 000 2h1.22l.305 1.222a.997.997 0 00.01.042l1.358 5.43-.893.892C3.74 11.846 4.632 14 6.414 14H15a1 1 0 000-2H6.414l1-1H14a1 1 0 00.894-.553l3-6A1 1 0 0017 3H6.28l-.31-1.243A1 1 0 005 1H3zM16 16.5a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0zM6.5 18a1.5 1.5 0 100-3 1.5 1.5 0 000 3z" />
                 </svg>
               </div>
-              <div className="text-right">
-                <p className="text-sm font-semibold text-gray-900">{seller.business_name}</p>
+              <div className="max-w-[10rem] text-left sm:max-w-none sm:text-right">
+                <p className="truncate text-sm font-semibold text-gray-900">{seller.business_name}</p>
                 <p className="text-xs text-gray-600">Seller</p>
               </div>
             </div>
           </div>
         </header>
 
+        {/* Mobile navigation */}
+        <nav aria-label="Seller dashboard sections" className="flex gap-2 overflow-x-auto border-b bg-white px-4 py-2 lg:hidden">
+          {SELLER_TABS.map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`min-h-[44px] whitespace-nowrap rounded-lg px-3 text-sm font-medium transition-colors ${
+                activeTab === tab.id
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </nav>
+
         {/* Scrollable Content */}
-        <main className="flex-1 overflow-y-auto p-8">
+        <main className="flex-1 p-4 sm:p-6 lg:overflow-y-auto lg:p-8">
           {/* Date Display */}
           <div className="flex justify-end mb-4">
             <div className="flex items-center gap-2 text-sm text-gray-600">
@@ -853,32 +1006,45 @@ export default function SellerDashboard() {
                 <div className="lg:col-span-2 bg-white p-6 rounded-xl shadow-sm border border-gray-100">
                   <div className="flex items-center justify-between mb-4">
                     <h3 className="text-lg font-bold">Sales Overview</h3>
-                    <select className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm">
-                      <option>Last 7 Days</option>
-                      <option>Last 30 Days</option>
-                      <option>Last 90 Days</option>
+                    <select
+                      value={salesRange}
+                      onChange={(e) => setSalesRange(e.target.value)}
+                      aria-label="Sales chart date range"
+                      className="min-h-[44px] rounded-lg border border-gray-300 px-3 py-1.5 text-sm"
+                    >
+                      <option value="7">Last 7 Days</option>
+                      <option value="30">Last 30 Days</option>
+                      <option value="90">Last 90 Days</option>
                     </select>
                   </div>
-                  <div className="h-48 flex items-end gap-2 bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg p-4">
-                    {dailySales.map((day) => {
+                  <div className="flex h-48 items-end gap-1 overflow-hidden rounded-lg bg-gradient-to-br from-blue-50 to-blue-100 p-4">
+                    {dailySales.map((day, index) => {
                       const maxDaily = Math.max(...dailySales.map((entry) => entry.total), 1);
                       const height = Math.round((day.total / maxDaily) * 100);
+                      const showLabel =
+                        dailySales.length <= 7 ||
+                        index % Math.ceil(dailySales.length / 7) === 0;
 
                       return (
-                        <div key={day.key} className="flex-1 flex flex-col items-center justify-end h-full gap-1">
-                          <span className="text-[10px] font-semibold text-gray-700">
-                            {day.total > 0 ? `₱${Math.round(day.total).toLocaleString()}` : ''}
-                          </span>
+                        <div key={day.key} className="flex h-full flex-1 flex-col items-center justify-end gap-1">
+                          {dailySales.length <= 7 && (
+                            <span className="text-[10px] font-semibold text-gray-700">
+                              {day.total > 0 ? `₱${Math.round(day.total).toLocaleString()}` : ''}
+                            </span>
+                          )}
                           <div
-                            className="w-full bg-blue-500 rounded-t"
+                            className="w-full rounded-t bg-blue-500"
                             style={{ height: `${Math.max(height, 2)}%` }}
+                            title={`${day.key}: ₱${day.total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                           />
-                          <span className="text-[10px] text-gray-500">{day.label}</span>
+                          <span className="text-[10px] text-gray-500">
+                            {showLabel ? day.label : ''}
+                          </span>
                         </div>
                       );
                     })}
                     {dailySales.length === 0 && (
-                      <p className="w-full text-center text-sm text-gray-500">No sales in the last 7 days</p>
+                      <p className="w-full text-center text-sm text-gray-500">No sales in this period</p>
                     )}
                   </div>
                 </div>
@@ -888,8 +1054,11 @@ export default function SellerDashboard() {
                   <h3 className="text-lg font-bold mb-4">Quick Actions</h3>
                   <div className="space-y-3">
                     <button
-                      onClick={() => setActiveTab('products')}
-                      className="w-full flex items-center justify-between p-3 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors"
+                      onClick={() => {
+                        setActiveTab('products');
+                        setShowAddProduct(true);
+                      }}
+                      className="w-full min-h-[44px] flex items-center justify-between p-3 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors"
                     >
                       <div className="flex items-center gap-3">
                         <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center">
@@ -976,7 +1145,7 @@ export default function SellerDashboard() {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-200">
-                        {orders.slice(0, 4).map((order) => (
+                        {filteredOrders.slice(0, 4).map((order) => (
                           <tr key={order.id} className="hover:bg-gray-50">
                             <td className="px-6 py-4 text-sm font-semibold text-blue-600">#{order.id.slice(0, 8).toUpperCase()}</td>
                             <td className="px-6 py-4 text-sm text-gray-900">{order.customer_name}</td>
@@ -996,10 +1165,10 @@ export default function SellerDashboard() {
                             </td>
                           </tr>
                         ))}
-                        {orders.length === 0 && (
+                        {filteredOrders.length === 0 && (
                           <tr>
                             <td colSpan="5" className="px-6 py-8 text-center text-gray-500">
-                              No orders yet
+                              {searchTerm ? 'No orders match your search.' : 'No orders yet'}
                             </td>
                           </tr>
                         )}
@@ -1087,7 +1256,8 @@ export default function SellerDashboard() {
             </div>
 
             <div className="bg-white rounded-xl shadow-sm overflow-hidden border border-gray-100">
-              <table className="w-full">
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[700px]">
                 <thead className="bg-gray-50 border-b border-gray-200">
                   <tr>
                     <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase">Product</th>
@@ -1099,7 +1269,7 @@ export default function SellerDashboard() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200">
-                  {products.map((product) => (
+                  {filteredProducts.map((product) => (
                     <tr key={product.id} className="hover:bg-gray-50">
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-3">
@@ -1134,19 +1304,19 @@ export default function SellerDashboard() {
                         <div className="flex gap-2">
                           <button
                             onClick={() => openEditProduct(product)}
-                            className="px-3 py-1.5 text-xs font-medium rounded-lg bg-gray-100 text-gray-700 hover:bg-gray-200"
+                            className="min-h-[44px] px-3 py-1.5 text-xs font-medium rounded-lg bg-gray-100 text-gray-700 hover:bg-gray-200"
                           >
                             Edit
                           </button>
                           <button
                             onClick={() => handleToggleAvailability(product.id, product.available)}
-                            className="px-3 py-1.5 text-xs font-medium rounded-lg bg-blue-100 text-blue-700 hover:bg-blue-200"
+                            className="min-h-[44px] px-3 py-1.5 text-xs font-medium rounded-lg bg-blue-100 text-blue-700 hover:bg-blue-200"
                           >
                             {product.available ? 'Deactivate' : 'Activate'}
                           </button>
                           <button
                             onClick={() => handleDeleteProduct(product.id)}
-                            className="px-3 py-1.5 text-xs font-medium rounded-lg bg-red-100 text-red-700 hover:bg-red-200"
+                            className="min-h-[44px] px-3 py-1.5 text-xs font-medium rounded-lg bg-red-100 text-red-700 hover:bg-red-200"
                           >
                             Delete
                           </button>
@@ -1154,25 +1324,52 @@ export default function SellerDashboard() {
                       </td>
                     </tr>
                   ))}
+                  {filteredProducts.length === 0 && (
+                    <tr>
+                      <td colSpan="6" className="px-6 py-10 text-center text-gray-500">
+                        {searchTerm ? 'No products match your search.' : 'No products yet. Add your first product to start selling.'}
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
+              </div>
             </div>
           </div>
         )}
 
         {activeTab === 'orders' && (
           <div>
-            <h2 className="text-2xl font-bold text-gray-900 mb-6">Orders</h2>
+            <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+              <h2 className="text-2xl font-bold text-gray-900">Orders</h2>
+              {searchTerm && (
+                <button
+                  onClick={() => setSearchQuery('')}
+                  className="min-h-[44px] rounded-lg bg-gray-100 px-3 text-sm font-medium text-gray-700 hover:bg-gray-200"
+                >
+                  Clear search
+                </button>
+              )}
+            </div>
             <div className="space-y-4">
-              {orders.map((order) => (
-                <div key={order.id} className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
-                  <div className="flex justify-between items-start mb-4">
-                    <div>
+              {filteredOrders.length === 0 && (
+                <div className="rounded-xl border border-gray-100 bg-white p-10 text-center text-gray-500">
+                  {searchTerm ? 'No orders match your search.' : 'No orders yet.'}
+                </div>
+              )}
+              {filteredOrders.map((order) => {
+                const allowedStatuses = getAllowedStatuses(order.status);
+                const isFinal = ['delivered', 'cancelled'].includes(order.status);
+
+                return (
+                <div key={order.id} className="bg-white rounded-xl shadow-sm p-4 sm:p-6 border border-gray-100">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-start mb-4">
+                    <div className="min-w-0">
                       <h3 className="font-bold text-lg">{order.customer_name}</h3>
-                      <p className="text-sm text-gray-600">{order.customer_email}</p>
+                      <p className="text-sm text-gray-600 break-words">{order.customer_email}</p>
                       <p className="text-sm text-gray-600">{order.customer_phone}</p>
                     </div>
-                    <div className="text-right">
+                    <div className="text-left sm:text-right">
                       <div className="text-2xl font-bold text-blue-600">₱{order.my_total.toLocaleString()}</div>
                       <p className="text-xs text-gray-500">Your items in this order</p>
                       <div className="text-sm text-gray-500">{new Date(order.created_at).toLocaleDateString()}</div>
@@ -1188,24 +1385,40 @@ export default function SellerDashboard() {
                     ))}
                   </div>
 
-                  <div className="flex gap-3 items-center">
-                    <span className="text-sm font-medium">Status:</span>
-                    <select
-                      value={order.status}
-                      onChange={(e) => updateOrderStatus(order.id, e.target.value)}
-                      className="px-4 py-2 border rounded-lg"
-                    >
-                      <option value="pending">Pending</option>
-                      <option value="confirmed">Confirmed</option>
-                      <option value="processing">Processing</option>
-                      <option value="shipped">Shipped</option>
-                      <option value="delivered">Delivered</option>
-                      <option value="cancelled">Cancelled</option>
-                    </select>
-                    <span className="text-sm text-gray-600">Payment: {order.payment_method?.toUpperCase()}</span>
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                    <label className="flex items-center gap-2 text-sm font-medium">
+                      Status:
+                      <select
+                        value={order.status}
+                        onChange={(e) => updateOrderStatus(order.id, e.target.value)}
+                        disabled={isFinal || updatingOrderId === order.id}
+                        aria-label={`Order status for ${order.customer_name}`}
+                        className="min-h-[44px] rounded-lg border border-gray-300 px-3 py-2 disabled:cursor-not-allowed disabled:bg-gray-100"
+                      >
+                        {allowedStatuses.map((status) => (
+                          <option key={status} value={status}>
+                            {STATUS_LABELS[status] || status}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <span className="text-sm text-gray-600">
+                      Payment: {order.payment_method?.toUpperCase()}
+                    </span>
+                    {updatingOrderId === order.id && (
+                      <span className="text-sm text-blue-600">Updating stock and order…</span>
+                    )}
+                    {isFinal && (
+                      <span className="text-xs text-gray-500">
+                        {order.status === 'cancelled'
+                          ? 'Cancelled orders cannot be reopened.'
+                          : 'Delivered orders cannot be changed.'}
+                      </span>
+                    )}
                   </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         )}
@@ -1431,7 +1644,7 @@ export default function SellerDashboard() {
                   <button
                     onClick={handleSaveShopProfile}
                     disabled={savingProfile}
-                    className="px-6 py-2.5 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+                    className="min-h-[44px] px-6 py-2.5 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
                   >
                     {savingProfile ? 'Saving...' : 'Save Contact Info'}
                   </button>
@@ -1450,7 +1663,11 @@ export default function SellerDashboard() {
             <div className="p-6 border-b">
               <div className="flex justify-between items-center">
                 <h2 className="text-2xl font-bold">{editingProductId ? 'Edit Product' : 'Add New Product'}</h2>
-                <button onClick={closeProductModal} className="text-gray-400 hover:text-gray-600">
+                <button
+                  onClick={closeProductModal}
+                  aria-label="Close product form"
+                  className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+                >
                   <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                   </svg>
@@ -1534,13 +1751,13 @@ export default function SellerDashboard() {
                       onChange={(e) => setNewCategoryName(e.target.value)}
                       placeholder="New category name"
                       maxLength={40}
-                      className="flex-1 px-4 py-2.5 border-2 rounded-xl focus:ring-2 focus:ring-blue-500"
+                      className="flex-1 min-h-[44px] px-4 py-2.5 border-2 rounded-xl focus:ring-2 focus:ring-blue-500"
                     />
                     <button
                       type="button"
                       onClick={handleCreateCategory}
                       disabled={savingCategory || !newCategoryName.trim()}
-                      className="px-4 py-2.5 rounded-xl bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                      className="min-h-[44px] px-4 py-2.5 rounded-xl bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 disabled:opacity-50 transition-colors"
                     >
                       {savingCategory ? 'Adding…' : 'Add'}
                     </button>
@@ -1550,7 +1767,7 @@ export default function SellerDashboard() {
                         setShowNewCategory(false);
                         setNewCategoryName('');
                       }}
-                      className="px-3 py-2.5 rounded-xl bg-gray-100 text-gray-700 text-sm font-semibold hover:bg-gray-200 transition-colors"
+                      className="min-h-[44px] px-3 py-2.5 rounded-xl bg-gray-100 text-gray-700 text-sm font-semibold hover:bg-gray-200 transition-colors"
                     >
                       Cancel
                     </button>

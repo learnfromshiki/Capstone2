@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import CheckoutModal from './CheckoutModal';
 
-export default function Cart({ cart, isOpen, onClose, onUpdateQuantity, onRemoveItem, total, onClearCart, checkoutRequest = 0 }) {
+export default function Cart({ cart, isOpen, onClose, onUpdateQuantity, onRemoveItem, total, onClearCart, checkoutRequest = 0, onRequireAuth }) {
   const [showCheckout, setShowCheckout] = useState(false);
 
   // "Buy Now" on a product card asks the open cart to jump straight to checkout
@@ -49,7 +49,8 @@ export default function Cart({ cart, isOpen, onClose, onUpdateQuantity, onRemove
           </div>
           <button
             onClick={onClose}
-            className="text-white hover:bg-white/20 rounded-full p-2 transition-colors"
+            aria-label="Close cart"
+            className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full text-white hover:bg-white/20 transition-colors"
           >
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -101,7 +102,8 @@ export default function Cart({ cart, isOpen, onClose, onUpdateQuantity, onRemove
                       </h3>
                       <button
                         onClick={() => onRemoveItem(item.id)}
-                        className="text-red-500 hover:bg-red-50 rounded-lg p-1.5 flex-shrink-0 transition-colors"
+                        aria-label={`Remove ${item.name} from cart`}
+                        className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg text-red-500 hover:bg-red-50 flex-shrink-0 transition-colors"
                         title="Remove item"
                       >
                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -111,24 +113,27 @@ export default function Cart({ cart, isOpen, onClose, onUpdateQuantity, onRemove
                     </div>
                     
                     <p className="text-blue-600 font-bold text-lg mb-3">
-                      ₱{item.price.toFixed(2)}
+                      ₱{Number(item.price).toFixed(2)}
                     </p>
 
                     {/* Quantity Controls */}
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3 bg-gray-100 rounded-lg p-1">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-2 bg-gray-100 rounded-lg p-1">
                         <button
                           onClick={() => onUpdateQuantity(item.id, item.quantity - 1)}
-                          className="bg-white hover:bg-gray-50 rounded-md w-8 h-8 flex items-center justify-center font-bold text-gray-700 shadow-sm transition-colors"
+                          aria-label={`Decrease quantity of ${item.name}`}
+                          className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-md bg-white font-bold text-gray-700 shadow-sm transition-colors hover:bg-gray-50"
                         >
                           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" />
                           </svg>
                         </button>
-                        <span className="font-bold w-8 text-center text-gray-900">{item.quantity}</span>
+                        <span className="w-8 text-center font-bold text-gray-900" aria-live="polite">{item.quantity}</span>
                         <button
                           onClick={() => onUpdateQuantity(item.id, item.quantity + 1)}
-                          className="bg-white hover:bg-gray-50 rounded-md w-8 h-8 flex items-center justify-center font-bold text-gray-700 shadow-sm transition-colors"
+                          disabled={Number(item.quantity) >= Number(item.stock)}
+                          aria-label={`Increase quantity of ${item.name}`}
+                          className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-md bg-white font-bold text-gray-700 shadow-sm transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
                         >
                           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -137,7 +142,7 @@ export default function Cart({ cart, isOpen, onClose, onUpdateQuantity, onRemove
                       </div>
                       <div className="text-right">
                         <p className="text-xs text-gray-500">Subtotal</p>
-                        <p className="font-bold text-gray-900">₱{(item.price * item.quantity).toFixed(2)}</p>
+                        <p className="font-bold text-gray-900">₱{(Number(item.price) * Number(item.quantity)).toFixed(2)}</p>
                       </div>
                     </div>
                   </div>
@@ -154,7 +159,7 @@ export default function Cart({ cart, isOpen, onClose, onUpdateQuantity, onRemove
             <div className="space-y-2 mb-4">
               <div className="flex justify-between text-gray-600">
                 <span>Subtotal</span>
-                <span className="font-semibold">₱{total.toFixed(2)}</span>
+                <span className="font-semibold">₱{(Number(total) || 0).toFixed(2)}</span>
               </div>
               <div className="flex justify-between text-sm text-gray-500">
                 <span>Estimated Delivery</span>
@@ -163,7 +168,7 @@ export default function Cart({ cart, isOpen, onClose, onUpdateQuantity, onRemove
               <div className="border-t pt-2 flex justify-between items-center">
                 <span className="text-lg font-bold text-gray-900">Total</span>
                 <span className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-blue-700 bg-clip-text text-transparent">
-                  ₱{total.toFixed(2)}
+                  ₱{(Number(total) || 0).toFixed(2)}
                 </span>
               </div>
             </div>
@@ -175,7 +180,7 @@ export default function Cart({ cart, isOpen, onClose, onUpdateQuantity, onRemove
                   <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
                 </svg>
                 <p className="text-sm text-yellow-900">
-                  <span className="font-bold">Earn {Math.floor(total / 100) * 10} points</span> with this purchase
+                  <span className="font-bold">Earn {Math.floor((Number(total) || 0) / 100) * 10} points</span> with this purchase
                 </p>
               </div>
             </div>
@@ -198,9 +203,10 @@ export default function Cart({ cart, isOpen, onClose, onUpdateQuantity, onRemove
       {showCheckout && (
         <CheckoutModal
           cart={cart}
-          total={total}
+          total={Number(total) || 0}
           onClose={() => setShowCheckout(false)}
           onSuccess={handleCheckoutSuccess}
+          onRequireAuth={onRequireAuth}
         />
       )}
 
