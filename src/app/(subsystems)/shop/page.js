@@ -18,6 +18,8 @@ export default function ShopPage() {
   const [showCart, setShowCart] = useState(false);
   const [checkoutRequest, setCheckoutRequest] = useState(0);
   const [selectedProduct, setSelectedProduct] = useState(null);
+  const [reviewsByProduct, setReviewsByProduct] = useState({});
+  const [reviewableProducts, setReviewableProducts] = useState({});
 
   // Open the cart when arriving from the buyer dashboard "My Cart" link
   useEffect(() => {
@@ -84,6 +86,7 @@ export default function ShopPage() {
   useEffect(() => {
     fetchProducts();
     fetchCategories();
+    fetchReviews();
   }, []);
 
   const fetchProducts = async () => {
@@ -147,6 +150,128 @@ export default function ShopPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  // Reviews are readable by everyone, so guests see them too and each product
+  // card can show the rating its buyers gave.
+  const fetchReviews = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('shop_reviews')
+        .select('id, product_id, rating, comment, created_at')
+        .order('created_at', { ascending: false })
+        .limit(300);
+
+      if (error) {
+        console.warn('Reviews are unavailable:', error.message);
+        return;
+      }
+
+      const grouped = {};
+      (data || []).forEach((review) => {
+        if (!review.product_id) return;
+        if (!grouped[review.product_id]) grouped[review.product_id] = [];
+        grouped[review.product_id].push(review);
+      });
+
+      setReviewsByProduct(grouped);
+    } catch (error) {
+      console.warn('Reviews are unavailable:', error?.message || error);
+    }
+  };
+
+  // A product can be reviewed only after a delivered order that contains it,
+  // and only once. RLS enforces both; this keeps the form out of reach early.
+  useEffect(() => {
+    if (authLoading) return;
+
+    if (!user) {
+      setReviewableProducts({});
+      return;
+    }
+
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const [deliveredRes, mineRes] = await Promise.all([
+          supabase
+            .from('shop_orders')
+            .select('id, status, shop_order_items(product_id)')
+            .eq('user_id', user.id)
+            .eq('status', 'delivered'),
+          supabase.from('shop_reviews').select('product_id').eq('user_id', user.id),
+        ]);
+
+        if (deliveredRes.error) throw deliveredRes.error;
+        if (mineRes.error) throw mineRes.error;
+        if (cancelled) return;
+
+        const reviewed = new Set((mineRes.data || []).map((review) => review.product_id));
+        const eligible = {};
+
+        (deliveredRes.data || []).forEach((order) => {
+          (order.shop_order_items || []).forEach((item) => {
+            if (item.product_id && !reviewed.has(item.product_id)) {
+              eligible[item.product_id] = true;
+            }
+          });
+        });
+
+        setReviewableProducts(eligible);
+      } catch (error) {
+        if (!cancelled) {
+          console.warn('Could not check review eligibility:', error?.message || error);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user, authLoading]);
+
+  const submitProductReview = async (product, { rating, comment }) => {
+    if (!user) {
+      setShowAuthModal(true);
+      throw new Error('Please sign in to review this product.');
+    }
+
+    const value = Number(rating);
+    if (!Number.isInteger(value) || value < 1 || value > 5) {
+      throw new Error('Please choose a star rating from 1 to 5.');
+    }
+
+    const text = (comment || '').trim();
+    if (text.length > 1000) {
+      throw new Error('Please keep your review under 1,000 characters.');
+    }
+
+    if (!reviewableProducts[product.id]) {
+      throw new Error('Only delivered orders can be reviewed.');
+    }
+
+    const { error } = await supabase.from('shop_reviews').insert({
+      product_id: product.id,
+      user_id: user.id,
+      rating: value,
+      comment: text || null,
+    });
+
+    if (error) {
+      if (error.code === '23505' || /duplicate|unique/i.test(error.message || '')) {
+        throw new Error('You have already reviewed this product.');
+      }
+      throw error;
+    }
+
+    setReviewableProducts((previous) => {
+      const next = { ...previous };
+      delete next[product.id];
+      return next;
+    });
+
+    await fetchReviews();
   };
 
   const addToCart = (product, quantity = 1) => {
@@ -309,6 +434,15 @@ export default function ShopPage() {
       : profile?.user_type === 'seller'
       ? 'Seller Dashboard'
       : 'My Account';
+
+  // Card-level average and count; the modal lists the reviews themselves.
+  const reviewSummaries = {};
+  Object.keys(reviewsByProduct).forEach((productId) => {
+    const rows = reviewsByProduct[productId] || [];
+    if (rows.length === 0) return;
+    const total = rows.reduce((sum, review) => sum + (Number(review.rating) || 0), 0);
+    reviewSummaries[productId] = { average: total / rows.length, count: rows.length };
+  });
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -507,6 +641,7 @@ export default function ShopPage() {
                 onBuyNow={buyNow}
                 onViewDetails={setSelectedProduct}
                 sellerInfo={sellers[product.seller_id]}
+                reviewSummary={reviewSummaries[product.id]}
               />
             ))}
           </div>
@@ -533,6 +668,9 @@ export default function ShopPage() {
       <ProductDetailsModal
         product={selectedProduct}
         sellerInfo={selectedProduct ? sellers[selectedProduct.seller_id] : null}
+        reviews={selectedProduct ? reviewsByProduct[selectedProduct.id] || [] : []}
+        canReview={Boolean(selectedProduct && user && reviewableProducts[selectedProduct.id])}
+        onSubmitReview={submitProductReview}
         onClose={() => setSelectedProduct(null)}
         onAddToCart={addToCart}
         onBuyNow={buyNow}

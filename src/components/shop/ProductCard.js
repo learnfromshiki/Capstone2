@@ -1,6 +1,8 @@
 'use client';
 
-export default function ProductCard({ product, onAddToCart, onBuyNow, onViewDetails, sellerInfo }) {
+import StarRating from './StarRating';
+
+export default function ProductCard({ product, onAddToCart, onBuyNow, onViewDetails, sellerInfo, reviewSummary }) {
   const categoryIcons = {
     handicrafts: '🧺',
     food: '🍽️',
@@ -70,6 +72,16 @@ export default function ProductCard({ product, onAddToCart, onBuyNow, onViewDeta
         >
           {product.name}
         </button>
+
+        {reviewSummary && reviewSummary.count > 0 && (
+          <div className="flex items-center gap-2 mb-2">
+            <StarRating rating={reviewSummary.average} />
+            <span className="text-sm font-semibold text-gray-800">
+              {reviewSummary.average.toFixed(1)}
+            </span>
+            <span className="text-xs text-gray-500">({reviewSummary.count})</span>
+          </div>
+        )}
         
         {/* Seller Badge */}
         {sellerInfo && (

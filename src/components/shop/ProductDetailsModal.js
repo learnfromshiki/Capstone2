@@ -1,6 +1,14 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import StarRating from './StarRating';
+
+const formatReviewDate = (value) => {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' });
+};
 
 const categoryIcons = {
   handicrafts: '🧺',
@@ -14,14 +22,60 @@ const categoryIcons = {
  * Product quick view opened by clicking a product card: full description, seller,
  * artisan, stock and a quantity picker, with the same cart and buy actions.
  */
-export default function ProductDetailsModal({ product, sellerInfo, onClose, onAddToCart, onBuyNow }) {
+export default function ProductDetailsModal({
+  product,
+  sellerInfo,
+  reviews = [],
+  canReview = false,
+  onSubmitReview,
+  onClose,
+  onAddToCart,
+  onBuyNow,
+}) {
   const [quantity, setQuantity] = useState(1);
+  const [draftRating, setDraftRating] = useState(5);
+  const [draftComment, setDraftComment] = useState('');
+  const [savingReview, setSavingReview] = useState(false);
+  const [reviewFeedback, setReviewFeedback] = useState(null);
+
+  // Every product opens with a clean review draft.
+  useEffect(() => {
+    setDraftRating(5);
+    setDraftComment('');
+    setReviewFeedback(null);
+  }, [product?.id]);
 
   if (!product) return null;
 
   const stock = Number(product.stock) || 0;
   const inStock = stock > 0;
   const price = Number(product.price) || 0;
+  const reviewCount = reviews.length;
+  const averageRating = reviewCount
+    ? reviews.reduce((sum, review) => sum + (Number(review.rating) || 0), 0) / reviewCount
+    : 0;
+
+  const handleReviewSubmit = async (event) => {
+    event.preventDefault();
+    if (!onSubmitReview) return;
+
+    setSavingReview(true);
+    setReviewFeedback(null);
+
+    try {
+      await onSubmitReview(product, { rating: draftRating, comment: draftComment });
+      setDraftRating(5);
+      setDraftComment('');
+      setReviewFeedback({ type: 'success', message: 'Thank you for your review!' });
+    } catch (error) {
+      setReviewFeedback({
+        type: 'error',
+        message: error?.message || 'Could not save your review. Please try again.',
+      });
+    } finally {
+      setSavingReview(false);
+    }
+  };
 
   const changeQuantity = (next) => {
     const clamped = Math.min(Math.max(1, next), Math.max(1, stock));
@@ -191,6 +245,117 @@ export default function ProductDetailsModal({ product, sellerInfo, onClose, onAd
             </div>
           </div>
         </div>
+
+        {/* Reviews: public, from customers whose order was delivered */}
+        <section className="border-t border-gray-100 p-6">
+          <div className="flex flex-wrap items-center gap-3 mb-4">
+            <h3 className="text-lg font-bold text-gray-900">Reviews</h3>
+            {reviewCount > 0 ? (
+              <div className="flex items-center gap-2">
+                <StarRating rating={averageRating} />
+                <span className="text-sm font-bold text-gray-800">{averageRating.toFixed(1)}</span>
+                <span className="text-xs text-gray-500">
+                  ({reviewCount} {reviewCount === 1 ? 'review' : 'reviews'})
+                </span>
+              </div>
+            ) : (
+              <span className="text-sm text-gray-500">No reviews yet</span>
+            )}
+          </div>
+
+          {reviewFeedback?.type === 'success' && (
+            <p className="mb-4 text-sm font-semibold text-green-700" role="status">
+              {reviewFeedback.message}
+            </p>
+          )}
+
+          {reviewCount === 0 ? (
+            <p className="text-sm text-gray-500">
+              Be the first to review this product once your order has been delivered.
+            </p>
+          ) : (
+            <ul className="space-y-3">
+              {reviews.slice(0, 3).map((review) => (
+                <li key={review.id} className="bg-gray-50 rounded-xl p-4">
+                  <div className="flex items-center justify-between gap-3 mb-1.5">
+                    <div className="flex items-center gap-2">
+                      <StarRating rating={review.rating} />
+                      <span className="text-[11px] font-semibold text-green-700 bg-green-100 px-2 py-0.5 rounded-full">
+                        Verified purchase
+                      </span>
+                    </div>
+                    <span className="text-xs text-gray-500">
+                      {formatReviewDate(review.created_at)}
+                    </span>
+                  </div>
+                  {review.comment && (
+                    <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-line">
+                      {review.comment}
+                    </p>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {canReview && (
+            <form onSubmit={handleReviewSubmit} className="mt-5 bg-blue-50 rounded-xl p-4">
+              <p className="text-sm font-semibold text-gray-900 mb-2">
+                Your order was delivered — rate this product
+              </p>
+              <div className="flex items-center gap-1 mb-3">
+                {[1, 2, 3, 4, 5].map((star) => (
+                  <button
+                    key={star}
+                    type="button"
+                    onClick={() => setDraftRating(star)}
+                    aria-label={`${star} star${star === 1 ? '' : 's'}`}
+                    aria-pressed={draftRating === star}
+                    className="p-1"
+                  >
+                    <svg
+                      className={`w-7 h-7 transition-colors ${star <= draftRating ? 'text-yellow-500' : 'text-gray-300'} hover:text-yellow-500`}
+                      fill="currentColor"
+                      viewBox="0 0 20 20"
+                      aria-hidden="true"
+                    >
+                      <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                    </svg>
+                  </button>
+                ))}
+              </div>
+              <textarea
+                rows={3}
+                maxLength={1000}
+                value={draftComment}
+                onChange={(event) => setDraftComment(event.target.value)}
+                placeholder="Tell other buyers what you liked (optional)"
+                className="w-full rounded-lg border border-gray-200 p-3 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              />
+              <div className="flex flex-wrap items-center justify-between gap-3 mt-3">
+                <p
+                  className={`text-xs ${reviewFeedback?.type === 'error' ? 'text-red-600' : 'text-gray-500'}`}
+                  role="status"
+                >
+                  {reviewFeedback?.type === 'error' ? reviewFeedback.message : ''}
+                </p>
+                <button
+                  type="submit"
+                  disabled={savingReview}
+                  className="bg-blue-600 text-white text-sm font-bold px-4 py-2.5 rounded-lg hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
+                >
+                  {savingReview ? 'Submitting...' : 'Submit Review'}
+                </button>
+              </div>
+            </form>
+          )}
+
+          {!canReview && reviewCount > 0 && (
+            <p className="mt-4 text-xs text-gray-500">
+              Reviews are written by customers whose order for this product was delivered.
+            </p>
+          )}
+        </section>
       </div>
     </div>
   );
