@@ -14,6 +14,10 @@ export const supabaseAdmin = createClient(
   {
     auth: {
       storageKey: 'connect-daet-admin-auth',
+      // Tab-scoped like the storefront client: a refresh stays signed in, but a
+      // new visit starts at the admin login instead of restoring an old session.
+      storage:
+        typeof window !== 'undefined' ? window.sessionStorage : undefined,
       persistSession: true,
       autoRefreshToken: true,
     },
