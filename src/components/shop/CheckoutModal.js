@@ -241,6 +241,15 @@ export default function CheckoutModal({ cart, total, onClose, onSuccess, onRequi
     try {
       await ensureAccountIsActive();
 
+      // Own the order with the authenticated session, not the React user state.
+      // The context can lag behind after another tab signs in, and an order whose
+      // user_id differs from auth.uid() is rejected by the RLS policy.
+      const { data: { user: sessionUser }, error: sessionError } = await supabase.auth.getUser();
+
+      if (sessionError || !sessionUser) {
+        throw new Error('Your session has expired. Please sign in again.');
+      }
+
       // Re-verify at the last moment: prices or stock may have changed while
       // the customer was typing their details.
       const orderCart = await verifyCart();
@@ -289,7 +298,7 @@ export default function CheckoutModal({ cart, total, onClose, onSuccess, onRequi
       const { data: order, error: orderError } = await supabase
         .from('shop_orders')
         .insert({
-          user_id: user.id,
+          user_id: sessionUser.id,
           customer_name: formData.fullName.trim(),
           customer_email: formData.email.trim(),
           customer_phone: formData.phone.trim(),
@@ -323,8 +332,8 @@ export default function CheckoutModal({ cart, total, onClose, onSuccess, onRequi
       const pointsToAward = Math.floor(orderCart.total / 100) * 10;
       let awarded = 0;
 
-      if (user?.id && pointsToAward > 0) {
-        const pointsResult = await addPoints(user.id, pointsToAward, 'shop_purchase', order.id);
+      if (pointsToAward > 0) {
+        const pointsResult = await addPoints(sessionUser.id, pointsToAward, 'shop_purchase', order.id);
         if (pointsResult.success) {
           awarded = pointsToAward;
         } else {
