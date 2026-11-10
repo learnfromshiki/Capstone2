@@ -428,6 +428,8 @@ export default function ShopAdminPage() {
 
         if (error) throw error;
         setOrders(data || []);
+        // Keep the sidebar badge in sync when the orders tab loads
+        setStats((prev) => ({ ...prev, totalOrders: data?.length || 0 }));
       }
     } catch (error) {
       console.error('Error fetching data:', error);

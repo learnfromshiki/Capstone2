@@ -557,8 +557,11 @@ export default function SellerDashboard() {
     });
   };
 
+  const [settingsFeedback, setSettingsFeedback] = useState({ type: '', text: '' });
+
   const handleSaveShopProfile = async () => {
     setSavingProfile(true);
+    setSettingsFeedback({ type: '', text: '' });
 
     try {
       const { error } = await updateSellerProfile({
@@ -570,10 +573,11 @@ export default function SellerDashboard() {
       });
 
       if (error) throw error;
-      alert('Shop settings saved!');
+      setSettingsFeedback({ type: 'success', text: 'Shop settings saved!' });
+      setTimeout(() => setSettingsFeedback({ type: '', text: '' }), 4000);
     } catch (error) {
       console.error('Error saving shop settings:', error);
-      alert('Failed to save shop settings: ' + error.message);
+      setSettingsFeedback({ type: 'error', text: 'Failed to save shop settings: ' + error.message });
     } finally {
       setSavingProfile(false);
     }
@@ -1552,6 +1556,14 @@ export default function SellerDashboard() {
                 >
                   {savingProfile ? 'Saving...' : 'Save Shop Settings'}
                 </button>
+                {settingsFeedback.text && (
+                  <p
+                    role="status"
+                    className={`mt-3 text-sm font-medium ${settingsFeedback.type === 'error' ? 'text-red-600' : 'text-green-600'}`}
+                  >
+                    {settingsFeedback.text}
+                  </p>
+                )}
               </div>
             </div>
           </div>
@@ -1654,6 +1666,14 @@ export default function SellerDashboard() {
                     {savingProfile ? 'Saving...' : 'Save Contact Info'}
                   </button>
                 </div>
+                {settingsFeedback.text && (
+                  <p
+                    role="status"
+                    className={`mt-3 text-sm font-medium ${settingsFeedback.type === 'error' ? 'text-red-600' : 'text-green-600'}`}
+                  >
+                    {settingsFeedback.text}
+                  </p>
+                )}
               </div>
             </div>
           </div>
