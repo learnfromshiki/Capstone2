@@ -527,6 +527,21 @@ export default function ShopAdminPage() {
     if (!confirm('Are you sure you want to delete this product?')) return;
     
     try {
+      // A product referenced by orders must keep its row so order history stays
+      // intact; deactivating hides it from the shop without breaking past orders.
+      const { data: orderedItems, error: orderedError } = await supabase
+        .from('shop_order_items')
+        .select('id')
+        .eq('product_id', productId)
+        .limit(1);
+
+      if (orderedError) throw orderedError;
+
+      if (orderedItems && orderedItems.length > 0) {
+        alert('This product is part of existing orders, so it cannot be deleted. Deactivate it instead to hide it from the shop.');
+        return;
+      }
+
       const { data, error } = await supabase
         .from('shop_products')
         .delete()
