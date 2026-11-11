@@ -126,31 +126,71 @@ The code path is the reliable one — use it if the link still misbehaves.
 
 ---
 
-## Step 3 — Send from your own email address (optional)
+## Step 3 — Send through Brevo (recommended before your demo)
 
-By default Supabase sends from its own address and **limits free projects to a
-few emails per hour**, which is fine for a demo but not for a defence day with
-many sign-ups. To use your own address — the PHPMailer equivalent:
+Supabase's built-in mailer allows only a **handful of auth emails per hour** on
+a free project. That is the usual reason registration shows "Error sending
+confirmation email" after a few test sign-ups. Pointing Supabase at a real mail
+service fixes it, and Brevo's free plan is generous enough for a capstone:
+**300 emails a day**.
 
-1. In Supabase, go to **Project Settings → Authentication → SMTP Settings**.
-2. Turn on **Enable Custom SMTP** and fill in your mail provider's details.
+This is the same job PHPMailer would have done — PHPMailer connects to an SMTP
+server, and here Supabase connects to Brevo's SMTP server instead. **No code
+changes are needed**, only these settings.
 
-For a Gmail account:
+### a) Get your Brevo SMTP key
+
+1. Create a free account at [brevo.com](https://www.brevo.com) and sign in.
+2. Go to **Settings → SMTP & API → SMTP**.
+3. Press **Generate a new SMTP key** and copy it somewhere safe — it is shown once.
+   This is an **SMTP key**, not an API key; the two are different and only the
+   SMTP key works here.
+
+### b) Verify who the mail comes from
+
+Brevo refuses to send from an address it has not verified.
+
+- **Quickest:** **Senders, Domains & Dedicated IPs → Senders → Add a sender**,
+  enter the address you want the shop to send from, then click the link in the
+  confirmation email Brevo sends you.
+- **Better, if you have a domain:** add the domain under **Domains** and copy
+  the SPF and DKIM records it gives you into your DNS. Mail from an
+  authenticated domain is far less likely to land in spam, and Gmail and Yahoo
+  increasingly reject anything else.
+
+### c) Point Supabase at Brevo
+
+In Supabase: **Project Settings → Authentication → SMTP Settings** → turn on
+**Enable Custom SMTP**:
 
 | Field | Value |
 |-------|-------|
-| Host | `smtp.gmail.com` |
-| Port | `465` |
-| Username | your full Gmail address |
-| Password | a Google **App Password**, not your normal password |
-| Sender email | the same Gmail address |
+| Host | `smtp-relay.brevo.com` |
+| Port | `587` |
+| Username | your Brevo account login email |
+| Password | the **SMTP key** from step (a) |
+| Sender email | the sender you verified in step (b) |
 | Sender name | `CONNECT-Daet.ph` |
 
-An App Password is created at **Google Account → Security → 2-Step
-Verification → App passwords**. Gmail blocks normal passwords for SMTP, exactly
-as it does with PHPMailer.
+Press **Save**.
 
-3. Press **Save** and register a test account. The email now comes from you.
+### d) Raise the Supabase limit
+
+With custom SMTP on, Supabase lifts its own cap from about 2 auth emails per
+hour to 30. Check **Authentication → Rate Limits** and raise the emails-per-hour
+figure if you expect a busy demo — keep it under Brevo's 300 a day.
+
+Register a test account afterwards: the code should arrive in seconds, and
+Brevo's **Transactional → Logs** page shows every message it accepted, which is
+the fastest way to tell a delivery problem from a Supabase problem.
+
+### Using Gmail instead
+
+Gmail works too, but its sending limits are lower and it is stricter about
+"from" addresses: host `smtp.gmail.com`, port `465`, your Gmail address as the
+username, and a 16-character **App Password** (Google Account → Security →
+2-Step Verification → App passwords) as the password — never your normal
+password.
 
 ---
 
@@ -166,7 +206,7 @@ as it does with PHPMailer.
 | "Too many attempts" | Supabase's rate limit. Wait 5–10 minutes. |
 | **"Error sending confirmation email"** | Supabase could not send. See the three causes below. |
 | Reset email arrives but the link says invalid/expired | The address is not in **Redirect URLs** (Step 2b a), or the link was already used. Use the 6-digit code instead. |
-| Reset email never arrives | Free projects are limited to a few emails per hour, and password resets share that limit with sign-ups. Wait, or do Step 3. |
+| Reset email never arrives | Free projects are limited to a few emails per hour, and password resets share that limit with sign-ups. Wait, or do Step 3 (Brevo). |
 | The reset email has no code in it | The Reset Password template still has no `{{ .Token }}`. Redo Step 2b b. |
 
 ---
@@ -183,8 +223,8 @@ There are three causes, in the order they actually happen:
 **1. The free email limit (most common while testing).**
 A free Supabase project may send only a few emails per hour, shared between
 sign-ups and password resets. After a morning of test registrations it stops.
-Wait an hour, or do **Step 3** to send through your own Gmail — that limit is
-much higher and is the real fix before a demo.
+Wait an hour, or do **Step 3** and send through Brevo — 300 emails a day on the
+free plan, and it is the real fix before a demo.
 
 **2. The email template cannot be built.**
 Open **Authentication → Emails → Confirm signup** and compare it with the
@@ -194,8 +234,9 @@ simple template again and save.
 
 **3. Custom SMTP is on but wrong.**
 If **Project Settings → Authentication → SMTP Settings** is enabled, check the
-host, port and password. With Gmail the password must be a 16-character **App
-Password**, never the normal account password. To rule SMTP out, turn Custom
+host, port and password. With Brevo the password must be the **SMTP key** (not
+an API key) and the sender address must be one Brevo has verified. With Gmail it
+must be a 16-character **App Password**, never the normal account password. To rule SMTP out, turn Custom
 SMTP off, save, and register again — if the code arrives, the SMTP details are
 the problem.
 
