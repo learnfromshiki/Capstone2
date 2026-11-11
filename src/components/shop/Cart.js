@@ -1,12 +1,10 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
-import CheckoutModal from './CheckoutModal';
+import { useEffect } from 'react';
 import { describeSelection } from '@/lib/productOptions';
 import { useDialog } from '@/components/ui/Dialog';
 
-export default function Cart({ cart, isOpen, onClose, onUpdateQuantity, onRemoveItem, total, onClearCart, onOrderPlaced, checkoutRequest = 0, onRequireAuth }) {
-  const [showCheckout, setShowCheckout] = useState(false);
+export default function Cart({ cart, isOpen, onClose, onUpdateQuantity, onRemoveItem, total }) {
   const { showConfirm } = useDialog();
 
   /** Removing something from the cart is easy to do by accident, so ask. */
@@ -22,38 +20,15 @@ export default function Cart({ cart, isOpen, onClose, onUpdateQuantity, onRemove
     if (confirmed) onRemoveItem(item.lineId);
   };
 
-  // Escape closes the cart (the checkout window handles its own Escape)
+  // Escape closes the cart
   useEffect(() => {
-    if (!isOpen || showCheckout) return undefined;
+    if (!isOpen) return undefined;
     const handleKeyDown = (event) => {
       if (event.key === 'Escape') onClose();
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, showCheckout, onClose]);
-
-  // "Buy Now" on a product card asks the open cart to jump straight to checkout
-  const handledCheckoutRequest = useRef(0);
-
-  useEffect(() => {
-    if (
-      checkoutRequest &&
-      checkoutRequest !== handledCheckoutRequest.current &&
-      isOpen &&
-      cart.length > 0
-    ) {
-      handledCheckoutRequest.current = checkoutRequest;
-      setShowCheckout(true);
-    }
-  }, [checkoutRequest, isOpen, cart.length]);
-
-  const handleCheckoutSuccess = () => {
-    setShowCheckout(false);
-    if (onClearCart) onClearCart();
-    // Let the shop reload product stock so the page shows the new quantities
-    if (onOrderPlaced) onOrderPlaced();
-    onClose();
-  };
+  }, [isOpen, onClose]);
 
   if (!isOpen) return null;
 
@@ -153,10 +128,14 @@ export default function Cart({ cart, isOpen, onClose, onUpdateQuantity, onRemove
                     {/* Quantity Controls */}
                     <div className="flex items-center justify-between gap-3">
                       <div className="flex items-center gap-2 bg-gray-100 rounded-lg p-1">
+                        {/* At one, the minus does nothing: removing an item is
+                            the trash button's job, with its own confirmation. */}
                         <button
                           onClick={() => onUpdateQuantity(item.lineId, item.quantity - 1)}
+                          disabled={item.quantity <= 1}
                           aria-label={`Decrease quantity of ${item.name}`}
-                          className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-md bg-white font-bold text-gray-700 shadow-sm transition-colors hover:bg-gray-50"
+                          title={item.quantity <= 1 ? 'Use the bin to remove this item' : 'One less'}
+                          className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-md bg-white font-bold text-gray-700 shadow-sm transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
                         >
                           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" />
@@ -221,7 +200,10 @@ export default function Cart({ cart, isOpen, onClose, onUpdateQuantity, onRemove
 
             {/* Checkout Button */}
             <button
-              onClick={() => setShowCheckout(true)}
+              onClick={() => {
+                // Checkout is its own page now, not a window on top of the cart
+                window.location.href = '/shop/checkout';
+              }}
               className="w-full bg-gradient-to-r from-blue-600 to-blue-700 text-white py-4 rounded-xl font-bold text-lg hover:from-blue-700 hover:to-blue-800 transition-all shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 active:scale-95 flex items-center justify-center gap-2"
             >
               <span>Proceed to Checkout</span>
@@ -232,17 +214,6 @@ export default function Cart({ cart, isOpen, onClose, onUpdateQuantity, onRemove
           </div>
         )}
       </div>
-
-      {/* Checkout Modal */}
-      {showCheckout && (
-        <CheckoutModal
-          cart={cart}
-          total={Number(total) || 0}
-          onClose={() => setShowCheckout(false)}
-          onSuccess={handleCheckoutSuccess}
-          onRequireAuth={onRequireAuth}
-        />
-      )}
 
       <style jsx>{`
         @keyframes slide-in {

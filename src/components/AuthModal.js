@@ -53,6 +53,23 @@ export default function AuthModal({ isOpen, onClose, mode: initialMode = 'login'
     resetPasswordWithCode,
   } = useAuth();
 
+  // Reopening starts fresh. Without this the window stayed on "Create an
+  // Account" after it was closed from the sign-up form, and came back there
+  // the next time it was opened.
+  useEffect(() => {
+    if (isOpen) {
+      setMode(initialMode);
+      setError('');
+      setNotice('');
+      setPassword('');
+      setConfirmPassword('');
+      setCode('');
+      setCapsLockOn(false);
+      setShowPassword(false);
+      setAcceptedTerms(false);
+    }
+  }, [isOpen, initialMode]);
+
   // Escape closes the sign-in window
   useEffect(() => {
     if (!isOpen) return undefined;

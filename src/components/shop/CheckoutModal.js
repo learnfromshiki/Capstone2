@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import { addPoints } from '@/lib/rewards';
 import { useAuth } from '@/contexts/AuthContext';
@@ -36,7 +36,15 @@ const restoreReservedStock = async ({ productId, quantity }) => {
   }
 };
 
-export default function CheckoutModal({ cart, total, onClose, onSuccess, onRequireAuth }) {
+export default function CheckoutModal({
+  cart,
+  total,
+  onClose,
+  onSuccess,
+  onRequireAuth,
+  variant = 'modal',
+}) {
+  const isPage = variant === 'page';
   const { user, profile, isSuspended } = useAuth();
   const [step, setStep] = useState(1); // 1: Contact Info, 2: Payment, 3: Success
   const [loading, setLoading] = useState(false);
@@ -58,6 +66,23 @@ export default function CheckoutModal({ cart, total, onClose, onSuccess, onRequi
     landmark: '',
   });
   const [shippingFee, setShippingFee] = useState(0);
+  const topRef = useRef(null);
+
+  /**
+   * Show the problem. The form is taller than the window, so the message at
+   * the top is easy to miss: bring it back into view.
+   */
+  const reportError = useCallback((message) => {
+    setError(message);
+
+    setTimeout(() => {
+      const node = topRef.current;
+      if (!node) return;
+
+      if (typeof node.scrollTo === 'function') node.scrollTo({ top: 0, behavior: 'smooth' });
+      node.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 0);
+  }, []);
   const [error, setError] = useState('');
   const [formData, setFormData] = useState({
     fullName: '',
@@ -162,42 +187,42 @@ export default function CheckoutModal({ cart, total, onClose, onSuccess, onRequi
   // The Continue button is not a form submit, so nothing validates the fields otherwise
   const detailsAreValid = () => {
     if (!formData.fullName.trim()) {
-      setError('Please enter your full name.');
+      reportError('Please enter your full name.');
       return false;
     }
 
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(formData.email.trim())) {
-      setError('Please enter a valid email address, for example name@example.com.');
+      reportError('Please enter a valid email address, for example name@example.com.');
       return false;
     }
 
     if (formData.phone.replace(/\D/g, '').length < 7) {
-      setError('Please enter a valid phone number.');
+      reportError('Please enter a valid phone number.');
       return false;
     }
 
     if (!addressParts.province.trim()) {
-      setError('Please choose your province.');
+      reportError('Please choose your province.');
       return false;
     }
 
     if (!addressParts.city.trim()) {
-      setError('Please choose your city or municipality.');
+      reportError('Please choose your city or municipality.');
       return false;
     }
 
     if (!addressParts.barangay.trim()) {
-      setError('Please choose your barangay.');
+      reportError('Please choose your barangay.');
       return false;
     }
 
     if (addressParts.street.trim().length < 3) {
-      setError('Please enter your house number and street.');
+      reportError('Please enter your house number and street.');
       return false;
     }
 
     if (formData.address.trim().length < 5) {
-      setError('Please complete your delivery address.');
+      reportError('Please complete your delivery address.');
       return false;
     }
 
@@ -345,12 +370,12 @@ export default function CheckoutModal({ cart, total, onClose, onSuccess, onRequi
     if (!detailsAreValid()) return;
 
     if (!user) {
-      setError('Please sign in to place an order.');
+      reportError('Please sign in to place an order.');
       return;
     }
 
     if (isSuspended) {
-      setError('This account has been suspended. Please contact CONNECT-Daet support.');
+      reportError('This account has been suspended. Please contact CONNECT-Daet support.');
       return;
     }
 
@@ -362,7 +387,7 @@ export default function CheckoutModal({ cart, total, onClose, onSuccess, onRequi
       setStep(2);
     } catch (verificationError) {
       console.error('Cart verification failed:', verificationError);
-      setError(verificationError.message || 'Please review your cart and try again.');
+      reportError(verificationError.message || 'Please review your cart and try again.');
     } finally {
       setVerifying(false);
     }
@@ -583,7 +608,7 @@ export default function CheckoutModal({ cart, total, onClose, onSuccess, onRequi
         await restoreReservedStock(reservation);
       }
 
-      setError(submitError.message || 'Please try again.');
+      reportError(submitError.message || 'Please try again.');
     } finally {
       setLoading(false);
     }
@@ -594,9 +619,29 @@ export default function CheckoutModal({ cart, total, onClose, onSuccess, onRequi
   const summaryPoints = estimateRewardPoints(summaryItems);
   const orderNumbers = placedOrders.map((order) => formatOrderNumber(order.id));
 
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 z-[60] flex items-center justify-center p-4">
-      <div role="dialog" aria-modal="true" aria-label="Checkout" className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+  const shell = (children) =>
+    isPage ? (
+      // Checkout as a page of its own: no overlay, and the browser window does
+      // the scrolling.
+      <div ref={topRef} className="mx-auto w-full max-w-2xl rounded-2xl bg-white shadow-sm">
+        {children}
+      </div>
+    ) : (
+      <div className="fixed inset-0 bg-black bg-opacity-50 z-[60] flex items-center justify-center p-4">
+        <div
+          ref={topRef}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Checkout"
+          className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto"
+        >
+          {children}
+        </div>
+      </div>
+    );
+
+  return shell(
+    <>
         {/* Step 1: Contact Information */}
         {step === 1 && (
           <div className="p-6">
@@ -938,7 +983,6 @@ export default function CheckoutModal({ cart, total, onClose, onSuccess, onRequi
             </a>
           </div>
         )}
-      </div>
-    </div>
+    </>
   );
 }

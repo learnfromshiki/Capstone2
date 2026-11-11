@@ -1,14 +1,14 @@
 /**
  * Address choices for the delivery form.
  *
- * The shop serves Camarines Norte, so that province is listed in full, with
- * the barangays of Daet itself. Anywhere else is still reachable: every list
- * ends with "Other", which turns the next box into a plain text field, so an
- * order can be delivered to an address that is not in this file.
+ * CONNECT-Daet delivers within Camarines Norte only, so the province is fixed
+ * and not a choice. The municipalities of the province are listed, with the
+ * barangays of Daet itself; other municipalities accept a typed barangay.
  *
- * To cover another municipality, add its barangays to the list below - nothing
- * else needs to change.
+ * To cover another municipality's barangays, add them to the list below -
+ * nothing else needs to change.
  */
+export const DEFAULT_PROVINCE = 'Camarines Norte';
 export const OTHER = 'Other';
 
 const DAET_BARANGAYS = [
@@ -59,12 +59,13 @@ export const PROVINCES = [
   },
 ];
 
-export const provinceNames = () => [...PROVINCES.map((province) => province.name), OTHER];
+/** The only province served. Kept as a list so the form code stays the same. */
+export const provinceNames = () => PROVINCES.map((province) => province.name);
 
 export const cityNames = (provinceName) => {
   const province = PROVINCES.find((entry) => entry.name === provinceName);
   if (!province) return [];
-  return [...province.cities.map((city) => city.name), OTHER];
+  return province.cities.map((city) => city.name);
 };
 
 export const barangayNames = (provinceName, cityName) => {

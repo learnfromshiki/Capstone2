@@ -11,7 +11,8 @@ import { describePasswordProblem, isPasswordValid } from '@/lib/passwordPolicy';
 import { fetchProfileRow, joinName, splitName } from '@/lib/profile';
 import { describeSelection, readOptions } from '@/lib/productOptions';
 import ChatPanel from '@/components/shop/ChatPanel';
-import { messageCustomer } from '@/lib/messages';
+import { countUnread, messageCustomer } from '@/lib/messages';
+import NotificationBell from '@/components/ui/NotificationBell';
 import { useDialog } from '@/components/ui/Dialog';
 import Avatar from '@/components/ui/Avatar';
 import AvatarUpload from '@/components/ui/AvatarUpload';
@@ -90,6 +91,7 @@ export default function SellerDashboard() {
   const [savingOwnerName, setSavingOwnerName] = useState(false);
   const [avatarUrl, setAvatarUrl] = useState('');
   const [openConversationId, setOpenConversationId] = useState(null);
+  const [unreadMessages, setUnreadMessages] = useState(0);
 
   /** Start (or continue) the chat with the customer behind an order. */
   const handleMessageCustomer = async (order) => {
@@ -832,6 +834,25 @@ export default function SellerDashboard() {
     }
   };
 
+  // The bell counts unread messages alongside the stock and order warnings.
+  useEffect(() => {
+    if (!seller?.id) return undefined;
+
+    let cancelled = false;
+    const refresh = async () => {
+      const count = await countUnread('seller', seller.id);
+      if (!cancelled) setUnreadMessages(count);
+    };
+
+    refresh();
+    const timer = setInterval(refresh, 30000);
+
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [seller?.id, activeTab]);
+
   const handleSaveShopProfile = async () => {
     setSavingProfile(true);
     setSettingsFeedback({ type: '', text: '' });
@@ -896,6 +917,66 @@ export default function SellerDashboard() {
           .some((value) => String(value).toLowerCase().includes(searchTerm))
       )
     : products;
+  // What actually needs the shop's attention, newest concerns first.
+  const outOfStock = products.filter((product) => (Number(product.stock) || 0) === 0);
+  const lowStock = products.filter((product) => {
+    const stock = Number(product.stock) || 0;
+    return stock > 0 && stock <= 5;
+  });
+  const newOrders = orders.filter((order) => order.status === 'pending');
+  const toShip = orders.filter((order) => ['confirmed', 'processing'].includes(order.status));
+
+  const sellerNotifications = [
+    unreadMessages > 0 && {
+      id: 'messages',
+      icon: '💬',
+      tone: 'info',
+      title: unreadMessages === 1 ? 'A customer messaged you' : `${unreadMessages} unread messages`,
+      detail: 'Open your inbox to reply.',
+      count: unreadMessages,
+      onClick: () => setActiveTab('messages'),
+    },
+    newOrders.length > 0 && {
+      id: 'new-orders',
+      icon: '🛒',
+      tone: 'success',
+      title: newOrders.length === 1 ? 'A new order came in' : `${newOrders.length} new orders`,
+      detail: 'Confirm them so the customer knows they are being prepared.',
+      count: newOrders.length,
+      onClick: () => setActiveTab('orders'),
+    },
+    toShip.length > 0 && {
+      id: 'to-ship',
+      icon: '📦',
+      tone: 'warning',
+      title: `${toShip.length} ${toShip.length === 1 ? 'order is' : 'orders are'} waiting to be shipped`,
+      detail: 'Mark them shipped once they are on the way.',
+      count: toShip.length,
+      onClick: () => setActiveTab('orders'),
+    },
+    outOfStock.length > 0 && {
+      id: 'out-of-stock',
+      icon: '⚠️',
+      tone: 'danger',
+      title:
+        outOfStock.length === 1
+          ? `${outOfStock[0].name} is out of stock`
+          : `${outOfStock.length} products are out of stock`,
+      detail: 'Customers cannot buy them until you restock.',
+      count: outOfStock.length,
+      onClick: () => setActiveTab('products'),
+    },
+    lowStock.length > 0 && {
+      id: 'low-stock',
+      icon: '📉',
+      tone: 'warning',
+      title: `${lowStock.length} ${lowStock.length === 1 ? 'product is' : 'products are'} running low`,
+      detail: 'Five or fewer left in stock.',
+      count: lowStock.length,
+      onClick: () => setActiveTab('products'),
+    },
+  ].filter(Boolean);
+
   const orderSearchTerm = searchTerm.replace(/^#/, '');
   const filteredOrders = orderSearchTerm
     ? orders.filter((order) =>
@@ -1183,20 +1264,10 @@ export default function SellerDashboard() {
             </div>
           </div>
           <div className="flex items-center justify-between gap-4 sm:justify-end">
-            <button
-              onClick={() => setActiveTab('orders')}
-              aria-label="View orders that need attention"
-              className="relative flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full text-gray-600 hover:bg-gray-100 hover:text-gray-900"
-            >
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-              </svg>
-              {stats.toFulfill > 0 && (
-                <span className="absolute right-1 top-1 flex h-5 min-w-[20px] items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">
-                  {stats.toFulfill}
-                </span>
-              )}
-            </button>
+            <NotificationBell
+              emptyMessage="Nothing needs your attention. Your shop is all caught up."
+              items={sellerNotifications}
+            />
             <div className="flex items-center gap-2">
               <Avatar src={avatarUrl} name={joinName(ownerName.first_name, ownerName.last_name)} email={user?.email} size="md" />
               <div className="max-w-[10rem] text-left sm:max-w-none sm:text-right">

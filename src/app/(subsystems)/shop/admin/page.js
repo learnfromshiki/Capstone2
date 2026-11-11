@@ -16,6 +16,7 @@ const peso = (value) =>
 import Link from 'next/link';
 import { useDialog } from '@/components/ui/Dialog';
 import AvatarUpload from '@/components/ui/AvatarUpload';
+import NotificationBell from '@/components/ui/NotificationBell';
 import { describeSelection } from '@/lib/productOptions';
 import { describeArea, listShippingRates } from '@/lib/shipping';
 
@@ -120,6 +121,15 @@ export default function ShopAdminPage() {
   const [imagePreview, setImagePreview] = useState('');
   const [adminUserId, setAdminUserId] = useState(null);
   const [adminAvatarUrl, setAdminAvatarUrl] = useState('');
+  const [notices, setNotices] = useState({
+    pendingSellers: 0,
+    pendingSellerName: '',
+    pendingOrders: 0,
+    preparingOrders: 0,
+    ordersToday: 0,
+    outOfStock: 0,
+    suspendedCustomers: 0,
+  });
   const [shippingRates, setShippingRates] = useState([]);
   const [shippingReady, setShippingReady] = useState(true);
   const [savingShipping, setSavingShipping] = useState(false);
@@ -191,6 +201,7 @@ export default function ShopAdminPage() {
       fetchData();
       fetchSettings();
       loadShippingRates();
+      loadNotices();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, isAuthenticated]);
@@ -210,6 +221,49 @@ export default function ShopAdminPage() {
       setCategories(data || []);
     } catch (error) {
       console.error('Error fetching categories:', error);
+    }
+  };
+
+  /**
+   * The counts behind the notification bell. Kept separate from the tab data
+   * so the bell is right no matter which tab is open.
+   */
+  const loadNotices = async () => {
+    try {
+      const startOfDay = new Date();
+      startOfDay.setHours(0, 0, 0, 0);
+
+      const [waiting, pending, preparing, todays, soldOut, suspended] = await Promise.all([
+        supabase
+          .from('shop_sellers')
+          .select('business_name', { count: 'exact' })
+          .eq('is_approved', false)
+          .neq('is_active', false)
+          .limit(1),
+        supabase.from('shop_orders').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
+        supabase
+          .from('shop_orders')
+          .select('id', { count: 'exact', head: true })
+          .in('status', ['confirmed', 'processing']),
+        supabase
+          .from('shop_orders')
+          .select('id', { count: 'exact', head: true })
+          .gte('created_at', startOfDay.toISOString()),
+        supabase.from('shop_products').select('id', { count: 'exact', head: true }).eq('stock', 0),
+        supabase.from('profiles').select('id', { count: 'exact', head: true }).eq('is_suspended', true),
+      ]);
+
+      setNotices({
+        pendingSellers: waiting.count || 0,
+        pendingSellerName: waiting.data?.[0]?.business_name || '',
+        pendingOrders: pending.count || 0,
+        preparingOrders: preparing.count || 0,
+        ordersToday: todays.count || 0,
+        outOfStock: soldOut.count || 0,
+        suspendedCustomers: suspended.count || 0,
+      });
+    } catch (error) {
+      console.warn('Could not load notifications:', error?.message || error);
     }
   };
 
@@ -1307,6 +1361,69 @@ export default function ShopAdminPage() {
   };
 
   // Login Screen
+  // Things happening across the marketplace that an admin should act on.
+  // These counts are loaded on their own (see loadNotices) because the tables
+  // above are only fetched for the tab being viewed.
+  const adminNotifications = [
+    notices.pendingSellers > 0 && {
+      id: 'pending-sellers',
+      icon: '🏪',
+      tone: 'warning',
+      title:
+        notices.pendingSellerName && notices.pendingSellers === 1
+          ? `${notices.pendingSellerName} is waiting for approval`
+          : `${notices.pendingSellers} shops are waiting for approval`,
+      detail: 'They cannot sell until you approve them.',
+      count: notices.pendingSellers,
+      onClick: () => setActiveTab('sellers'),
+    },
+    notices.pendingOrders > 0 && {
+      id: 'pending-orders',
+      icon: '🛒',
+      tone: 'info',
+      title: `${notices.pendingOrders} ${notices.pendingOrders === 1 ? 'order is' : 'orders are'} still pending`,
+      detail: 'Waiting for a shop to confirm them.',
+      count: notices.pendingOrders,
+      onClick: () => setActiveTab('orders'),
+    },
+    notices.preparingOrders > 0 && {
+      id: 'unfulfilled-orders',
+      icon: '📦',
+      tone: 'info',
+      title: `${notices.preparingOrders} ${notices.preparingOrders === 1 ? 'order is' : 'orders are'} being prepared`,
+      detail: 'Confirmed or processing, not yet shipped.',
+      count: notices.preparingOrders,
+      onClick: () => setActiveTab('orders'),
+    },
+    notices.ordersToday > 0 && {
+      id: 'orders-today',
+      icon: '📈',
+      tone: 'success',
+      title: `${notices.ordersToday} ${notices.ordersToday === 1 ? 'order' : 'orders'} placed today`,
+      detail: 'Across every shop on the marketplace.',
+      count: notices.ordersToday,
+      onClick: () => setActiveTab('orders'),
+    },
+    notices.outOfStock > 0 && {
+      id: 'out-of-stock',
+      icon: '⚠️',
+      tone: 'danger',
+      title: `${notices.outOfStock} ${notices.outOfStock === 1 ? 'product is' : 'products are'} out of stock`,
+      detail: 'Shoppers cannot buy them until the shop restocks.',
+      count: notices.outOfStock,
+      onClick: () => setActiveTab('products'),
+    },
+    notices.suspendedCustomers > 0 && {
+      id: 'suspended-customers',
+      icon: '🚫',
+      tone: 'warning',
+      title: `${notices.suspendedCustomers} suspended ${notices.suspendedCustomers === 1 ? 'customer' : 'customers'}`,
+      detail: 'They cannot sign in or order.',
+      count: notices.suspendedCustomers,
+      onClick: () => setActiveTab('customers'),
+    },
+  ].filter(Boolean);
+
   const orderQuery = orderSearch.trim().toLowerCase().replace(/^#/, '');
   const visibleOrders = orders.filter((order) => {
     if (orderStatusFilter !== 'all' && order.status !== orderStatusFilter) return false;
@@ -1573,12 +1690,10 @@ export default function ShopAdminPage() {
             <p className="hidden text-sm text-gray-600 sm:block">Here&apos;s what&apos;s happening with your e-commerce platform today.</p>
           </div>
           <div className="flex flex-shrink-0 items-center gap-2 lg:gap-4">
-            <button className="relative hidden p-2 text-gray-600 hover:text-gray-900 sm:block" aria-label="Notifications">
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-              </svg>
-              <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
-            </button>
+            <NotificationBell
+              emptyMessage="Nothing needs attention. The marketplace is running smoothly."
+              items={adminNotifications}
+            />
             <div className="flex items-center gap-2">
               <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-100">
                 <span className="font-bold text-blue-700">A</span>

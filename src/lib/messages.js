@@ -124,6 +124,19 @@ export const markConversationRead = async (conversationId, myRole) => {
   }
 };
 
+/** Total messages waiting for this person, for the notification bell. */
+export const countUnread = async (role, sellerId) => {
+  try {
+    const conversations = await listConversations(role, sellerId);
+    if (conversations.length === 0) return 0;
+
+    const counts = await unreadCounts(conversations.map((row) => row.id), role);
+    return Object.values(counts).reduce((sum, value) => sum + value, 0);
+  } catch (error) {
+    return 0;
+  }
+};
+
 /** How many messages are waiting, per conversation id. */
 export const unreadCounts = async (conversationIds, myRole) => {
   if (!conversationIds || conversationIds.length === 0) return {};

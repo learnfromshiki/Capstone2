@@ -1,6 +1,7 @@
 'use client';
 
-import { OTHER, barangayNames, cityNames, provinceNames } from '@/lib/philippineAddresses';
+import { useEffect } from 'react';
+import { DEFAULT_PROVINCE, OTHER, barangayNames, cityNames } from '@/lib/philippineAddresses';
 
 const selectClass =
   'w-full min-h-[48px] px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white';
@@ -19,12 +20,18 @@ const inputClass =
 export default function AddressFields({ value, onChange, disabled = false }) {
   const { province = '', city = '', barangay = '', street = '', landmark = '' } = value || {};
 
-  const provinces = provinceNames();
-  const cities = cityNames(province);
-  const barangays = barangayNames(province, city);
+  const cities = cityNames(DEFAULT_PROVINCE);
+  const barangays = barangayNames(DEFAULT_PROVINCE, city);
 
-  // A value that is set but not on the list means it was typed by hand.
-  const provinceIsCustom = Boolean(province) && !provinces.includes(province);
+  // The shop delivers inside Camarines Norte only, so the province is set for
+  // the customer instead of being asked for.
+  useEffect(() => {
+    if (province !== DEFAULT_PROVINCE) {
+      onChange({ ...value, province: DEFAULT_PROVINCE });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [province]);
+
   const cityIsCustom = Boolean(city) && cities.length > 0 && !cities.includes(city);
   const barangayIsCustom = Boolean(barangay) && barangays.length > 0 && !barangays.includes(barangay);
 
@@ -33,54 +40,20 @@ export default function AddressFields({ value, onChange, disabled = false }) {
   return (
     <div className="space-y-4">
       <div className="grid gap-4 sm:grid-cols-2">
-        {/* Province */}
+        {/* Province: fixed, this marketplace serves one province */}
         <div>
           <label htmlFor="addressProvince" className="block text-sm font-semibold text-gray-700 mb-2">
-            Province *
+            Province
           </label>
-          {provinceIsCustom ? (
-            <div className="flex gap-2">
-              <input
-                id="addressProvince"
-                type="text"
-                value={province}
-                onChange={(event) => update({ province: event.target.value })}
-                disabled={disabled}
-                maxLength={60}
-                className={inputClass}
-                placeholder="Type your province"
-              />
-              <button
-                type="button"
-                onClick={() => update({ province: '', city: '', barangay: '' })}
-                className="min-h-[48px] whitespace-nowrap rounded-xl border border-gray-300 px-3 text-sm font-semibold text-gray-600 hover:bg-gray-50"
-              >
-                List
-              </button>
-            </div>
-          ) : (
-            <select
-              id="addressProvince"
-              value={province}
-              disabled={disabled}
-              onChange={(event) => {
-                const next = event.target.value;
-                update({
-                  province: next === OTHER ? ' ' : next,
-                  city: '',
-                  barangay: '',
-                });
-              }}
-              className={selectClass}
-            >
-              <option value="">Select province</option>
-              {provinces.map((name) => (
-                <option key={name} value={name}>
-                  {name}
-                </option>
-              ))}
-            </select>
-          )}
+          <input
+            id="addressProvince"
+            type="text"
+            value={DEFAULT_PROVINCE}
+            readOnly
+            disabled
+            className="w-full min-h-[48px] cursor-not-allowed rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 font-medium text-gray-700"
+          />
+          <p className="mt-1 text-xs text-gray-500">CONNECT-Daet delivers within Camarines Norte.</p>
         </div>
 
         {/* City or municipality */}
@@ -88,26 +61,23 @@ export default function AddressFields({ value, onChange, disabled = false }) {
           <label htmlFor="addressCity" className="block text-sm font-semibold text-gray-700 mb-2">
             City / Municipality *
           </label>
-          {cities.length === 0 || cityIsCustom ? (
+          {cityIsCustom ? (
             <input
               id="addressCity"
               type="text"
               value={city}
               onChange={(event) => update({ city: event.target.value, barangay: '' })}
-              disabled={disabled || !province}
+              disabled={disabled}
               maxLength={60}
               className={inputClass}
-              placeholder={province ? 'Type your city or municipality' : 'Choose a province first'}
+              placeholder="Type your city or municipality"
             />
           ) : (
             <select
               id="addressCity"
               value={city}
-              disabled={disabled || !province}
-              onChange={(event) => {
-                const next = event.target.value;
-                update({ city: next === OTHER ? ' ' : next, barangay: '' });
-              }}
+              disabled={disabled}
+              onChange={(event) => update({ city: event.target.value, barangay: '' })}
               className={selectClass}
             >
               <option value="">Select city or municipality</option>

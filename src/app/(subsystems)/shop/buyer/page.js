@@ -6,7 +6,6 @@ import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabaseClient';
 import Link from 'next/link';
 import { cancelMyOrder, confirmOrderReceived, formatOrderNumber, PAYMENT_LABELS } from '@/lib/orders';
-import CheckoutModal from '@/components/shop/CheckoutModal';
 import { fetchShopSettings } from '@/lib/shopSettings';
 import PaymentInstructions from '@/components/shop/PaymentInstructions';
 import PasswordRequirements from '@/components/PasswordRequirements';
@@ -92,8 +91,8 @@ export default function BuyerDashboard() {
   const [confirmingOrderId, setConfirmingOrderId] = useState(null);
   const [showPassword, setShowPassword] = useState(false);
   const [cart, setCart] = useState([]);
-  const [showCheckout, setShowCheckout] = useState(false);
   const [shopNames, setShopNames] = useState({});
+  const [orderedProducts, setOrderedProducts] = useState({});
 
   // The chat shows shop names; shop_sellers is readable by everyone.
   useEffect(() => {
@@ -205,6 +204,30 @@ export default function BuyerDashboard() {
         address: profileRes.data?.address || '',
       });
       setOrders(ordersRes.data || []);
+
+      // The photo and shop behind each purchased item, for the review cards
+      const purchasedIds = [
+        ...new Set(
+          (ordersRes.data || [])
+            .flatMap((order) => order.shop_order_items || [])
+            .map((item) => item.product_id)
+            .filter(Boolean)
+        ),
+      ];
+
+      if (purchasedIds.length > 0) {
+        const { data: purchased } = await supabase
+          .from('shop_products')
+          .select('id, name, image_url, seller_id')
+          .in('id', purchasedIds);
+
+        setOrderedProducts(
+          (purchased || []).reduce((acc, product) => {
+            acc[product.id] = product;
+            return acc;
+          }, {})
+        );
+      }
       setProducts(productsRes.data || []);
       setReviews(reviewsRes.data || []);
 
@@ -272,10 +295,8 @@ export default function BuyerDashboard() {
     const item = cart.find((entry) => entry.lineId === lineId);
     if (!item) return;
 
-    if (quantity <= 0) {
-      removeCartLine(item);
-      return;
-    }
+    // The minus button never empties a line; "Remove" does, and it asks first.
+    if (quantity < 1) return;
 
     const maxStock = Number(item.stock) || 0;
     if (maxStock && quantity > maxStock) {
@@ -297,13 +318,6 @@ export default function BuyerDashboard() {
     });
 
     if (confirmed) writeCart(cart.filter((entry) => entry.lineId !== item.lineId));
-  };
-
-  const handleCheckoutSuccess = () => {
-    setShowCheckout(false);
-    writeCart([]);
-    fetchData();
-    setActiveTab('orders');
   };
 
   const handleConfirmReceived = async (order) => {
@@ -588,16 +602,6 @@ export default function BuyerDashboard() {
     );
   }
 
-  const checkoutModal = showCheckout ? (
-    <CheckoutModal
-      cart={cart}
-      total={cartTotal}
-      onClose={() => setShowCheckout(false)}
-      onSuccess={handleCheckoutSuccess}
-      onRequireAuth={() => setShowCheckout(false)}
-    />
-  ) : null;
-
   if (suspended) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
@@ -651,7 +655,12 @@ export default function BuyerDashboard() {
     });
   });
 
-  const productImageById = new Map(products.map((product) => [product.id, product.image_url]));
+  // Photos come from the catalogue when the product is still listed, and from
+  // the order lookup when it is not.
+  const productImageById = new Map([
+    ...products.map((product) => [product.id, product.image_url]),
+    ...Object.values(orderedProducts).map((product) => [product.id, product.image_url]),
+  ]);
 
   const reviewableItems = orders
     .filter((order) => order.status === 'delivered')
@@ -1188,8 +1197,9 @@ export default function BuyerDashboard() {
                                 <button
                                   type="button"
                                   onClick={() => changeCartQuantity(item.lineId, Number(item.quantity) - 1)}
+                                  disabled={Number(item.quantity) <= 1}
                                   aria-label={`Remove one ${item.name}`}
-                                  className="flex h-11 w-11 items-center justify-center text-lg font-bold text-gray-600 hover:bg-gray-50"
+                                  className="flex h-11 w-11 items-center justify-center text-lg font-bold text-gray-600 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
                                 >
                                   −
                                 </button>
@@ -1231,13 +1241,12 @@ export default function BuyerDashboard() {
                         </div>
 
                         <div className="mt-4 flex flex-col gap-3 sm:flex-row">
-                          <button
-                            type="button"
-                            onClick={() => setShowCheckout(true)}
-                            className="min-h-[48px] flex-1 rounded-full bg-blue-600 font-bold text-white transition-colors hover:bg-blue-700"
+                          <Link
+                            href="/shop/checkout"
+                            className="flex min-h-[48px] flex-1 items-center justify-center rounded-full bg-blue-600 font-bold text-white transition-colors hover:bg-blue-700"
                           >
                             Proceed to Checkout →
-                          </button>
+                          </Link>
                           <button
                             type="button"
                             onClick={() => {
@@ -1353,10 +1362,42 @@ export default function BuyerDashboard() {
                       <div className="space-y-4">
                         {reviewableItems.map((item) => {
                           const draft = reviewDrafts[item.product_id] || { rating: 5, comment: '' };
+                          const productInfo = orderedProducts[item.product_id];
+                          const shopName = productInfo?.seller_id ? shopNames[productInfo.seller_id] : null;
 
                           return (
                             <div key={item.product_id} className="border border-gray-100 rounded-xl p-4">
-                              <p className="font-semibold text-gray-900 mb-2">{item.product_name}</p>
+                              <div className="mb-3 flex items-center gap-3">
+                                <div className="h-16 w-16 flex-shrink-0 overflow-hidden rounded-lg bg-gray-100">
+                                  {productInfo?.image_url ? (
+                                    <img
+                                      src={productInfo.image_url}
+                                      alt={item.product_name}
+                                      className="h-full w-full object-cover"
+                                    />
+                                  ) : (
+                                    <div className="flex h-full items-center justify-center text-[10px] text-gray-400">
+                                      No image
+                                    </div>
+                                  )}
+                                </div>
+
+                                <div className="min-w-0">
+                                  <p className="font-semibold text-gray-900">{item.product_name}</p>
+                                  {shopName && (
+                                    <p className="text-xs text-gray-500">
+                                      Sold by <span className="font-medium text-blue-600">{shopName}</span>
+                                    </p>
+                                  )}
+                                  {describeSelection(item.options) && (
+                                    <p className="text-xs text-gray-500">{describeSelection(item.options)}</p>
+                                  )}
+                                  <p className="text-xs text-gray-500">
+                                    Order {formatOrderNumber(item.orderId)} · {item.quantity} x ₱
+                                    {Number(item.price).toFixed(2)}
+                                  </p>
+                                </div>
+                              </div>
                               <StarPicker
                                 value={draft.rating}
                                 onChange={(rating) =>
@@ -1670,7 +1711,6 @@ export default function BuyerDashboard() {
         </div>
       </div>
 
-      {checkoutModal}
     </div>
   );
 }

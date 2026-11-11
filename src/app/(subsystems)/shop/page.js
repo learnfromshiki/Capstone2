@@ -13,6 +13,7 @@ import ShopProfileModal from '@/components/shop/ShopProfileModal';
 import ProductOptionsModal from '@/components/shop/ProductOptionsModal';
 import { cartLineId, describeSelection, hasOptions } from '@/lib/productOptions';
 import { openConversation } from '@/lib/messages';
+import { storeBuyNow } from '@/lib/buyNow';
 import ShopFooter from '@/components/shop/ShopFooter';
 
 export default function ShopPage() {
@@ -22,7 +23,6 @@ export default function ShopPage() {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('all');
   const [showCart, setShowCart] = useState(false);
-  const [checkoutRequest, setCheckoutRequest] = useState(0);
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [selectedSellerId, setSelectedSellerId] = useState(null);
   // The product whose options sheet is open, and why it was opened
@@ -465,10 +465,9 @@ export default function ShopPage() {
 
     if (!item) return;
 
-    if (quantity <= 0) {
-      removeFromCart(lineId);
-      return;
-    }
+    // Never let the quantity buttons empty a line; the bin icon removes it,
+    // and that asks first.
+    if (quantity < 1) return;
 
     const maxStock = Number(item.stock) || 0;
     if (quantity > maxStock) {
@@ -489,25 +488,33 @@ export default function ShopPage() {
     setOptionsFor({ product, intent: 'buy' });
   };
 
-  /** What the options sheet hands back. */
-  const handleOptionsConfirm = ({ product, quantity, selected, action }) => {
-    const added = addLineToCart(product, quantity, selected);
-    setOptionsFor(null);
-    if (!added) return;
-
-    const summary = describeSelection(selected);
-
-    if (action === 'buy') {
-      setShowCart(true);
-      setCheckoutRequest((request) => request + 1);
+  /**
+   * Buy one item now. It is NOT put in the cart and the cart drawer stays
+   * shut: the item is handed to the checkout page on its own.
+   */
+  const goToBuyNowCheckout = (product, quantity, selectedOptions) => {
+    if (!user) {
+      setShowAuthModal(true);
       return;
     }
 
-    showToast(`${product.name}${summary ? ` (${summary})` : ''} added to your cart.`, 'success');
+    storeBuyNow(user.id, product, quantity, selectedOptions);
+    window.location.href = '/shop/checkout?mode=buynow';
   };
 
-  const clearCart = () => {
-    setCart([]);
+  /** What the options sheet hands back. */
+  const handleOptionsConfirm = ({ product, quantity, selected, action }) => {
+    setOptionsFor(null);
+
+    if (action === 'buy') {
+      goToBuyNowCheckout(product, quantity, selected);
+      return;
+    }
+
+    if (!addLineToCart(product, quantity, selected)) return;
+
+    const summary = describeSelection(selected);
+    showToast(`${product.name}${summary ? ` (${summary})` : ''} added to your cart.`, 'success');
   };
 
   const defaultCategories = [
@@ -846,16 +853,9 @@ export default function ShopPage() {
       <Cart
         cart={cart}
         isOpen={showCart}
-        checkoutRequest={checkoutRequest}
         onClose={() => setShowCart(false)}
         onUpdateQuantity={updateQuantity}
         onRemoveItem={removeFromCart}
-        onClearCart={clearCart}
-        onOrderPlaced={fetchProducts}
-        onRequireAuth={() => {
-          setShowCart(false);
-          setShowAuthModal(true);
-        }}
         total={cartTotal}
       />
 
