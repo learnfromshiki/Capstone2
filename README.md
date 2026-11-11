@@ -25,6 +25,9 @@ This platform now supports **multiple sellers** who can independently manage the
 - 🎨 **Product Choices** - Pick colour, size or flavour and a quantity before ordering
 - 📍 **Address Picker** - Province, city/municipality and barangay dropdowns at checkout
 - 🖼️ **Profile Pictures** - Customers, sellers and admins can upload their own
+- 📷 **Photo Galleries** - Up to 6 photos per product, with a chosen cover
+- 🚚 **Delivery Fees** - Per province and city, with free-delivery thresholds
+- 💬 **Chat** - Customers message a shop; both sides have an inbox
 - 💳 **Payment Instructions** - GCash / bank details from Admin → Settings shown at checkout
 - 🔑 **Forgot Password** - Reset link by email
 - 📧 **Email Verification** - A 6-digit code is emailed when registering
@@ -74,7 +77,11 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=your_anon_key
 6. supabase-auth-roles-fix.sql          # Account roles (seller vs customer) + first/last name
 7. supabase-buyer-confirm-order.sql     # "Order Received" button for customers
 8. supabase-product-options.sql         # Product choices, order variants, review authors, profile pictures
+9. supabase-shipping-chat-gallery.sql   # Photo galleries, delivery fees, customer/seller chat
 ```
+
+> Run file 9 and deploy the website together: `place_order()` gains two
+> parameters there, so an older build would not match it.
 This creates all tables, triggers, and sample data. Never run `supabase-final-fixes.sql`
 on the live database; it re-opens testing permissions.
 

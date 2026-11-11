@@ -27,6 +27,7 @@ export default function ProductDetailsModal({
   product,
   sellerInfo,
   onViewShop,
+  onMessageShop,
   reviews = [],
   canReview = false,
   onSubmitReview,
@@ -39,13 +40,15 @@ export default function ProductDetailsModal({
   const [draftComment, setDraftComment] = useState('');
   const [savingReview, setSavingReview] = useState(false);
   const [reviewFeedback, setReviewFeedback] = useState(null);
+  const [activeImage, setActiveImage] = useState(0);
 
-  // Every product opens with a clean review draft.
+  // Every product opens with a clean review draft and its first photo.
   useEffect(() => {
     setDraftRating(5);
     setDraftComment('');
     setReviewFeedback(null);
     setQuantity(1);
+    setActiveImage(0);
   }, [product?.id]);
 
   // Escape closes the product window
@@ -59,6 +62,12 @@ export default function ProductDetailsModal({
   }, [product, onClose]);
 
   if (!product) return null;
+
+  // The cover photo leads, then any extra photos the seller uploaded.
+  const gallery = [
+    product.image_url,
+    ...(Array.isArray(product.images) ? product.images : []),
+  ].filter((url, index, all) => url && all.indexOf(url) === index);
 
   const stock = Number(product.stock) || 0;
   const inStock = stock > 0;
@@ -117,14 +126,35 @@ export default function ProductDetailsModal({
         onClick={(event) => event.stopPropagation()}
       >
         <div className="grid md:grid-cols-2">
-          {/* Image */}
+          {/* Photos */}
           <div className="relative bg-gray-100 min-h-[280px] md:min-h-full">
-            {product.image_url ? (
-              <img
-                src={product.image_url}
-                alt={product.name}
-                className="w-full h-full max-h-[420px] object-cover md:rounded-l-2xl"
-              />
+            {gallery.length > 0 ? (
+              <div className="flex h-full flex-col">
+                <img
+                  src={gallery[activeImage] || gallery[0]}
+                  alt={`${product.name} photo ${activeImage + 1} of ${gallery.length}`}
+                  className="w-full flex-1 max-h-[360px] object-cover md:rounded-tl-2xl"
+                />
+
+                {gallery.length > 1 && (
+                  <div className="flex gap-2 overflow-x-auto bg-white/80 p-3">
+                    {gallery.map((url, index) => (
+                      <button
+                        key={url}
+                        type="button"
+                        onClick={() => setActiveImage(index)}
+                        aria-label={`Show photo ${index + 1}`}
+                        aria-pressed={index === activeImage}
+                        className={`h-16 w-16 flex-shrink-0 overflow-hidden rounded-lg border-2 transition-colors ${
+                          index === activeImage ? 'border-blue-600' : 'border-transparent hover:border-gray-300'
+                        }`}
+                      >
+                        <img src={url} alt="" className="h-full w-full object-cover" />
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
             ) : (
               <div className="w-full h-full min-h-[280px] flex flex-col items-center justify-center text-gray-400">
                 <svg className="w-20 h-20 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -192,6 +222,15 @@ export default function ProductDetailsModal({
                       <span className="text-sm font-semibold text-blue-600 truncate">
                         {sellerInfo.business_name}
                       </span>
+                    )}
+                    {onMessageShop && (
+                      <button
+                        type="button"
+                        onClick={() => onMessageShop(sellerInfo)}
+                        className="ml-auto min-h-[36px] whitespace-nowrap rounded-full border border-blue-200 px-3 text-xs font-semibold text-blue-600 hover:bg-blue-50"
+                      >
+                        💬 Message shop
+                      </button>
                     )}
                   </div>
                 )}

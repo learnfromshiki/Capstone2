@@ -13,6 +13,7 @@ export default function ShopProfileModal({
   reviewSummaries = {},
   onClose,
   onViewProduct,
+  onMessageShop,
 }) {
   // Escape closes the shop window
   useEffect(() => {
@@ -74,6 +75,16 @@ export default function ShopProfileModal({
               </div>
             </div>
           </div>
+
+          {onMessageShop && (
+            <button
+              type="button"
+              onClick={() => onMessageShop(seller)}
+              className="mt-4 min-h-[44px] rounded-full bg-white px-5 text-sm font-bold text-blue-700 transition-colors hover:bg-blue-50"
+            >
+              💬 Message this shop
+            </button>
+          )}
 
           <div className="mt-4 flex flex-wrap gap-6 text-sm">
             <div>

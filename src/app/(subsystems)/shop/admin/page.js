@@ -17,6 +17,7 @@ import Link from 'next/link';
 import { useDialog } from '@/components/ui/Dialog';
 import AvatarUpload from '@/components/ui/AvatarUpload';
 import { describeSelection } from '@/lib/productOptions';
+import { describeArea, listShippingRates } from '@/lib/shipping';
 
 const REPORT_CONFIG = {
   sales: {
@@ -119,6 +120,10 @@ export default function ShopAdminPage() {
   const [imagePreview, setImagePreview] = useState('');
   const [adminUserId, setAdminUserId] = useState(null);
   const [adminAvatarUrl, setAdminAvatarUrl] = useState('');
+  const [shippingRates, setShippingRates] = useState([]);
+  const [shippingReady, setShippingReady] = useState(true);
+  const [savingShipping, setSavingShipping] = useState(false);
+  const [newRate, setNewRate] = useState({ province: '', city: '', fee: '', free_threshold: '' });
 
   // Site-wide notifications: a modal for anything that must be read or
   // confirmed, a corner toast for routine successes.
@@ -185,6 +190,7 @@ export default function ShopAdminPage() {
       fetchCategories();
       fetchData();
       fetchSettings();
+      loadShippingRates();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, isAuthenticated]);
@@ -204,6 +210,100 @@ export default function ShopAdminPage() {
       setCategories(data || []);
     } catch (error) {
       console.error('Error fetching categories:', error);
+    }
+  };
+
+  const loadShippingRates = async () => {
+    try {
+      const { rates, ready } = await listShippingRates();
+      setShippingRates(rates);
+      setShippingReady(ready);
+    } catch (error) {
+      console.warn('Could not load the delivery fees:', error.message);
+    }
+  };
+
+  /** Save one row's fee and free-delivery threshold. */
+  const saveShippingRate = async (rate) => {
+    setSavingShipping(true);
+    try {
+      const { error } = await supabase
+        .from('shop_shipping_rates')
+        .update({
+          fee: Number(rate.fee) || 0,
+          free_threshold: rate.free_threshold === '' || rate.free_threshold === null
+            ? null
+            : Number(rate.free_threshold),
+          is_active: rate.is_active !== false,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', rate.id);
+
+      if (error) throw error;
+      showToast(`Delivery fee for ${describeArea(rate)} saved.`, 'success');
+      loadShippingRates();
+    } catch (error) {
+      showAlert('Could not save the delivery fee: ' + error.message);
+    } finally {
+      setSavingShipping(false);
+    }
+  };
+
+  const addShippingRate = async () => {
+    const province = newRate.province.trim();
+    const city = newRate.city.trim();
+    const fee = Number(newRate.fee);
+
+    if (!Number.isFinite(fee) || fee < 0) {
+      showAlert('Please enter a delivery fee of zero or more.');
+      return;
+    }
+
+    if (city && !province) {
+      showAlert('A city needs its province, so the right fee can be matched.');
+      return;
+    }
+
+    setSavingShipping(true);
+    try {
+      const { error } = await supabase.from('shop_shipping_rates').insert({
+        province: province || null,
+        city: city || null,
+        fee,
+        free_threshold: newRate.free_threshold === '' ? null : Number(newRate.free_threshold),
+      });
+
+      if (error) {
+        if (error.code === '23505') throw new Error('There is already a fee for that area.');
+        throw error;
+      }
+
+      setNewRate({ province: '', city: '', fee: '', free_threshold: '' });
+      showToast('Delivery area added.', 'success');
+      loadShippingRates();
+    } catch (error) {
+      showAlert('Could not add the area: ' + error.message);
+    } finally {
+      setSavingShipping(false);
+    }
+  };
+
+  const deleteShippingRate = async (rate) => {
+    const confirmed = await showConfirm({
+      tone: 'error',
+      title: 'Remove this delivery area?',
+      message: `Orders going to ${describeArea(rate)} will fall back to a wider rate.`,
+      confirmLabel: 'Remove area',
+    });
+    if (!confirmed) return;
+
+    try {
+      const { error } = await supabase.from('shop_shipping_rates').delete().eq('id', rate.id);
+      if (error) throw error;
+      showToast('Delivery area removed.', 'success');
+      loadShippingRates();
+    } catch (error) {
+      showAlert('Could not remove the area: ' + error.message);
     }
   };
 
@@ -2120,6 +2220,11 @@ export default function ShopAdminPage() {
                     </div>
                     <div className="sm:text-right">
                       <div className="text-2xl font-bold text-blue-600">{peso(order.total_amount)}</div>
+                      {Number(order.shipping_fee) > 0 && (
+                        <div className="text-xs text-gray-500">
+                          includes {peso(order.shipping_fee)} delivery
+                        </div>
+                      )}
                       <div className="text-sm text-gray-500">
                         {new Date(order.created_at).toLocaleString('en-PH', { dateStyle: 'medium', timeStyle: 'short' })}
                       </div>
@@ -2766,6 +2871,134 @@ export default function ShopAdminPage() {
                     {savingSettings ? 'Saving...' : 'Save Changes'}
                   </button>
                 </div>
+              </div>
+
+              {/* Delivery fees */}
+              <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                <h4 className="font-bold text-lg mb-1 flex items-center gap-2">
+                  <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17a2 2 0 11-4 0 2 2 0 014 0zM19 17a2 2 0 11-4 0 2 2 0 014 0z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16V6a1 1 0 00-1-1H4a1 1 0 00-1 1v10a1 1 0 001 1h1m8-1a1 1 0 01-1 1H9m4-1V8a1 1 0 011-1h2.586a1 1 0 01.707.293l3.414 3.414a1 1 0 01.293.707V16a1 1 0 01-1 1h-1" />
+                  </svg>
+                  Delivery Fees
+                </h4>
+                <p className="mb-4 text-sm text-gray-600">
+                  Charged once per shop on each order. The most specific area wins: a city beats its province, and
+                  the province beats &quot;Anywhere else&quot;. Set a free-delivery amount to waive the fee on bigger
+                  baskets.
+                </p>
+
+                {!shippingReady ? (
+                  <p className="rounded-lg bg-yellow-50 p-3 text-sm text-yellow-900">
+                    Delivery fees are not set up yet. Run <strong>supabase-shipping-chat-gallery.sql</strong> in
+                    Supabase.
+                  </p>
+                ) : (
+                  <>
+                    <div className="space-y-3">
+                      {shippingRates.map((rate) => (
+                        <div key={rate.id} className="rounded-lg border border-gray-200 p-3">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <p className="font-semibold text-gray-900">{describeArea(rate)}</p>
+                            {rate.province && (
+                              <button
+                                onClick={() => deleteShippingRate(rate)}
+                                className="min-h-[36px] rounded-lg px-3 text-xs font-semibold text-red-600 hover:bg-red-50"
+                              >
+                                Remove
+                              </button>
+                            )}
+                          </div>
+
+                          <div className="mt-2 grid gap-3 sm:grid-cols-3">
+                            <label className="text-xs font-semibold text-gray-600">
+                              Fee (₱)
+                              <input
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                value={rate.fee ?? ''}
+                                onChange={(e) =>
+                                  setShippingRates((current) =>
+                                    current.map((entry) =>
+                                      entry.id === rate.id ? { ...entry, fee: e.target.value } : entry
+                                    )
+                                  )
+                                }
+                                className="mt-1 w-full min-h-[44px] rounded-lg border-2 px-3 text-sm font-normal text-gray-900"
+                              />
+                            </label>
+
+                            <label className="text-xs font-semibold text-gray-600">
+                              Free over (₱, optional)
+                              <input
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                value={rate.free_threshold ?? ''}
+                                onChange={(e) =>
+                                  setShippingRates((current) =>
+                                    current.map((entry) =>
+                                      entry.id === rate.id ? { ...entry, free_threshold: e.target.value } : entry
+                                    )
+                                  )
+                                }
+                                placeholder="Never free"
+                                className="mt-1 w-full min-h-[44px] rounded-lg border-2 px-3 text-sm font-normal text-gray-900"
+                              />
+                            </label>
+
+                            <div className="flex items-end">
+                              <button
+                                onClick={() => saveShippingRate(rate)}
+                                disabled={savingShipping}
+                                className="min-h-[44px] w-full rounded-lg bg-blue-600 px-4 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
+                              >
+                                Save
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="mt-5 rounded-lg border-2 border-dashed border-gray-200 p-3">
+                      <p className="mb-2 text-sm font-semibold text-gray-900">Add an area</p>
+                      <div className="grid gap-3 sm:grid-cols-4">
+                        <input
+                          type="text"
+                          value={newRate.province}
+                          onChange={(e) => setNewRate({ ...newRate, province: e.target.value })}
+                          placeholder="Province"
+                          className="min-h-[44px] rounded-lg border-2 px-3 text-sm"
+                        />
+                        <input
+                          type="text"
+                          value={newRate.city}
+                          onChange={(e) => setNewRate({ ...newRate, city: e.target.value })}
+                          placeholder="City (optional)"
+                          className="min-h-[44px] rounded-lg border-2 px-3 text-sm"
+                        />
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={newRate.fee}
+                          onChange={(e) => setNewRate({ ...newRate, fee: e.target.value })}
+                          placeholder="Fee"
+                          className="min-h-[44px] rounded-lg border-2 px-3 text-sm"
+                        />
+                        <button
+                          onClick={addShippingRate}
+                          disabled={savingShipping}
+                          className="min-h-[44px] rounded-lg bg-gray-900 px-4 text-sm font-semibold text-white hover:bg-gray-800 disabled:opacity-50"
+                        >
+                          Add
+                        </button>
+                      </div>
+                    </div>
+                  </>
+                )}
               </div>
 
               {/* Security Settings */}

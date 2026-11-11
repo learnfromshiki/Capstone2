@@ -12,6 +12,7 @@ import { useDialog } from '@/components/ui/Dialog';
 import ShopProfileModal from '@/components/shop/ShopProfileModal';
 import ProductOptionsModal from '@/components/shop/ProductOptionsModal';
 import { cartLineId, describeSelection, hasOptions } from '@/lib/productOptions';
+import { openConversation } from '@/lib/messages';
 import ShopFooter from '@/components/shop/ShopFooter';
 
 export default function ShopPage() {
@@ -30,7 +31,7 @@ export default function ShopPage() {
   const [reviewableProducts, setReviewableProducts] = useState({});
 
   const [pendingProductId, setPendingProductId] = useState(null);
-  const { showToast, showConfirm } = useDialog();
+  const { showToast, showConfirm, showAlert } = useDialog();
 
   const confirmSignOut = async () => {
     const confirmed = await showConfirm({
@@ -355,6 +356,24 @@ export default function ShopPage() {
     });
 
     await fetchReviews();
+  };
+
+  /**
+   * Start (or continue) a chat with a shop, then open the customer's inbox
+   * where the conversation lives.
+   */
+  const messageShop = async (seller, productId = null) => {
+    if (!user) {
+      setShowAuthModal(true);
+      return;
+    }
+
+    try {
+      await openConversation(seller.id, productId);
+      window.location.href = '/shop/buyer?tab=messages';
+    } catch (error) {
+      showAlert(error.message || 'Could not open the chat.');
+    }
   };
 
   /** Shared gate: a shopper must be signed in, active, and the item in stock. */
@@ -849,6 +868,7 @@ export default function ShopPage() {
           setSelectedProduct(null);
           setSelectedSellerId(sellerId);
         }}
+        onMessageShop={(seller) => messageShop(seller, selectedProduct?.id || null)}
         reviews={selectedProduct ? reviewsByProduct[selectedProduct.id] || [] : []}
         canReview={Boolean(selectedProduct && user && reviewableProducts[selectedProduct.id])}
         onSubmitReview={submitProductReview}
@@ -875,6 +895,7 @@ export default function ShopPage() {
           setSelectedSellerId(null);
           setSelectedProduct(product);
         }}
+        onMessageShop={(seller) => messageShop(seller)}
       />
 
       {/* Auth Modal */}

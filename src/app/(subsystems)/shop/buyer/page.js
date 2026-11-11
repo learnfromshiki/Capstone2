@@ -15,6 +15,7 @@ import { joinName, splitName } from '@/lib/profile';
 import { ROLE_LABELS } from '@/lib/roles';
 import { useDialog } from '@/components/ui/Dialog';
 import { cartLineId, describeSelection } from '@/lib/productOptions';
+import ChatPanel from '@/components/shop/ChatPanel';
 import Avatar from '@/components/ui/Avatar';
 import AvatarUpload from '@/components/ui/AvatarUpload';
 
@@ -92,6 +93,28 @@ export default function BuyerDashboard() {
   const [showPassword, setShowPassword] = useState(false);
   const [cart, setCart] = useState([]);
   const [showCheckout, setShowCheckout] = useState(false);
+  const [shopNames, setShopNames] = useState({});
+
+  // The chat shows shop names; shop_sellers is readable by everyone.
+  useEffect(() => {
+    let cancelled = false;
+
+    (async () => {
+      const { data } = await supabase.from('shop_sellers').select('id, business_name');
+      if (cancelled || !data) return;
+
+      setShopNames(
+        data.reduce((acc, seller) => {
+          acc[seller.id] = seller.business_name;
+          return acc;
+        }, {})
+      );
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   const [shopSettings, setShopSettings] = useState(null);
 
   // Open a specific tab from a link, e.g. "Track my order" after checkout
@@ -99,7 +122,7 @@ export default function BuyerDashboard() {
   useEffect(() => {
     try {
       const tab = new URLSearchParams(window.location.search).get('tab');
-      if (['home', 'orders', 'cart', 'wishlist', 'reviews', 'profile', 'settings'].includes(tab)) {
+      if (['home', 'orders', 'cart', 'messages', 'wishlist', 'reviews', 'profile', 'settings'].includes(tab)) {
         setActiveTab(tab);
       }
     } catch (error) {
@@ -741,6 +764,20 @@ export default function BuyerDashboard() {
                 </button>
 
                 <button
+                  onClick={() => setActiveTab('messages')}
+                  className={`flex min-h-[44px] items-center gap-2 px-4 py-3 text-left text-sm font-medium transition-colors whitespace-nowrap lg:gap-3 lg:px-6 lg:py-4 ${
+                    activeTab === 'messages'
+                      ? 'bg-blue-50 text-blue-600 border-b-4 border-blue-600 lg:border-b-0 lg:border-l-4'
+                      : 'text-gray-700 hover:bg-gray-50'
+                  }`}
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                  </svg>
+                  Messages
+                </button>
+
+                <button
                   onClick={() => setActiveTab('wishlist')}
                   className={`flex min-h-[44px] items-center gap-2 px-4 py-3 text-left text-sm font-medium transition-colors whitespace-nowrap lg:gap-3 lg:px-6 lg:py-4 ${
                     activeTab === 'wishlist'
@@ -1022,6 +1059,12 @@ export default function BuyerDashboard() {
 
                           <div className="border-t mt-4 pt-4 flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-center">
                             <div>
+                              {Number(order.shipping_fee) > 0 && (
+                                <p className="text-xs text-gray-500">
+                                  Items ₱{(Number(order.total_amount) - Number(order.shipping_fee)).toFixed(2)} +
+                                  delivery ₱{Number(order.shipping_fee).toFixed(2)}
+                                </p>
+                              )}
                               <p className="text-sm text-gray-600">Total Amount</p>
                               <p className="text-2xl font-bold text-blue-600">₱{Number(order.total_amount).toFixed(2)}</p>
                             </div>
@@ -1219,6 +1262,8 @@ export default function BuyerDashboard() {
                 </div>
               </div>
             )}
+
+            {activeTab === 'messages' && <ChatPanel role="buyer" shopNameById={shopNames} />}
 
             {activeTab === 'wishlist' && (
               <div className="bg-white rounded-xl shadow-sm border border-gray-100">

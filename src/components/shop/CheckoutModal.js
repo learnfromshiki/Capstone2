@@ -10,6 +10,7 @@ import PaymentInstructions from './PaymentInstructions';
 import { describeSelection } from '@/lib/productOptions';
 import AddressFields from './AddressFields';
 import { formatAddress, parseAddress } from '@/lib/philippineAddresses';
+import { fetchShippingFee } from '@/lib/shipping';
 
 const MAX_QUANTITY = 9999;
 
@@ -56,6 +57,7 @@ export default function CheckoutModal({ cart, total, onClose, onSuccess, onRequi
     street: '',
     landmark: '',
   });
+  const [shippingFee, setShippingFee] = useState(0);
   const [error, setError] = useState('');
   const [formData, setFormData] = useState({
     fullName: '',
@@ -105,6 +107,29 @@ export default function CheckoutModal({ cart, total, onClose, onSuccess, onRequi
       cancelled = true;
     };
   }, [user]);
+
+  // The delivery fee for this address. The database works out the real figure
+  // again when the order is placed, so this is only what the customer sees.
+  useEffect(() => {
+    let cancelled = false;
+
+    if (!addressParts.province) {
+      setShippingFee(0);
+      return undefined;
+    }
+
+    fetchShippingFee({
+      province: addressParts.province,
+      city: addressParts.city,
+      subtotal: Number(total) || 0,
+    }).then((fee) => {
+      if (!cancelled) setShippingFee(fee);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [addressParts.province, addressParts.city, total]);
 
   // GCash / bank details the admin saved in Admin -> Settings
   useEffect(() => {
@@ -384,6 +409,8 @@ export default function CheckoutModal({ cart, total, onClose, onSuccess, onRequi
       p_delivery_address: formData.address.trim(),
       p_payment_method: formData.paymentMethod,
       p_notes: formData.notes.trim() || null,
+      p_province: addressParts.province || null,
+      p_city: addressParts.city || null,
     });
 
     if (rpcError) {
@@ -756,10 +783,25 @@ export default function CheckoutModal({ cart, total, onClose, onSuccess, onRequi
                   <span className="flex-shrink-0">₱{(Number(item.price) * Number(item.quantity)).toFixed(2)}</span>
                 </div>
               ))}
-              <div className="border-t mt-2 pt-2 flex justify-between font-bold">
-                <span>Total</span>
-                <span className="text-blue-600">₱{summaryTotal.toFixed(2)}</span>
+              <div className="mt-2 flex justify-between border-t pt-2 text-sm">
+                <span className="text-gray-600">Items</span>
+                <span>₱{summaryTotal.toFixed(2)}</span>
               </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-600">Delivery</span>
+                <span className={shippingFee === 0 ? 'font-semibold text-green-600' : ''}>
+                  {shippingFee === 0 ? 'FREE' : `₱${shippingFee.toFixed(2)}`}
+                </span>
+              </div>
+              <div className="mt-2 flex justify-between border-t pt-2 font-bold">
+                <span>Total</span>
+                <span className="text-blue-600">₱{(summaryTotal + shippingFee).toFixed(2)}</span>
+              </div>
+              {summaryItems.some((item) => item.seller_id) && shippingFee > 0 && (
+                <p className="mt-2 text-xs text-gray-500">
+                  Each shop delivers separately, so the fee applies once per shop.
+                </p>
+              )}
             </div>
 
             {/* Payment Options */}

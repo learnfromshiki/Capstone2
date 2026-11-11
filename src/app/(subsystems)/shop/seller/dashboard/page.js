@@ -10,6 +10,7 @@ import PasswordRequirements from '@/components/PasswordRequirements';
 import { describePasswordProblem, isPasswordValid } from '@/lib/passwordPolicy';
 import { fetchProfileRow, joinName, splitName } from '@/lib/profile';
 import { describeSelection, readOptions } from '@/lib/productOptions';
+import ChatPanel from '@/components/shop/ChatPanel';
 import { useDialog } from '@/components/ui/Dialog';
 import Avatar from '@/components/ui/Avatar';
 import AvatarUpload from '@/components/ui/AvatarUpload';
@@ -48,6 +49,7 @@ const SELLER_TABS = [
   { id: 'dashboard', label: 'Dashboard' },
   { id: 'products', label: 'Products' },
   { id: 'orders', label: 'Orders' },
+  { id: 'messages', label: 'Messages' },
   { id: 'earnings', label: 'Earnings' },
   { id: 'settings', label: 'Shop' },
   { id: 'profile', label: 'Profile' },
@@ -121,6 +123,8 @@ export default function SellerDashboard() {
     imageFile: null,
     // What the buyer gets to choose: [{ name: 'Colour', values: ['Red'] }]
     options: [],
+    // Extra photos. The first one is the cover (image_url).
+    images: [],
   });
 
   useEffect(() => {
@@ -222,7 +226,7 @@ export default function SellerDashboard() {
 
     const { data: orderRows, error: ordersError } = await supabase
       .from('shop_orders')
-      .select('id, customer_name, customer_email, customer_phone, delivery_address, notes, status, payment_method, created_at')
+      .select('id, customer_name, customer_email, customer_phone, delivery_address, notes, status, payment_method, shipping_fee, created_at')
       .in('id', orderIds)
       .order('created_at', { ascending: false });
 
@@ -338,23 +342,62 @@ export default function SellerDashboard() {
     }
   };
 
+  const MAX_PRODUCT_IMAGES = 6;
+
+  /** Add one or more photos to the product gallery. */
   const handleImageUpload = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
+    const files = Array.from(e.target.files || []);
+    e.target.value = '';
+    if (files.length === 0) return;
+
+    const current = newProduct.images || [];
+    const room = MAX_PRODUCT_IMAGES - current.length;
+
+    if (room <= 0) {
+      showAlert(`A product can have up to ${MAX_PRODUCT_IMAGES} photos. Remove one first.`);
+      return;
+    }
 
     setUploadingImage(true);
     try {
-      const { url: imageUrl, error } = await uploadProductImage(file);
-      if (error) throw error;
-      setNewProduct({ ...newProduct, image_url: imageUrl, imageFile: file });
-      setImagePreview(URL.createObjectURL(file));
-      showToast('Image uploaded successfully!', 'success');
+      const uploaded = [];
+
+      for (const file of files.slice(0, room)) {
+        const { url: imageUrl, error } = await uploadProductImage(file);
+        if (error) throw error;
+        uploaded.push(imageUrl);
+      }
+
+      const images = [...current, ...uploaded];
+      setNewProduct((prev) => ({ ...prev, images, image_url: prev.image_url || images[0] }));
+      setImagePreview(images[0]);
+
+      showToast(
+        uploaded.length === 1 ? 'Photo uploaded.' : `${uploaded.length} photos uploaded.`,
+        'success'
+      );
     } catch (error) {
       console.error('Error uploading image:', error);
       showAlert('Failed to upload image: ' + error.message);
     } finally {
       setUploadingImage(false);
     }
+  };
+
+  /** Remove one photo; the first remaining one becomes the cover. */
+  const removeProductImage = (url) => {
+    setNewProduct((prev) => {
+      const images = (prev.images || []).filter((entry) => entry !== url);
+      const image_url = images.includes(prev.image_url) ? prev.image_url : images[0] || '';
+      setImagePreview(image_url);
+      return { ...prev, images, image_url };
+    });
+  };
+
+  /** Make one photo the cover shown on the product card. */
+  const makeCoverImage = (url) => {
+    setNewProduct((prev) => ({ ...prev, image_url: url }));
+    setImagePreview(url);
   };
 
   // Sellers can add a category while listing a product instead of waiting for an admin
@@ -455,13 +498,19 @@ export default function SellerDashboard() {
         }))
         .filter((group) => group.name && group.values.length > 0);
 
+      // The cover photo leads the gallery, so the order on screen matches.
+      const gallery = (newProduct.images || []).filter(Boolean);
+      const cover = newProduct.image_url || gallery[0] || null;
+      const images = cover ? [cover, ...gallery.filter((url) => url !== cover)] : gallery;
+
       const payload = {
         name,
         description,
         price,
         stock,
         category: newProduct.category,
-        image_url: newProduct.image_url || null,
+        image_url: cover,
+        images,
         artisan_name: newProduct.artisan_name.trim() || null,
         options,
       };
@@ -614,6 +663,9 @@ export default function SellerDashboard() {
       artisan_name: product.artisan_name || '',
       imageFile: null,
       options: readOptions(product),
+      images: Array.isArray(product.images) && product.images.length > 0
+        ? product.images
+        : [product.image_url].filter(Boolean),
     });
     setImagePreview(product.image_url || '');
     setShowAddProduct(true);
@@ -632,6 +684,7 @@ export default function SellerDashboard() {
       stock: '',
       category: 'handicrafts',
       options: [],
+      images: [],
       image_url: '',
       artisan_name: '',
       imageFile: null,
@@ -1024,6 +1077,20 @@ export default function SellerDashboard() {
                 {stats.totalOrders}
               </span>
             )}
+          </button>
+
+          <button
+            onClick={() => setActiveTab('messages')}
+            className={`w-full flex items-center gap-3 px-6 py-3 text-left transition-colors ${
+              activeTab === 'messages'
+                ? 'bg-blue-700 border-l-4 border-white font-semibold'
+                : 'hover:bg-blue-700/50'
+            }`}
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+            </svg>
+            <span className="font-medium">Messages</span>
           </button>
 
           <button
@@ -1614,6 +1681,11 @@ export default function SellerDashboard() {
                     <div className="text-left sm:text-right">
                       <div className="text-2xl font-bold text-blue-600">₱{order.my_total.toLocaleString()}</div>
                       <p className="text-xs text-gray-500">Your items in this order</p>
+                      {Number(order.shipping_fee) > 0 && (
+                        <p className="text-xs text-gray-500">
+                          + ₱{Number(order.shipping_fee).toFixed(2)} delivery collected
+                        </p>
+                      )}
                       <div className="text-sm text-gray-500">
                         {new Date(order.created_at).toLocaleString('en-PH', { dateStyle: 'medium', timeStyle: 'short' })}
                       </div>
@@ -1671,6 +1743,8 @@ export default function SellerDashboard() {
             </div>
           </div>
         )}
+
+        {activeTab === 'messages' && <ChatPanel role="seller" sellerId={seller.id} />}
 
         {activeTab === 'earnings' && (
           <div>
@@ -2230,23 +2304,62 @@ export default function SellerDashboard() {
               </div>
 
               <div>
-                <label className="block text-sm font-semibold mb-2">Product Image *</label>
+                <label className="block text-sm font-semibold mb-2">Product Photos *</label>
                 <input
                   type="file"
                   accept="image/*"
+                  multiple
                   onChange={handleImageUpload}
                   className="w-full px-4 py-3 border-2 rounded-xl focus:ring-2 focus:ring-blue-500"
                 />
                 <p className="mt-1 text-xs text-gray-500">
-                  Customers only see a grey box without one, so a photo is required. JPG, PNG, GIF or WebP, up to 5 MB.
+                  At least one photo is required - customers only see a grey box without it. You can add up to{' '}
+                  {MAX_PRODUCT_IMAGES}; the first is the cover shown on the product card. JPG, PNG, GIF or WebP, up
+                  to 5 MB each.
                 </p>
                 {uploadingImage && <p className="text-sm text-blue-600 mt-2">Uploading...</p>}
-                {(imagePreview || newProduct.image_url) && (
-                  <img
-                    src={imagePreview || newProduct.image_url}
-                    alt="Preview"
-                    className="mt-4 w-32 h-32 object-cover rounded-lg border border-gray-200"
-                  />
+
+                {(newProduct.images || []).length > 0 && (
+                  <div className="mt-4 flex flex-wrap gap-3">
+                    {(newProduct.images || []).map((url) => {
+                      const isCover = url === newProduct.image_url;
+
+                      return (
+                        <div key={url} className="w-28">
+                          <div
+                            className={`relative h-28 w-28 overflow-hidden rounded-lg border-2 ${
+                              isCover ? 'border-blue-600' : 'border-gray-200'
+                            }`}
+                          >
+                            <img src={url} alt="Product" className="h-full w-full object-cover" />
+                            {isCover && (
+                              <span className="absolute left-1 top-1 rounded-full bg-blue-600 px-2 py-0.5 text-[10px] font-bold text-white">
+                                Cover
+                              </span>
+                            )}
+                          </div>
+                          <div className="mt-1 flex gap-1">
+                            {!isCover && (
+                              <button
+                                type="button"
+                                onClick={() => makeCoverImage(url)}
+                                className="flex-1 rounded-md bg-blue-50 py-1 text-[11px] font-semibold text-blue-700 hover:bg-blue-100"
+                              >
+                                Cover
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => removeProductImage(url)}
+                              className="flex-1 rounded-md bg-red-50 py-1 text-[11px] font-semibold text-red-600 hover:bg-red-100"
+                            >
+                              Remove
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
                 )}
               </div>
 
