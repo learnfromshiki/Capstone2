@@ -2,7 +2,7 @@
 
 import StarRating from './StarRating';
 
-export default function ProductCard({ product, onAddToCart, onBuyNow, onViewDetails, sellerInfo, reviewSummary }) {
+export default function ProductCard({ product, onAddToCart, onBuyNow, onViewDetails, sellerInfo, reviewSummary, onViewShop }) {
   const categoryIcons = {
     handicrafts: '🧺',
     food: '🍽️',
@@ -93,9 +93,21 @@ export default function ProductCard({ product, onAddToCart, onBuyNow, onViewDeta
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-xs text-gray-500">Sold by</p>
-              <p className="text-sm font-semibold text-blue-600 truncate">
-                {sellerInfo.business_name}
-              </p>
+              {onViewShop ? (
+                <button
+                  type="button"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onViewShop();
+                  }}
+                  title={`Visit ${sellerInfo.business_name}`}
+                  className="block w-full truncate text-left text-sm font-semibold text-blue-600 underline-offset-2 hover:underline"
+                >
+                  {sellerInfo.business_name}
+                </button>
+              ) : (
+                <p className="text-sm font-semibold text-blue-600 truncate">{sellerInfo.business_name}</p>
+              )}
             </div>
           </div>
         )}

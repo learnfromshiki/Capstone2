@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 // Shares the storefront client: sessions are per tab, so signing in as an admin
 // from the shop carries into this page instead of asking for the password again.
-import { supabase } from '@/lib/supabaseClient';
+import { supabase, startAdminSession } from '@/lib/supabaseClient';
 import { uploadProductImage } from '@/lib/imageUpload';
 import { getAccountRole } from '@/lib/roles';
 import { formatOrderNumber, getAllowedStatuses, PAYMENT_LABELS, STATUS_LABELS, transitionOrderStatus } from '@/lib/orders';
@@ -152,6 +152,8 @@ export default function ShopAdminPage() {
         const role = await getAccountRole(session.user.id, supabase);
 
         if (role === 'admin') {
+          // Keep the admin session inside this tab only (see supabaseClient.js)
+          startAdminSession();
           setIsAuthenticated(true);
           setAdminEmail(session.user.email || '');
           setAdminName(session.user.user_metadata?.full_name || 'Admin');
@@ -234,6 +236,7 @@ export default function ShopAdminPage() {
         return;
       }
 
+      startAdminSession();
       setIsAuthenticated(true);
       setAdminName(data.user.user_metadata?.full_name || 'Admin');
       setAdminEmail(data.user.email || adminEmail.trim());

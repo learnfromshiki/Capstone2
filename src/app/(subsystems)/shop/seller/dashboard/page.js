@@ -6,6 +6,9 @@ import { useSellerAuth } from '@/contexts/SellerAuthContext';
 import { supabase } from '@/lib/supabaseClient';
 import { uploadProductImage } from '@/lib/imageUpload';
 import { formatOrderNumber, getAllowedStatuses, PAYMENT_LABELS, STATUS_LABELS, transitionOrderStatus } from '@/lib/orders';
+import PasswordRequirements from '@/components/PasswordRequirements';
+import { describePasswordProblem, isPasswordValid } from '@/lib/passwordPolicy';
+import { fetchProfileRow, joinName, splitName } from '@/lib/profile';
 import Link from 'next/link';
 
 // Totals for this seller's items over the selected range, used by the dashboard chart
@@ -73,6 +76,14 @@ export default function SellerDashboard() {
   const [showAddProduct, setShowAddProduct] = useState(false);
   const [showNewCategory, setShowNewCategory] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState('');
+  const [newCategoryIcon, setNewCategoryIcon] = useState('📦');
+  // The owner's own name, kept on the profiles row (the shop name is separate)
+  const [ownerName, setOwnerName] = useState({ first_name: '', last_name: '' });
+  const [savingOwnerName, setSavingOwnerName] = useState(false);
+  const [passwordForm, setPasswordForm] = useState({ current: '', next: '', confirm: '' });
+  const [showPassword, setShowPassword] = useState(false);
+  const [changingPassword, setChangingPassword] = useState(false);
+  const [sendingReset, setSendingReset] = useState(false);
   const [savingCategory, setSavingCategory] = useState(false);
   const [editingProductId, setEditingProductId] = useState(null);
   const [savingProduct, setSavingProduct] = useState(false);
@@ -369,7 +380,7 @@ export default function SellerDashboard() {
         .insert([{
           name,
           slug,
-          icon: '📦',
+          icon: newCategoryIcon || '📦',
           display_order: categories.length,
         }])
         .select()
@@ -415,6 +426,11 @@ export default function SellerDashboard() {
 
     if (!Number.isInteger(stock) || stock < 0) {
       alert('Stock must be a whole number of zero or more.');
+      return;
+    }
+
+    if (!newProduct.image_url) {
+      alert('Please add a product photo. Customers will not buy from an empty picture box.');
       return;
     }
 
@@ -573,6 +589,131 @@ export default function SellerDashboard() {
   };
 
   const [settingsFeedback, setSettingsFeedback] = useState({ type: '', text: '' });
+
+  // The owner's name lives on profiles, not on the shop row
+  useEffect(() => {
+    if (!user?.id) return;
+    let cancelled = false;
+
+    (async () => {
+      const row = await fetchProfileRow(user.id);
+      if (cancelled || !row) return;
+
+      const stored = splitName(row.full_name);
+      setOwnerName({
+        first_name: row.first_name || stored.firstName,
+        last_name: row.last_name || stored.lastName,
+      });
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user]);
+
+  const handleSaveOwnerName = async () => {
+    const fullName = joinName(ownerName.first_name, ownerName.last_name);
+
+    if (!fullName) {
+      setSettingsFeedback({ type: 'error', text: 'Please enter your first and last name.' });
+      return;
+    }
+
+    setSavingOwnerName(true);
+    setSettingsFeedback({ type: '', text: '' });
+
+    try {
+      const base = { full_name: fullName, updated_at: new Date().toISOString() };
+
+      let { error } = await supabase
+        .from('profiles')
+        .update({
+          ...base,
+          first_name: ownerName.first_name.trim() || null,
+          last_name: ownerName.last_name.trim() || null,
+        })
+        .eq('id', user.id);
+
+      // Database without the name columns yet: save the combined name only.
+      if (error && /first_name|last_name/.test(error.message || '')) {
+        ({ error } = await supabase.from('profiles').update(base).eq('id', user.id));
+      }
+
+      if (error) throw error;
+
+      setSettingsFeedback({ type: 'success', text: 'Your name has been saved.' });
+      setTimeout(() => setSettingsFeedback({ type: '', text: '' }), 4000);
+    } catch (error) {
+      console.error('Error saving your name:', error);
+      setSettingsFeedback({ type: 'error', text: 'Could not save your name: ' + error.message });
+    } finally {
+      setSavingOwnerName(false);
+    }
+  };
+
+  const handleChangePassword = async () => {
+    const passwordProblem = describePasswordProblem(passwordForm.next);
+    if (passwordProblem) {
+      setSettingsFeedback({ type: 'error', text: passwordProblem });
+      return;
+    }
+
+    if (passwordForm.next !== passwordForm.confirm) {
+      setSettingsFeedback({ type: 'error', text: 'The two new passwords do not match.' });
+      return;
+    }
+
+    setChangingPassword(true);
+    setSettingsFeedback({ type: '', text: '' });
+
+    try {
+      // Check the current password before changing it, so a logged-in tab left
+      // open by someone else cannot take over the shop.
+      const { error: verifyError } = await supabase.auth.signInWithPassword({
+        email: user.email,
+        password: passwordForm.current,
+      });
+
+      if (verifyError) {
+        setSettingsFeedback({ type: 'error', text: 'Your current password is incorrect.' });
+        return;
+      }
+
+      const { error } = await supabase.auth.updateUser({ password: passwordForm.next });
+      if (error) throw error;
+
+      setPasswordForm({ current: '', next: '', confirm: '' });
+      setSettingsFeedback({ type: 'success', text: 'Password updated.' });
+      setTimeout(() => setSettingsFeedback({ type: '', text: '' }), 4000);
+    } catch (error) {
+      console.error('Error changing password:', error);
+      setSettingsFeedback({ type: 'error', text: 'Could not change the password: ' + error.message });
+    } finally {
+      setChangingPassword(false);
+    }
+  };
+
+  const handleEmailPasswordReset = async () => {
+    setSendingReset(true);
+    setSettingsFeedback({ type: '', text: '' });
+
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(user.email, {
+        redirectTo: `${window.location.origin}/reset-password`,
+      });
+      if (error) throw error;
+
+      setSettingsFeedback({
+        type: 'success',
+        text: `We sent a password reset code and link to ${user.email}.`,
+      });
+    } catch (error) {
+      console.error('Error sending the reset email:', error);
+      setSettingsFeedback({ type: 'error', text: error.message || 'Could not send the reset email.' });
+    } finally {
+      setSendingReset(false);
+    }
+  };
 
   const handleSaveShopProfile = async () => {
     setSavingProfile(true);
@@ -1619,6 +1760,52 @@ export default function SellerDashboard() {
                   </div>
                 </div>
 
+                <div className="pt-6 border-t">
+                  <h4 className="font-semibold text-gray-900 mb-1">Your Name</h4>
+                  <p className="text-sm text-gray-600 mb-4">
+                    The owner of this shop. Customers see the shop name; this is how CONNECT-Daet addresses you.
+                  </p>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label htmlFor="ownerFirstName" className="block text-sm font-semibold text-gray-700 mb-2">
+                        First Name
+                      </label>
+                      <input
+                        id="ownerFirstName"
+                        type="text"
+                        value={ownerName.first_name}
+                        onChange={(e) => setOwnerName({ ...ownerName, first_name: e.target.value })}
+                        autoComplete="given-name"
+                        maxLength={60}
+                        placeholder="Juan"
+                        className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      />
+                    </div>
+                    <div>
+                      <label htmlFor="ownerLastName" className="block text-sm font-semibold text-gray-700 mb-2">
+                        Last Name
+                      </label>
+                      <input
+                        id="ownerLastName"
+                        type="text"
+                        value={ownerName.last_name}
+                        onChange={(e) => setOwnerName({ ...ownerName, last_name: e.target.value })}
+                        autoComplete="family-name"
+                        maxLength={60}
+                        placeholder="Dela Cruz"
+                        className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      />
+                    </div>
+                  </div>
+                  <button
+                    onClick={handleSaveOwnerName}
+                    disabled={savingOwnerName}
+                    className="mt-4 min-h-[44px] rounded-lg bg-blue-600 px-6 font-semibold text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
+                  >
+                    {savingOwnerName ? 'Saving...' : 'Save My Name'}
+                  </button>
+                </div>
+
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-6 border-t">
                   <div>
                     <label className="block text-sm font-semibold text-gray-700 mb-2">Business Name</label>
@@ -1679,6 +1866,73 @@ export default function SellerDashboard() {
                       <p className="text-sm text-gray-600 mt-1">
                         Rating{rating.count ? ` (${rating.count})` : ''}
                       </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="pt-6 border-t">
+                  <h4 className="font-semibold text-gray-900 mb-1">Change Password</h4>
+                  <p className="text-sm text-gray-600 mb-4">
+                    Keep your shop safe. You will need your current password.
+                  </p>
+
+                  <div className="max-w-md space-y-3">
+                    <input
+                      type={showPassword ? 'text' : 'password'}
+                      value={passwordForm.current}
+                      onChange={(e) => setPasswordForm({ ...passwordForm, current: e.target.value })}
+                      placeholder="Current password"
+                      autoComplete="current-password"
+                      className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500"
+                    />
+
+                    <div>
+                      <input
+                        type={showPassword ? 'text' : 'password'}
+                        value={passwordForm.next}
+                        onChange={(e) => setPasswordForm({ ...passwordForm, next: e.target.value })}
+                        placeholder="New password"
+                        autoComplete="new-password"
+                        className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500"
+                      />
+                      <PasswordRequirements value={passwordForm.next} />
+                    </div>
+
+                    <input
+                      type={showPassword ? 'text' : 'password'}
+                      value={passwordForm.confirm}
+                      onChange={(e) => setPasswordForm({ ...passwordForm, confirm: e.target.value })}
+                      placeholder="Confirm new password"
+                      autoComplete="new-password"
+                      className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500"
+                    />
+
+                    <label htmlFor="sellerShowPassword" className="flex min-h-[44px] cursor-pointer items-center">
+                      <input
+                        type="checkbox"
+                        id="sellerShowPassword"
+                        checked={showPassword}
+                        onChange={(e) => setShowPassword(e.target.checked)}
+                        className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-2 focus:ring-blue-600"
+                      />
+                      <span className="ml-2 text-sm font-medium text-gray-700">Show password</span>
+                    </label>
+
+                    <div className="flex flex-wrap gap-3">
+                      <button
+                        onClick={handleChangePassword}
+                        disabled={changingPassword || !isPasswordValid(passwordForm.next)}
+                        className="min-h-[44px] rounded-lg bg-blue-600 px-6 font-semibold text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {changingPassword ? 'Updating...' : 'Update Password'}
+                      </button>
+                      <button
+                        onClick={handleEmailPasswordReset}
+                        disabled={sendingReset}
+                        className="min-h-[44px] rounded-lg border-2 border-blue-200 px-5 font-semibold text-blue-600 transition-colors hover:bg-blue-50 disabled:opacity-50"
+                      >
+                        {sendingReset ? 'Sending...' : 'Forgot password? Email me a code'}
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -1797,44 +2051,13 @@ export default function SellerDashboard() {
                   )}
                 </select>
 
-                {showNewCategory ? (
-                  <div className="mt-2 flex items-center gap-2">
-                    <input
-                      type="text"
-                      value={newCategoryName}
-                      onChange={(e) => setNewCategoryName(e.target.value)}
-                      placeholder="New category name"
-                      maxLength={40}
-                      className="flex-1 min-h-[44px] px-4 py-2.5 border-2 rounded-xl focus:ring-2 focus:ring-blue-500"
-                    />
-                    <button
-                      type="button"
-                      onClick={handleCreateCategory}
-                      disabled={savingCategory || !newCategoryName.trim()}
-                      className="min-h-[44px] px-4 py-2.5 rounded-xl bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 disabled:opacity-50 transition-colors"
-                    >
-                      {savingCategory ? 'Adding…' : 'Add'}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setShowNewCategory(false);
-                        setNewCategoryName('');
-                      }}
-                      className="min-h-[44px] px-3 py-2.5 rounded-xl bg-gray-100 text-gray-700 text-sm font-semibold hover:bg-gray-200 transition-colors"
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => setShowNewCategory(true)}
-                    className="mt-2 text-xs font-semibold text-blue-600 hover:text-blue-700"
-                  >
-                    + Add a new category
-                  </button>
-                )}
+                <button
+                  type="button"
+                  onClick={() => setShowNewCategory(true)}
+                  className="mt-2 min-h-[36px] text-xs font-semibold text-blue-600 hover:text-blue-700"
+                >
+                  + Add a new category
+                </button>
               </div>
 
               <div>
@@ -1848,16 +2071,23 @@ export default function SellerDashboard() {
               </div>
 
               <div>
-                <label className="block text-sm font-semibold mb-2">Product Image</label>
+                <label className="block text-sm font-semibold mb-2">Product Image *</label>
                 <input
                   type="file"
                   accept="image/*"
                   onChange={handleImageUpload}
                   className="w-full px-4 py-3 border-2 rounded-xl focus:ring-2 focus:ring-blue-500"
                 />
+                <p className="mt-1 text-xs text-gray-500">
+                  Customers only see a grey box without one, so a photo is required. JPG, PNG, GIF or WebP, up to 5 MB.
+                </p>
                 {uploadingImage && <p className="text-sm text-blue-600 mt-2">Uploading...</p>}
-                {imagePreview && (
-                  <img src={imagePreview} alt="Preview" className="mt-4 w-32 h-32 object-cover rounded-lg" />
+                {(imagePreview || newProduct.image_url) && (
+                  <img
+                    src={imagePreview || newProduct.image_url}
+                    alt="Preview"
+                    className="mt-4 w-32 h-32 object-cover rounded-lg border border-gray-200"
+                  />
                 )}
               </div>
 
@@ -1878,6 +2108,83 @@ export default function SellerDashboard() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Add category */}
+      {showNewCategory && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Add a new category"
+            className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl"
+          >
+            <h3 className="text-xl font-bold text-gray-900">Add a new category</h3>
+            <p className="mt-1 text-sm text-gray-600">
+              It becomes available to every shop on CONNECT-Daet, so please use a clear, general name.
+            </p>
+
+            <div className="mt-4 space-y-4">
+              <div>
+                <label htmlFor="categoryName" className="mb-2 block text-sm font-semibold text-gray-700">
+                  Category name *
+                </label>
+                <input
+                  id="categoryName"
+                  type="text"
+                  value={newCategoryName}
+                  onChange={(e) => setNewCategoryName(e.target.value)}
+                  placeholder="e.g. Delicacies"
+                  maxLength={40}
+                  autoFocus
+                  className="w-full min-h-[44px] rounded-xl border-2 px-4 focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <div>
+                <label htmlFor="categoryIcon" className="mb-2 block text-sm font-semibold text-gray-700">
+                  Icon
+                </label>
+                <div className="flex flex-wrap gap-2">
+                  {['📦', '🧺', '🍽️', '🎁', '🧵', '🎨', '🪔', '🌿'].map((icon) => (
+                    <button
+                      key={icon}
+                      type="button"
+                      onClick={() => setNewCategoryIcon(icon)}
+                      aria-pressed={newCategoryIcon === icon}
+                      className={`flex h-11 w-11 items-center justify-center rounded-xl border-2 text-xl transition-colors ${
+                        newCategoryIcon === icon ? 'border-blue-600 bg-blue-50' : 'border-gray-200 hover:border-gray-300'
+                      }`}
+                    >
+                      {icon}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-6 flex gap-3">
+              <button
+                type="button"
+                onClick={handleCreateCategory}
+                disabled={savingCategory || !newCategoryName.trim()}
+                className="min-h-[44px] flex-1 rounded-xl bg-blue-600 font-bold text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {savingCategory ? 'Adding...' : 'Add Category'}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowNewCategory(false);
+                  setNewCategoryName('');
+                }}
+                className="min-h-[44px] rounded-xl border-2 border-gray-300 px-6 font-semibold text-gray-700 transition-colors hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -1,11 +1,12 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabaseClient';
 import Link from 'next/link';
-import { cancelMyOrder, formatOrderNumber, PAYMENT_LABELS } from '@/lib/orders';
+import { cancelMyOrder, confirmOrderReceived, formatOrderNumber, PAYMENT_LABELS } from '@/lib/orders';
+import CheckoutModal from '@/components/shop/CheckoutModal';
 import { fetchShopSettings } from '@/lib/shopSettings';
 import PaymentInstructions from '@/components/shop/PaymentInstructions';
 import PasswordRequirements from '@/components/PasswordRequirements';
@@ -82,6 +83,10 @@ export default function BuyerDashboard() {
   const [suspended, setSuspended] = useState(false);
   const [cancellingOrderId, setCancellingOrderId] = useState(null);
   const [sendingReset, setSendingReset] = useState(false);
+  const [confirmingOrderId, setConfirmingOrderId] = useState(null);
+  const [showPassword, setShowPassword] = useState(false);
+  const [cart, setCart] = useState([]);
+  const [showCheckout, setShowCheckout] = useState(false);
   const [shopSettings, setShopSettings] = useState(null);
 
   // Open a specific tab from a link, e.g. "Track my order" after checkout
@@ -89,7 +94,7 @@ export default function BuyerDashboard() {
   useEffect(() => {
     try {
       const tab = new URLSearchParams(window.location.search).get('tab');
-      if (['home', 'orders', 'wishlist', 'reviews', 'profile', 'settings'].includes(tab)) {
+      if (['home', 'orders', 'cart', 'wishlist', 'reviews', 'profile', 'settings'].includes(tab)) {
         setActiveTab(tab);
       }
     } catch (error) {
@@ -185,6 +190,89 @@ export default function BuyerDashboard() {
       console.error('Error fetching data:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const cartKey = user ? `shop_cart:${user.id}` : null;
+
+  // The cart lives in this browser under the signed-in customer's own key, so
+  // the dashboard can show and edit it without sending anyone back to the shop.
+  const readCart = useCallback(() => {
+    if (!cartKey) return [];
+    try {
+      const stored = localStorage.getItem(cartKey);
+      return stored ? JSON.parse(stored) : [];
+    } catch (error) {
+      console.error('Error reading the cart:', error);
+      return [];
+    }
+  }, [cartKey]);
+
+  const writeCart = (next) => {
+    setCart(next);
+    if (!cartKey) return;
+    try {
+      if (next.length > 0) {
+        localStorage.setItem(cartKey, JSON.stringify(next));
+      } else {
+        localStorage.removeItem(cartKey);
+      }
+    } catch (error) {
+      console.error('Error saving the cart:', error);
+    }
+  };
+
+  useEffect(() => {
+    setCart(readCart());
+  }, [readCart]);
+
+  const cartTotal = cart.reduce(
+    (sum, item) => sum + (Number(item.price) || 0) * (Number(item.quantity) || 0),
+    0
+  );
+  const cartCount = cart.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0);
+
+  const changeCartQuantity = (productId, quantity) => {
+    const item = cart.find((entry) => entry.id === productId);
+    if (!item) return;
+
+    if (quantity <= 0) {
+      writeCart(cart.filter((entry) => entry.id !== productId));
+      return;
+    }
+
+    const maxStock = Number(item.stock) || 0;
+    if (maxStock && quantity > maxStock) {
+      alert(`Only ${maxStock} of ${item.name} in stock.`);
+      return;
+    }
+
+    writeCart(cart.map((entry) => (entry.id === productId ? { ...entry, quantity } : entry)));
+  };
+
+  const handleCheckoutSuccess = () => {
+    setShowCheckout(false);
+    writeCart([]);
+    fetchData();
+    setActiveTab('orders');
+  };
+
+  const handleConfirmReceived = async (order) => {
+    if (confirmingOrderId) return;
+    if (!window.confirm(`Confirm that order ${formatOrderNumber(order.id)} arrived? You can review the items afterwards.`)) {
+      return;
+    }
+
+    setConfirmingOrderId(order.id);
+    try {
+      await confirmOrderReceived(order.id);
+      setOrders((prev) => prev.map((row) => (row.id === order.id ? { ...row, status: 'delivered' } : row)));
+      alert('Thank you! You can now rate the items in My Reviews.');
+    } catch (error) {
+      console.error('Error confirming the order:', error);
+      alert(error.message || 'Could not confirm this order.');
+    } finally {
+      setConfirmingOrderId(null);
     }
   };
 
@@ -421,6 +509,16 @@ export default function BuyerDashboard() {
     );
   }
 
+  const checkoutModal = showCheckout ? (
+    <CheckoutModal
+      cart={cart}
+      total={cartTotal}
+      onClose={() => setShowCheckout(false)}
+      onSuccess={handleCheckoutSuccess}
+      onRequireAuth={() => setShowCheckout(false)}
+    />
+  ) : null;
+
   if (suspended) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
@@ -454,6 +552,28 @@ export default function BuyerDashboard() {
   const reviewedProductIds = new Set(reviews.map((review) => review.product_id));
 
   // Delivered items this buyer can still review (one entry per product)
+  // What was actually bought, so a review in the history shows the product and
+  // the order it came from instead of a bare star rating.
+  const purchaseByProduct = new Map();
+  orders.forEach((order) => {
+    (order.shop_order_items || []).forEach((item) => {
+      if (!item.product_id) return;
+      const existing = purchaseByProduct.get(item.product_id);
+      if (!existing || new Date(order.created_at) > new Date(existing.orderDate)) {
+        purchaseByProduct.set(item.product_id, {
+          name: item.product_name,
+          quantity: Number(item.quantity) || 0,
+          price: Number(item.price) || 0,
+          orderId: order.id,
+          orderDate: order.created_at,
+          status: order.status,
+        });
+      }
+    });
+  });
+
+  const productImageById = new Map(products.map((product) => [product.id, product.image_url]));
+
   const reviewableItems = orders
     .filter((order) => order.status === 'delivered')
     .flatMap((order) => (order.shop_order_items || []).map((item) => ({ ...item, orderId: order.id })))
@@ -547,15 +667,24 @@ export default function BuyerDashboard() {
                   )}
                 </button>
 
-                <Link
-                  href="/shop?cart=1"
-                  className="flex min-h-[44px] items-center gap-2 whitespace-nowrap px-4 py-3 text-left text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 lg:gap-3 lg:px-6 lg:py-4"
+                <button
+                  onClick={() => setActiveTab('cart')}
+                  className={`flex min-h-[44px] items-center gap-2 px-4 py-3 text-left text-sm font-medium transition-colors whitespace-nowrap lg:gap-3 lg:px-6 lg:py-4 ${
+                    activeTab === 'cart'
+                      ? 'bg-blue-50 text-blue-600 border-b-4 border-blue-600 lg:border-b-0 lg:border-l-4'
+                      : 'text-gray-700 hover:bg-gray-50'
+                  }`}
                 >
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
                   </svg>
                   My Cart
-                </Link>
+                  {cartCount > 0 && (
+                    <span className="ml-auto px-2 py-1 bg-blue-100 text-blue-600 text-xs font-bold rounded-full">
+                      {cartCount}
+                    </span>
+                  )}
+                </button>
 
                 <button
                   onClick={() => setActiveTab('wishlist')}
@@ -805,6 +934,13 @@ export default function BuyerDashboard() {
 
                           <OrderTracking status={order.status} />
 
+                          {order.status === 'shipped' && (
+                            <p className="mt-3 rounded-lg bg-green-50 px-3 py-2 text-xs text-green-800">
+                              Parcel on the way. Tap <strong>Order Received</strong> once it arrives so the shop is paid
+                              and you can rate what you bought.
+                            </p>
+                          )}
+
                           <div className="border-t pt-4 mt-4">
                             <h4 className="font-semibold mb-2 text-gray-900">Items:</h4>
                             {order.shop_order_items?.map((item, idx) => (
@@ -840,6 +976,25 @@ export default function BuyerDashboard() {
                                   {cancellingOrderId === order.id ? 'Cancelling...' : 'Cancel order'}
                                 </button>
                               )}
+                              {order.status === 'shipped' && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleConfirmReceived(order)}
+                                  disabled={confirmingOrderId === order.id}
+                                  className="min-h-[44px] rounded-lg bg-green-600 px-5 font-semibold text-white hover:bg-green-700 disabled:opacity-50"
+                                >
+                                  {confirmingOrderId === order.id ? 'Confirming...' : '✓ Order Received'}
+                                </button>
+                              )}
+                              {order.status === 'delivered' && (
+                                <button
+                                  type="button"
+                                  onClick={() => setActiveTab('reviews')}
+                                  className="min-h-[44px] rounded-lg border-2 border-yellow-300 px-4 font-semibold text-yellow-700 hover:bg-yellow-50"
+                                >
+                                  ★ Rate the items
+                                </button>
+                              )}
                             </div>
                           </div>
 
@@ -857,6 +1012,135 @@ export default function BuyerDashboard() {
                         </div>
                       ))}
                     </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {activeTab === 'cart' && (
+              <div className="bg-white rounded-xl shadow-sm border border-gray-100">
+                <div className="flex flex-col gap-3 border-b p-6 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <h2 className="text-2xl font-bold text-gray-900">My Cart</h2>
+                    <p className="text-sm text-gray-600 mt-1">
+                      {cartCount === 0
+                        ? 'Your cart is empty.'
+                        : `${cartCount} ${cartCount === 1 ? 'item' : 'items'} ready for checkout.`}
+                    </p>
+                  </div>
+                  <Link
+                    href="/shop"
+                    className="inline-flex min-h-[44px] items-center justify-center rounded-lg border-2 border-blue-200 px-5 text-sm font-semibold text-blue-600 transition-colors hover:bg-blue-50"
+                  >
+                    + Add more items
+                  </Link>
+                </div>
+
+                <div className="p-6">
+                  {cart.length === 0 ? (
+                    <div className="text-center py-12">
+                      <svg className="w-16 h-16 text-gray-300 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
+                      </svg>
+                      <h3 className="text-lg font-semibold text-gray-900 mb-2">Nothing in your cart yet</h3>
+                      <p className="text-gray-600 mb-4">Browse the shop and tap Add to Cart.</p>
+                      <Link
+                        href="/shop"
+                        className="inline-flex min-h-[44px] items-center rounded-lg bg-blue-600 px-6 font-medium text-white transition-colors hover:bg-blue-700"
+                      >
+                        Browse the Shop
+                      </Link>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="space-y-4">
+                        {cart.map((item) => (
+                          <div key={item.id} className="flex flex-col gap-3 rounded-xl border border-gray-100 p-4 sm:flex-row sm:items-center">
+                            <div className="h-20 w-20 flex-shrink-0 overflow-hidden rounded-lg bg-gray-100">
+                              {item.image_url ? (
+                                <img src={item.image_url} alt={item.name} className="h-full w-full object-cover" />
+                              ) : (
+                                <div className="flex h-full items-center justify-center text-xs text-gray-400">No image</div>
+                              )}
+                            </div>
+
+                            <div className="min-w-0 flex-1">
+                              <Link
+                                href={`/shop?product=${item.id}`}
+                                className="font-semibold text-gray-900 line-clamp-2 hover:text-blue-600"
+                              >
+                                {item.name}
+                              </Link>
+                              <p className="font-bold text-blue-600">₱{Number(item.price).toFixed(2)}</p>
+                            </div>
+
+                            <div className="flex items-center gap-3">
+                              <div className="flex items-center rounded-lg border border-gray-200">
+                                <button
+                                  type="button"
+                                  onClick={() => changeCartQuantity(item.id, Number(item.quantity) - 1)}
+                                  aria-label={`Remove one ${item.name}`}
+                                  className="flex h-11 w-11 items-center justify-center text-lg font-bold text-gray-600 hover:bg-gray-50"
+                                >
+                                  −
+                                </button>
+                                <span className="w-10 text-center font-semibold">{item.quantity}</span>
+                                <button
+                                  type="button"
+                                  onClick={() => changeCartQuantity(item.id, Number(item.quantity) + 1)}
+                                  aria-label={`Add one ${item.name}`}
+                                  className="flex h-11 w-11 items-center justify-center text-lg font-bold text-gray-600 hover:bg-gray-50"
+                                >
+                                  +
+                                </button>
+                              </div>
+
+                              <div className="text-right">
+                                <p className="text-xs text-gray-500">Subtotal</p>
+                                <p className="font-bold text-gray-900">
+                                  ₱{((Number(item.price) || 0) * (Number(item.quantity) || 0)).toFixed(2)}
+                                </p>
+                              </div>
+
+                              <button
+                                type="button"
+                                onClick={() => writeCart(cart.filter((entry) => entry.id !== item.id))}
+                                aria-label={`Remove ${item.name} from the cart`}
+                                className="flex h-11 w-11 items-center justify-center rounded-lg text-red-600 hover:bg-red-50"
+                              >
+                                🗑
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+
+                      <div className="mt-6 border-t pt-4">
+                        <div className="flex items-center justify-between">
+                          <span className="text-lg font-semibold text-gray-900">Total</span>
+                          <span className="text-2xl font-bold text-blue-600">₱{cartTotal.toFixed(2)}</span>
+                        </div>
+
+                        <div className="mt-4 flex flex-col gap-3 sm:flex-row">
+                          <button
+                            type="button"
+                            onClick={() => setShowCheckout(true)}
+                            className="min-h-[48px] flex-1 rounded-full bg-blue-600 font-bold text-white transition-colors hover:bg-blue-700"
+                          >
+                            Proceed to Checkout →
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (window.confirm('Remove everything from your cart?')) writeCart([]);
+                            }}
+                            className="min-h-[48px] rounded-full border-2 border-gray-200 px-6 font-semibold text-gray-700 transition-colors hover:bg-gray-50"
+                          >
+                            Clear cart
+                          </button>
+                        </div>
+                      </div>
+                    </>
                   )}
                 </div>
               </div>
@@ -1003,15 +1287,66 @@ export default function BuyerDashboard() {
                       <p className="text-gray-600 text-sm">You have not written any reviews yet.</p>
                     ) : (
                       <div className="space-y-3">
-                        {reviews.map((review) => (
-                          <div key={review.id} className="border border-gray-100 rounded-lg p-4">
-                            <div className="flex items-center justify-between mb-1">
-                              <span className="text-yellow-500">{'★'.repeat(review.rating)}<span className="text-gray-300">{'★'.repeat(5 - review.rating)}</span></span>
-                              <span className="text-xs text-gray-500">{new Date(review.created_at).toLocaleDateString()}</span>
+                        {reviews.map((review) => {
+                          const purchase = purchaseByProduct.get(review.product_id);
+                          const image = productImageById.get(review.product_id);
+
+                          return (
+                            <div key={review.id} className="flex gap-4 rounded-lg border border-gray-100 p-4">
+                              <div className="h-16 w-16 flex-shrink-0 overflow-hidden rounded-lg bg-gray-100">
+                                {image ? (
+                                  <img src={image} alt={purchase?.name || 'Product'} className="h-full w-full object-cover" />
+                                ) : (
+                                  <div className="flex h-full items-center justify-center text-[10px] text-gray-400">
+                                    No image
+                                  </div>
+                                )}
+                              </div>
+
+                              <div className="min-w-0 flex-1">
+                                <div className="flex flex-wrap items-start justify-between gap-2">
+                                  <div className="min-w-0">
+                                    <p className="truncate font-semibold text-gray-900">
+                                      {purchase?.name || 'Product no longer listed'}
+                                    </p>
+                                    {purchase && (
+                                      <p className="text-xs text-gray-500">
+                                        Order{' '}
+                                        <span className="font-mono font-semibold text-blue-600">
+                                          {formatOrderNumber(purchase.orderId)}
+                                        </span>{' '}
+                                        · {purchase.quantity} x ₱{purchase.price.toFixed(2)} · bought{' '}
+                                        {new Date(purchase.orderDate).toLocaleDateString('en-PH', {
+                                          dateStyle: 'medium',
+                                        })}
+                                      </p>
+                                    )}
+                                  </div>
+                                  <span className="text-xs text-gray-500">
+                                    Reviewed{' '}
+                                    {new Date(review.created_at).toLocaleDateString('en-PH', { dateStyle: 'medium' })}
+                                  </span>
+                                </div>
+
+                                <span className="mt-1 block text-yellow-500">
+                                  {'★'.repeat(review.rating)}
+                                  <span className="text-gray-300">{'★'.repeat(5 - review.rating)}</span>
+                                </span>
+
+                                <p className="mt-1 text-sm text-gray-700">{review.comment || 'No comment'}</p>
+
+                                {review.product_id && (
+                                  <Link
+                                    href={`/shop?product=${review.product_id}`}
+                                    className="mt-2 inline-block text-xs font-semibold text-blue-600 hover:text-blue-700"
+                                  >
+                                    View product →
+                                  </Link>
+                                )}
+                              </div>
                             </div>
-                            <p className="text-sm text-gray-700">{review.comment || 'No comment'}</p>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     )}
                   </div>
@@ -1125,15 +1460,16 @@ export default function BuyerDashboard() {
                     <h3 className="font-semibold text-gray-900 mb-3">Change Password</h3>
                     <div className="space-y-3">
                       <input
-                        type="password"
+                        type={showPassword ? 'text' : 'password'}
                         value={passwordForm.current}
                         onChange={(e) => setPasswordForm({ ...passwordForm, current: e.target.value })}
                         placeholder="Current password"
+                        autoComplete="current-password"
                         className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500"
                       />
                       <div>
                         <input
-                          type="password"
+                          type={showPassword ? 'text' : 'password'}
                           value={passwordForm.next}
                           onChange={(e) => setPasswordForm({ ...passwordForm, next: e.target.value })}
                           placeholder="New password"
@@ -1143,12 +1479,24 @@ export default function BuyerDashboard() {
                         <PasswordRequirements value={passwordForm.next} />
                       </div>
                       <input
-                        type="password"
+                        type={showPassword ? 'text' : 'password'}
                         value={passwordForm.confirm}
                         onChange={(e) => setPasswordForm({ ...passwordForm, confirm: e.target.value })}
                         placeholder="Confirm new password"
+                        autoComplete="new-password"
                         className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500"
                       />
+
+                      <label htmlFor="buyerShowPassword" className="flex min-h-[44px] cursor-pointer items-center">
+                        <input
+                          type="checkbox"
+                          id="buyerShowPassword"
+                          checked={showPassword}
+                          onChange={(e) => setShowPassword(e.target.checked)}
+                          className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-2 focus:ring-blue-600"
+                        />
+                        <span className="ml-2 text-sm font-medium text-gray-700">Show password</span>
+                      </label>
                       <button
                         disabled={!isPasswordValid(passwordForm.next)}
                         onClick={changePassword}
@@ -1191,6 +1539,8 @@ export default function BuyerDashboard() {
           </div>
         </div>
       </div>
+
+      {checkoutModal}
     </div>
   );
 }

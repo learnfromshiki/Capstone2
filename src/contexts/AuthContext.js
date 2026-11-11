@@ -1,7 +1,7 @@
 'use client';
 
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { supabase, clearStoredSession } from '@/lib/supabaseClient';
+import { supabase, clearStoredSession, startAdminSession } from '@/lib/supabaseClient';
 import { resolveAccount } from '@/lib/roles';
 import { ensureProfileRow, joinName } from '@/lib/profile';
 
@@ -37,6 +37,10 @@ export const AuthProvider = ({ children }) => {
     }
 
     const account = await resolveAccount(sessionUser);
+
+    // An admin session must not be left in this browser for the next visitor.
+    if (account.role === 'admin') startAdminSession();
+
     setProfile(account.profile);
     setSeller(account.seller);
     setRole(account.role);
@@ -243,6 +247,8 @@ export const AuthProvider = ({ children }) => {
           error: new Error('This seller account has been suspended. Please contact CONNECT-Daet support.'),
         };
       }
+
+      if (account.role === 'admin') startAdminSession();
 
       setUser(data.user);
       setProfile(account.profile);

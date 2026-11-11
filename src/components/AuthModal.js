@@ -37,6 +37,7 @@ export default function AuthModal({ isOpen, onClose, mode: initialMode = 'login'
   const codeInputRef = useRef(null);
 
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [capsLockOn, setCapsLockOn] = useState(false);
 
   const {
     signIn,
@@ -69,6 +70,13 @@ export default function AuthModal({ isOpen, onClose, mode: initialMode = 'login'
   }, [mode]);
 
   if (!isOpen) return null;
+
+  // Typing a password with Caps Lock on is the most common reason a correct
+  // password is rejected, and the characters are hidden so nobody notices.
+  const trackCapsLock = (event) => {
+    if (typeof event.getModifierState !== 'function') return;
+    setCapsLockOn(event.getModifierState('CapsLock'));
+  };
 
   const switchMode = (next) => {
     setMode(next);
@@ -252,6 +260,17 @@ export default function AuthModal({ isOpen, onClose, mode: initialMode = 'login'
         setError('That code has expired. Tap "Send a new code" to get a fresh one.');
       } else if (lowerError.includes('invalid') && lowerError.includes('token')) {
         setError('That code is not correct. Please check the email and type the 6 digits again.');
+      } else if (lowerError.includes('error sending') || lowerError.includes('confirmation email')) {
+        // Supabase created the account but its mail service refused the send,
+        // almost always the free-project email limit or a template it cannot
+        // render. Send them to the code screen so they can ask for it again.
+        setCode('');
+        setResendIn(0);
+        setMode('verify');
+        setNotice('');
+        setError(
+          'Your account was created, but the verification email could not be sent just now. This is the email service, not your details. Wait a minute and tap "Send a new code".'
+        );
       } else if (lowerError.includes('rate limit') || lowerError.includes('email rate limit')) {
         setError('Too many attempts. Please wait 5-10 minutes before trying again.');
       } else if (lowerError.includes('already registered') || lowerError.includes('already exists')) {
@@ -285,6 +304,10 @@ export default function AuthModal({ isOpen, onClose, mode: initialMode = 'login'
       setError(
         lowerError.includes('rate limit')
           ? 'Please wait a few minutes before asking for another code.'
+          : lowerError.includes('error sending') || lowerError.includes('confirmation email')
+          ? 'The email service could not send the code. Check Supabase: the free limit is a few emails per hour, and the Confirm signup template must be valid (see EMAIL-VERIFICATION-SETUP.md).'
+          : lowerError.includes('not found')
+          ? 'No account is waiting for verification on this email. Please sign up again.'
           : err.message || 'Could not send a new code.'
       );
     } finally {
@@ -552,11 +575,20 @@ export default function AuthModal({ isOpen, onClose, mode: initialMode = 'login'
                 type={showPassword ? 'text' : 'password'}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
+                onKeyUp={trackCapsLock}
+                onKeyDown={trackCapsLock}
+                onBlur={() => setCapsLockOn(false)}
                 className={inputClass}
                 placeholder="Choose a new password"
                 autoComplete="new-password"
                 required
               />
+
+              {capsLockOn && (
+                <p role="status" className="mt-1.5 flex items-center gap-1 text-xs font-medium text-amber-700">
+                  <span aria-hidden="true">⇪</span> Caps Lock is on
+                </p>
+              )}
               <PasswordRequirements value={password} />
 
               <label htmlFor="confirmPassword" className="mt-3 block text-xs font-semibold text-gray-700 mb-1.5">
@@ -586,12 +618,21 @@ export default function AuthModal({ isOpen, onClose, mode: initialMode = 'login'
                 type={showPassword ? 'text' : 'password'}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
+                onKeyUp={trackCapsLock}
+                onKeyDown={trackCapsLock}
+                onBlur={() => setCapsLockOn(false)}
                 className={inputClass}
                 placeholder="Enter your password"
                 autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
                 required
                 aria-describedby={mode === 'signup' ? 'password-rules' : undefined}
               />
+
+              {capsLockOn && (
+                <p role="status" className="mt-1.5 flex items-center gap-1 text-xs font-medium text-amber-700">
+                  <span aria-hidden="true">⇪</span> Caps Lock is on
+                </p>
+              )}
 
               {mode === 'signup' && (
                 <div id="password-rules">

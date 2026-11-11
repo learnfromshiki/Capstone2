@@ -25,6 +25,7 @@ const categoryIcons = {
 export default function ProductDetailsModal({
   product,
   sellerInfo,
+  onViewShop,
   reviews = [],
   canReview = false,
   onSubmitReview,
@@ -178,9 +179,19 @@ export default function ProductDetailsModal({
                 {sellerInfo?.business_name && (
                   <div className="flex items-center gap-2">
                     <span className="text-xs text-gray-500 w-16">Sold by</span>
-                    <span className="text-sm font-semibold text-blue-600 truncate">
-                      {sellerInfo.business_name}
-                    </span>
+                    {onViewShop ? (
+                      <button
+                        type="button"
+                        onClick={onViewShop}
+                        className="min-h-[36px] truncate text-sm font-semibold text-blue-600 underline-offset-2 hover:underline"
+                      >
+                        {sellerInfo.business_name} →
+                      </button>
+                    ) : (
+                      <span className="text-sm font-semibold text-blue-600 truncate">
+                        {sellerInfo.business_name}
+                      </span>
+                    )}
                   </div>
                 )}
                 {product.artisan_name && (

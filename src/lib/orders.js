@@ -231,6 +231,25 @@ export const cancelMyOrder = async (orderId) => {
   };
 };
 
+/**
+ * The buyer confirms a shipped parcel arrived. Needs confirm_order_received()
+ * from supabase-buyer-confirm-order.sql; buyers cannot write to orders directly.
+ */
+export const confirmOrderReceived = async (orderId) => {
+  const { data, error } = await supabase.rpc('confirm_order_received', { p_order_id: orderId });
+
+  if (error) {
+    if (isMissingFunction(error)) {
+      throw new Error(
+        'Confirming delivery is not available yet. Ask the shop admin to run supabase-buyer-confirm-order.sql in Supabase.'
+      );
+    }
+    throw new Error(error.message || 'Could not confirm this order.');
+  }
+
+  return { status: data?.status || 'delivered' };
+};
+
 /** Short, readable order number shown to buyers, sellers and admins. */
 export const formatOrderNumber = (orderId) =>
   orderId ? `#${String(orderId).slice(0, 8).toUpperCase()}` : '';

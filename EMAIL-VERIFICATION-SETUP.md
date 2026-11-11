@@ -38,7 +38,7 @@ that replaces PHPMailer's SMTP settings.
 ```html
 <h2>Verify your email</h2>
 
-<p>Hi{{ if .Data.first_name }} {{ .Data.first_name }}{{ end }}, welcome to CONNECT-Daet.ph!</p>
+<p>Welcome to CONNECT-Daet.ph!</p>
 
 <p>Your verification code is:</p>
 
@@ -52,6 +52,10 @@ The code expires in 1 hour.</p>
 
 The important part is **`{{ .Token }}`** — that is the 6-digit code. The default
 template uses `{{ .ConfirmationURL }}`, which sends a link instead.
+
+> Keep the template this simple. Anything clever — `{{ if ... }}`, a field that
+> does not exist, an unclosed `{{` — makes Supabase fail to build the message
+> and registration then shows **"Error sending confirmation email"**.
 
 5. Go to **Authentication → Sign In / Providers → Email** and make sure
    **Confirm email** is **ON**. If it is off, Supabase creates accounts without
@@ -160,6 +164,40 @@ as it does with PHPMailer.
 | No email arrives | Check the spam folder. On a free project, Supabase's built-in mailer is rate-limited — wait a few minutes, or do Step 3. |
 | Registration signs people in with no code | **Confirm email** is off in Supabase (end of Step 1). |
 | "Too many attempts" | Supabase's rate limit. Wait 5–10 minutes. |
+| **"Error sending confirmation email"** | Supabase could not send. See the three causes below. |
 | Reset email arrives but the link says invalid/expired | The address is not in **Redirect URLs** (Step 2b a), or the link was already used. Use the 6-digit code instead. |
 | Reset email never arrives | Free projects are limited to a few emails per hour, and password resets share that limit with sign-ups. Wait, or do Step 3. |
 | The reset email has no code in it | The Reset Password template still has no `{{ .Token }}`. Redo Step 2b b. |
+
+---
+
+## "Error sending confirmation email"
+
+This message comes from Supabase, not from the website, and it means the email
+itself could not be sent. The account is usually created anyway — so do **not**
+register again with the same address. Wait a minute and press **"Send a new
+code"** on the verification screen.
+
+There are three causes, in the order they actually happen:
+
+**1. The free email limit (most common while testing).**
+A free Supabase project may send only a few emails per hour, shared between
+sign-ups and password resets. After a morning of test registrations it stops.
+Wait an hour, or do **Step 3** to send through your own Gmail — that limit is
+much higher and is the real fix before a demo.
+
+**2. The email template cannot be built.**
+Open **Authentication → Emails → Confirm signup** and compare it with the
+template in Step 1. If it contains `{{ if ... }}`, a misspelled field or an
+unclosed `{{`, Supabase fails at send time with exactly this error. Paste the
+simple template again and save.
+
+**3. Custom SMTP is on but wrong.**
+If **Project Settings → Authentication → SMTP Settings** is enabled, check the
+host, port and password. With Gmail the password must be a 16-character **App
+Password**, never the normal account password. To rule SMTP out, turn Custom
+SMTP off, save, and register again — if the code arrives, the SMTP details are
+the problem.
+
+To see the real reason, open **Logs → Auth Logs** in Supabase right after a
+failed registration; the entry names the provider's own error.

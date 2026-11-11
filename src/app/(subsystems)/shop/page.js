@@ -9,6 +9,7 @@ import Cart from '@/components/shop/Cart';
 import ProductDetailsModal from '@/components/shop/ProductDetailsModal';
 import AuthModal from '@/components/AuthModal';
 import Toast from '@/components/Toast';
+import ShopProfileModal from '@/components/shop/ShopProfileModal';
 import ShopFooter from '@/components/shop/ShopFooter';
 
 export default function ShopPage() {
@@ -20,6 +21,7 @@ export default function ShopPage() {
   const [showCart, setShowCart] = useState(false);
   const [checkoutRequest, setCheckoutRequest] = useState(0);
   const [selectedProduct, setSelectedProduct] = useState(null);
+  const [selectedSellerId, setSelectedSellerId] = useState(null);
   const [reviewsByProduct, setReviewsByProduct] = useState({});
   const [reviewableProducts, setReviewableProducts] = useState({});
 
@@ -152,7 +154,7 @@ export default function ShopPage() {
         const baseQuery = () =>
           supabase
             .from('shop_sellers')
-            .select('id, business_name, description')
+            .select('id, business_name, description, created_at')
             .eq('is_approved', true)
             .eq('is_active', true);
 
@@ -732,6 +734,7 @@ export default function ShopPage() {
                 onBuyNow={buyNow}
                 onViewDetails={setSelectedProduct}
                 sellerInfo={sellers[product.seller_id]}
+                onViewShop={() => setSelectedSellerId(product.seller_id)}
                 reviewSummary={reviewSummaries[product.id]}
               />
             ))}
@@ -762,12 +765,29 @@ export default function ShopPage() {
       <ProductDetailsModal
         product={selectedProduct}
         sellerInfo={selectedProduct ? sellers[selectedProduct.seller_id] : null}
+        onViewShop={() => {
+          const sellerId = selectedProduct?.seller_id;
+          setSelectedProduct(null);
+          setSelectedSellerId(sellerId);
+        }}
         reviews={selectedProduct ? reviewsByProduct[selectedProduct.id] || [] : []}
         canReview={Boolean(selectedProduct && user && reviewableProducts[selectedProduct.id])}
         onSubmitReview={submitProductReview}
         onClose={() => setSelectedProduct(null)}
         onAddToCart={addToCart}
         onBuyNow={buyNow}
+      />
+
+      {/* Shop profile */}
+      <ShopProfileModal
+        seller={selectedSellerId ? sellers[selectedSellerId] : null}
+        products={selectedSellerId ? products.filter((item) => item.seller_id === selectedSellerId) : []}
+        reviewSummaries={reviewSummaries}
+        onClose={() => setSelectedSellerId(null)}
+        onViewProduct={(product) => {
+          setSelectedSellerId(null);
+          setSelectedProduct(product);
+        }}
       />
 
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
