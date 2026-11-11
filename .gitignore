@@ -33,3 +33,10 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# private admin / credential notes - never publish these
+ADMIN-CREDENTIALS.md
+ADMIN-LOGIN-FLOW.md
+dev-server.log
+start-server.log
+build-output.txt
