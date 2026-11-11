@@ -14,7 +14,7 @@ import { describePasswordProblem, isPasswordValid } from '@/lib/passwordPolicy';
 const peso = (value) =>
   `₱${(Number(value) || 0).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 import Link from 'next/link';
-import Toast from '@/components/Toast';
+import { useDialog } from '@/components/ui/Dialog';
 
 const REPORT_CONFIG = {
   sales: {
@@ -114,13 +114,11 @@ export default function ShopAdminPage() {
     confirm: ''
   });
   const [uploadingImage, setUploadingImage] = useState(false);
-  const [toast, setToast] = useState(null);
   const [imagePreview, setImagePreview] = useState('');
-  
-  // Helper function to show toast notifications
-  const showToast = (message, type = 'success') => {
-    setToast({ message, type });
-  };
+
+  // Site-wide notifications: a modal for anything that must be read or
+  // confirmed, a corner toast for routine successes.
+  const { showAlert, showConfirm, showToast } = useDialog();
   
   // Product form state
   const [newProduct, setNewProduct] = useState({
@@ -275,7 +273,7 @@ export default function ShopAdminPage() {
       
     } catch (error) {
       console.error('Error uploading image:', error);
-      alert('Failed to upload image: ' + error.message);
+      showAlert('Failed to upload image: ' + error.message);
     } finally {
       setUploadingImage(false);
     }
@@ -297,7 +295,7 @@ export default function ShopAdminPage() {
         .replace(/^-+|-+$/g, '');
 
       if (!name || !slug) {
-        alert('Please enter a category name with letters or numbers.');
+        showAlert('Please enter a category name with letters or numbers.');
         return;
       }
 
@@ -306,7 +304,7 @@ export default function ShopAdminPage() {
       );
 
       if (duplicate) {
-        alert(`The category "${name}" already exists.`);
+        showAlert(`The category "${name}" already exists.`);
         return;
       }
 
@@ -458,17 +456,17 @@ export default function ShopAdminPage() {
       const stock = Number(newProduct.stock);
 
       if (!name || !description) {
-        alert('Product name and description are required.');
+        showAlert('Product name and description are required.');
         return;
       }
 
       if (!Number.isFinite(price) || price <= 0 || price > 99999999.99) {
-        alert('Price must be a number greater than 0.');
+        showAlert('Price must be a number greater than 0.');
         return;
       }
 
       if (!Number.isInteger(stock) || stock < 0) {
-        alert('Stock must be a whole number of 0 or more.');
+        showAlert('Stock must be a whole number of 0 or more.');
         return;
       }
 
@@ -503,10 +501,10 @@ export default function ShopAdminPage() {
       setImagePreview('');
       setShowAddProduct(false);
       fetchData();
-      alert('Product added successfully!');
+      showToast('Product added successfully!', 'success');
     } catch (error) {
       console.error('Error adding product:', error);
-      alert('Failed to add product: ' + error.message);
+      showAlert('Failed to add product: ' + error.message);
     } finally {
       setLoading(false);
     }
@@ -522,18 +520,24 @@ export default function ShopAdminPage() {
 
       if (error) throw error;
       if (!data || data.length === 0) {
-        alert('Could not update this product. The database blocked the change — run supabase-final-fixes.sql to allow admin writes.');
+        showAlert('Could not update this product. The database blocked the change — run supabase-final-fixes.sql to allow admin writes.');
         return;
       }
       fetchData();
     } catch (error) {
       console.error('Error updating product:', error);
-      alert('Failed to update product: ' + (error.message || 'unknown error'));
+      showAlert('Failed to update product: ' + (error.message || 'unknown error'));
     }
   };
 
   const deleteProduct = async (productId) => {
-    if (!confirm('Are you sure you want to delete this product?')) return;
+    const confirmed = await showConfirm({
+      tone: 'error',
+      title: 'Delete this product?',
+      message: 'It disappears from the storefront. This cannot be undone.',
+      confirmLabel: 'Delete product',
+    });
+    if (!confirmed) return;
     
     try {
       // A product referenced by orders must keep its row so order history stays
@@ -547,7 +551,7 @@ export default function ShopAdminPage() {
       if (orderedError) throw orderedError;
 
       if (orderedItems && orderedItems.length > 0) {
-        alert('This product is part of existing orders, so it cannot be deleted. Deactivate it instead to hide it from the shop.');
+        showAlert('This product is part of existing orders, so it cannot be deleted. Deactivate it instead to hide it from the shop.');
         return;
       }
 
@@ -559,13 +563,13 @@ export default function ShopAdminPage() {
 
       if (error) throw error;
       if (!data || data.length === 0) {
-        alert('Could not delete this product. The database blocked the change — run supabase-final-fixes.sql to allow admin writes.');
+        showAlert('Could not delete this product. The database blocked the change — run supabase-final-fixes.sql to allow admin writes.');
         return;
       }
       fetchData();
     } catch (error) {
       console.error('Error deleting product:', error);
-      alert('Failed to delete product: ' + (error.message || 'unknown error'));
+      showAlert('Failed to delete product: ' + (error.message || 'unknown error'));
     }
   };
 
@@ -599,7 +603,7 @@ export default function ShopAdminPage() {
   const deleteCategory = async (category) => {
     // "All Products" is a real row but it is the storefront's fallback tab.
     if (category.slug === 'all') {
-      alert('The "All Products" tab is built into the storefront and cannot be deleted.');
+      showAlert('The "All Products" tab is built into the storefront and cannot be deleted.');
       return;
     }
 
@@ -613,7 +617,7 @@ export default function ShopAdminPage() {
 
       // Products store the slug, so deleting a used category would orphan their tab.
       if ((count || 0) > 0) {
-        alert(`"${category.name}" still has ${count} product(s). Move or delete those products first.`);
+        showAlert(`"${category.name}" still has ${count} product(s). Move or delete those products first.`);
         return;
       }
     } catch (error) {
@@ -622,9 +626,13 @@ export default function ShopAdminPage() {
       return;
     }
 
-    if (!confirm(`Delete the category "${category.name}"?\n\nThe tab disappears from the storefront. This cannot be undone.`)) {
-      return;
-    }
+    const confirmed = await showConfirm({
+      tone: 'error',
+      title: `Delete the category "${category.name}"?`,
+      message: 'The tab disappears from the storefront. This cannot be undone.',
+      confirmLabel: 'Delete category',
+    });
+    if (!confirmed) return;
 
     try {
       const { data, error } = await supabase
@@ -652,9 +660,14 @@ export default function ShopAdminPage() {
   const deleteCustomer = async (customer) => {
     const name = customer.full_name || customer.email || 'this customer';
 
-    if (!confirm(`Delete "${name}" permanently?\n\nTheir profile and reward history are removed. Past orders stay in Transactions so sales records are not lost. This cannot be undone.`)) {
-      return;
-    }
+    const confirmed = await showConfirm({
+      tone: 'error',
+      title: `Delete "${name}" permanently?`,
+      message:
+        'Their profile and reward history are removed. Past orders stay in Transactions so sales records are not lost. This cannot be undone.',
+      confirmLabel: 'Delete customer',
+    });
+    if (!confirmed) return;
 
     try {
       const { data, error } = await supabase
@@ -680,9 +693,14 @@ export default function ShopAdminPage() {
   const deleteSeller = async (seller) => {
     const name = seller.business_name || 'this seller';
 
-    if (!confirm(`Delete "${name}" permanently?\n\nThis removes the shop, every product they listed and their account profile. This cannot be undone.`)) {
-      return;
-    }
+    const confirmed = await showConfirm({
+      tone: 'error',
+      title: `Delete "${name}" permanently?`,
+      message:
+        'This removes the shop, every product they listed and their account profile. This cannot be undone.',
+      confirmLabel: 'Delete seller',
+    });
+    if (!confirmed) return;
 
     try {
       // Products first: seller_id is SET NULL on delete, so removing the shop
@@ -732,11 +750,15 @@ export default function ShopAdminPage() {
 
     if (!order || order.status === newStatus) return;
 
-    if (
-      newStatus === 'cancelled' &&
-      !confirm('Cancel this order? The items will be returned to stock and the order cannot be reopened.')
-    ) {
-      return;
+    if (newStatus === 'cancelled') {
+      const confirmed = await showConfirm({
+        tone: 'warning',
+        title: 'Cancel this order?',
+        message: 'The items go back into stock and the order cannot be reopened.',
+        confirmLabel: 'Cancel order',
+        cancelLabel: 'Keep order',
+      });
+      if (!confirmed) return;
     }
 
     try {
@@ -757,7 +779,13 @@ export default function ShopAdminPage() {
   };
 
   const approveSeller = async (seller) => {
-    if (!confirm(`Approve "${seller.business_name}" as a seller?`)) return;
+    const confirmed = await showConfirm({
+      tone: 'question',
+      title: 'Approve this seller?',
+      message: `"${seller.business_name}" will be able to list products on the storefront.`,
+      confirmLabel: 'Approve seller',
+    });
+    if (!confirmed) return;
 
     try {
       const { data, error } = await supabase
@@ -790,9 +818,15 @@ export default function ShopAdminPage() {
     const suspending = !customer.is_suspended;
     const name = customer.full_name || customer.email || 'this customer';
 
-    if (!confirm(`Are you sure you want to ${suspending ? 'suspend' : 'reactivate'} "${name}"?`)) {
-      return;
-    }
+    const confirmed = await showConfirm({
+      tone: suspending ? 'warning' : 'question',
+      title: suspending ? 'Suspend this customer?' : 'Reactivate this customer?',
+      message: suspending
+        ? `"${name}" will not be able to sign in or place orders until you restore the account.`
+        : `"${name}" will be able to shop again.`,
+      confirmLabel: suspending ? 'Suspend' : 'Reactivate',
+    });
+    if (!confirmed) return;
 
     try {
       const { error } = await supabase
@@ -816,9 +850,13 @@ export default function ShopAdminPage() {
   };
 
   const rejectSeller = async (seller) => {
-    if (!confirm(`Reject the seller application for "${seller.business_name}"?`)) {
-      return;
-    }
+    const confirmed = await showConfirm({
+      tone: 'warning',
+      title: 'Reject this application?',
+      message: `"${seller.business_name}" will not be able to sell on CONNECT-Daet.`,
+      confirmLabel: 'Reject application',
+    });
+    if (!confirmed) return;
 
     try {
       const { error } = await supabase
@@ -1795,9 +1833,15 @@ export default function ShopAdminPage() {
                                 const newStatus = !seller.is_active;
                                 const action = newStatus ? 'activate' : 'suspend';
                                 
-                                if (!confirm(`Are you sure you want to ${action} "${seller.business_name}"?`)) {
-                                  return;
-                                }
+                                const confirmed = await showConfirm({
+                                  tone: newStatus ? 'question' : 'warning',
+                                  title: newStatus ? 'Activate this shop?' : 'Suspend this shop?',
+                                  message: `"${seller.business_name}" will ${
+                                    newStatus ? 'be able to sell again' : 'stop appearing on the storefront'
+                                  }.`,
+                                  confirmLabel: newStatus ? 'Activate' : 'Suspend',
+                                });
+                                if (!confirmed) return;
                                 
                                 const { error } = await supabase
                                   .from('shop_sellers')
@@ -3012,15 +3056,6 @@ export default function ShopAdminPage() {
             </form>
           </div>
         </div>
-      )}
-      
-      {/* Toast Notification */}
-      {toast && (
-        <Toast
-          message={toast.message}
-          type={toast.type}
-          onClose={() => setToast(null)}
-        />
       )}
     </div>
   );

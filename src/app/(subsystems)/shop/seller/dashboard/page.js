@@ -9,6 +9,7 @@ import { formatOrderNumber, getAllowedStatuses, PAYMENT_LABELS, STATUS_LABELS, t
 import PasswordRequirements from '@/components/PasswordRequirements';
 import { describePasswordProblem, isPasswordValid } from '@/lib/passwordPolicy';
 import { fetchProfileRow, joinName, splitName } from '@/lib/profile';
+import { useDialog } from '@/components/ui/Dialog';
 import Link from 'next/link';
 
 // Totals for this seller's items over the selected range, used by the dashboard chart
@@ -55,6 +56,7 @@ let loggingOut = false;
 
 export default function SellerDashboard() {
   const { user, seller, loading: authLoading, signOut, updateSellerProfile } = useSellerAuth();
+  const { showAlert, showConfirm, showToast } = useDialog();
   const router = useRouter();
 
   const [products, setProducts] = useState([]);
@@ -340,10 +342,10 @@ export default function SellerDashboard() {
       if (error) throw error;
       setNewProduct({ ...newProduct, image_url: imageUrl, imageFile: file });
       setImagePreview(URL.createObjectURL(file));
-      alert('Image uploaded successfully!');
+      showToast('Image uploaded successfully!', 'success');
     } catch (error) {
       console.error('Error uploading image:', error);
-      alert('Failed to upload image: ' + error.message);
+      showAlert('Failed to upload image: ' + error.message);
     } finally {
       setUploadingImage(false);
     }
@@ -356,7 +358,7 @@ export default function SellerDashboard() {
 
     const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
     if (!slug) {
-      alert('Please use letters or numbers in the category name.');
+      showAlert('Please use letters or numbers in the category name.');
       return;
     }
 
@@ -369,7 +371,7 @@ export default function SellerDashboard() {
       setNewProduct((prev) => ({ ...prev, category: existing.slug }));
       setShowNewCategory(false);
       setNewCategoryName('');
-      alert(`"${existing.name}" already exists — it is selected now.`);
+      showToast(`"${existing.name}" already exists — it is selected now.`, 'success');
       return;
     }
 
@@ -392,10 +394,10 @@ export default function SellerDashboard() {
       setNewProduct((prev) => ({ ...prev, category: data.slug }));
       setShowNewCategory(false);
       setNewCategoryName('');
-      alert(`Category "${name}" created and selected.`);
+      showToast(`Category "${name}" created and selected.`, 'success');
     } catch (error) {
       console.error('Error creating category:', error);
-      alert('Failed to create category: ' + (error.message || 'unknown error'));
+      showAlert('Failed to create category: ' + (error.message || 'unknown error'));
     } finally {
       setSavingCategory(false);
     }
@@ -410,27 +412,27 @@ export default function SellerDashboard() {
     const stock = Number(newProduct.stock);
 
     if (!name) {
-      alert('Please enter a product name.');
+      showAlert('Please enter a product name.');
       return;
     }
 
     if (!description) {
-      alert('Please enter a product description.');
+      showAlert('Please enter a product description.');
       return;
     }
 
     if (!Number.isFinite(price) || price <= 0) {
-      alert('Price must be greater than zero.');
+      showAlert('Price must be greater than zero.');
       return;
     }
 
     if (!Number.isInteger(stock) || stock < 0) {
-      alert('Stock must be a whole number of zero or more.');
+      showAlert('Stock must be a whole number of zero or more.');
       return;
     }
 
     if (!newProduct.image_url) {
-      alert('Please add a product photo. Customers will not buy from an empty picture box.');
+      showAlert('Please add a product photo. Customers will not buy from an empty picture box.');
       return;
     }
 
@@ -465,17 +467,23 @@ export default function SellerDashboard() {
 
       closeProductModal();
       fetchProducts();
-      alert(editingProductId ? 'Product updated successfully!' : 'Product added successfully!');
+      showToast(editingProductId ? 'Product updated successfully!' : 'Product added successfully!', 'success');
     } catch (error) {
       console.error('Error adding product:', error);
-      alert('Failed to add product: ' + error.message);
+      showAlert('Failed to add product: ' + error.message);
     } finally {
       setSavingProduct(false);
     }
   };
 
   const handleDeleteProduct = async (productId) => {
-    if (!confirm('Are you sure you want to delete this product?')) return;
+    const confirmed = await showConfirm({
+      tone: 'error',
+      title: 'Delete this product?',
+      message: 'It disappears from your shop and from the storefront. This cannot be undone.',
+      confirmLabel: 'Delete product',
+    });
+    if (!confirmed) return;
 
     try {
       // A product that already appears in orders must keep its row so past
@@ -489,7 +497,7 @@ export default function SellerDashboard() {
       if (orderedError) throw orderedError;
 
       if (orderedItems && orderedItems.length > 0) {
-        alert('This product is part of existing orders, so it cannot be deleted. Deactivate it instead to hide it from the shop.');
+        showAlert('This product is part of existing orders, so it cannot be deleted. Deactivate it instead to hide it from the shop.');
         return;
       }
 
@@ -501,10 +509,10 @@ export default function SellerDashboard() {
 
       if (error) throw error;
       fetchProducts();
-      alert('Product deleted successfully!');
+      showToast('Product deleted successfully!', 'success');
     } catch (error) {
       console.error('Error deleting product:', error);
-      alert('Failed to delete product: ' + error.message);
+      showAlert('Failed to delete product: ' + error.message);
     }
   };
 
@@ -520,35 +528,39 @@ export default function SellerDashboard() {
       fetchProducts();
     } catch (error) {
       console.error('Error toggling availability:', error);
-      alert('Failed to update product: ' + error.message);
+      showAlert('Failed to update product: ' + error.message);
     }
   };
 
   const updateOrderStatus = async (orderId, newStatus) => {
     // Only orders that actually contain this seller's products can be updated
     if (!orders.some((order) => order.id === orderId)) {
-      alert('You can only update orders that contain your products.');
+      showAlert('You can only update orders that contain your products.');
       return;
     }
 
     const currentOrder = orders.find((order) => order.id === orderId);
     if (currentOrder && currentOrder.status === newStatus) return;
 
-    if (
-      newStatus === 'cancelled' &&
-      !confirm('Cancel this order? The stock for its items will be returned to the shop.')
-    ) {
-      return;
+    if (newStatus === 'cancelled') {
+      const confirmed = await showConfirm({
+        tone: 'warning',
+        title: 'Cancel this order?',
+        message: 'The stock for its items goes back to your shop and the order cannot be reopened.',
+        confirmLabel: 'Cancel order',
+        cancelLabel: 'Keep order',
+      });
+      if (!confirmed) return;
     }
 
     setUpdatingOrderId(orderId);
     try {
       await transitionOrderStatus(orderId, newStatus);
       await fetchDashboardStats();
-      alert(`Order marked as ${STATUS_LABELS[newStatus] || newStatus}.`);
+      showToast(`Order marked as ${STATUS_LABELS[newStatus] || newStatus}.`, 'success');
     } catch (error) {
       console.error('Error updating order status:', error);
-      alert('Failed to update order: ' + error.message);
+      showAlert('Failed to update order: ' + error.message);
     } finally {
       setUpdatingOrderId(null);
     }
@@ -750,7 +762,7 @@ export default function SellerDashboard() {
       setProfileForm((prev) => ({ ...prev, logo_url: url }));
     } catch (error) {
       console.error('Error uploading logo:', error);
-      alert('Failed to upload logo: ' + error.message);
+      showAlert('Failed to upload logo: ' + error.message);
     } finally {
       setUploadingLogo(false);
     }

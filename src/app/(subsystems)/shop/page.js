@@ -8,7 +8,7 @@ import ProductCard from '@/components/shop/ProductCard';
 import Cart from '@/components/shop/Cart';
 import ProductDetailsModal from '@/components/shop/ProductDetailsModal';
 import AuthModal from '@/components/AuthModal';
-import Toast from '@/components/Toast';
+import { useDialog } from '@/components/ui/Dialog';
 import ShopProfileModal from '@/components/shop/ShopProfileModal';
 import ShopFooter from '@/components/shop/ShopFooter';
 
@@ -25,10 +25,8 @@ export default function ShopPage() {
   const [reviewsByProduct, setReviewsByProduct] = useState({});
   const [reviewableProducts, setReviewableProducts] = useState({});
 
-  const [toast, setToast] = useState(null);
   const [pendingProductId, setPendingProductId] = useState(null);
-
-  const showToast = (message, type = 'success') => setToast({ message, type });
+  const { showToast } = useDialog();
 
   // Links from the dashboard: ?cart=1 opens the cart, ?product=<id> opens that
   // product so a wishlist or "View" button lands on the product itself.
@@ -789,8 +787,6 @@ export default function ShopPage() {
           setSelectedProduct(product);
         }}
       />
-
-      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
 
       {/* Auth Modal */}
       <AuthModal

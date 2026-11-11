@@ -13,6 +13,7 @@ import PasswordRequirements from '@/components/PasswordRequirements';
 import { describePasswordProblem, isPasswordValid } from '@/lib/passwordPolicy';
 import { joinName, splitName } from '@/lib/profile';
 import { ROLE_LABELS } from '@/lib/roles';
+import { useDialog } from '@/components/ui/Dialog';
 
 const ORDER_STEPS = [
   { key: 'pending', label: 'Placed' },
@@ -66,6 +67,7 @@ function StarPicker({ value, onChange }) {
 
 export default function BuyerDashboard() {
   const { user, role, loading: authLoading, signOut, sendPasswordResetEmail } = useAuth();
+  const { showAlert, showConfirm, showToast } = useDialog();
   const router = useRouter();
 
   const [orders, setOrders] = useState([]);
@@ -243,7 +245,7 @@ export default function BuyerDashboard() {
 
     const maxStock = Number(item.stock) || 0;
     if (maxStock && quantity > maxStock) {
-      alert(`Only ${maxStock} of ${item.name} in stock.`);
+      showAlert(`Only ${maxStock} of ${item.name} in stock.`);
       return;
     }
 
@@ -259,18 +261,23 @@ export default function BuyerDashboard() {
 
   const handleConfirmReceived = async (order) => {
     if (confirmingOrderId) return;
-    if (!window.confirm(`Confirm that order ${formatOrderNumber(order.id)} arrived? You can review the items afterwards.`)) {
-      return;
-    }
+    const confirmed = await showConfirm({
+      tone: 'question',
+      title: 'Did your order arrive?',
+      message: `Confirm that order ${formatOrderNumber(order.id)} was delivered. You can rate the items afterwards.`,
+      confirmLabel: 'Yes, it arrived',
+      cancelLabel: 'Not yet',
+    });
+    if (!confirmed) return;
 
     setConfirmingOrderId(order.id);
     try {
       await confirmOrderReceived(order.id);
       setOrders((prev) => prev.map((row) => (row.id === order.id ? { ...row, status: 'delivered' } : row)));
-      alert('Thank you! You can now rate the items in My Reviews.');
+      showToast('Thank you! You can now rate the items in My Reviews.', 'success');
     } catch (error) {
       console.error('Error confirming the order:', error);
-      alert(error.message || 'Could not confirm this order.');
+      showAlert(error.message || 'Could not confirm this order.');
     } finally {
       setConfirmingOrderId(null);
     }
@@ -305,7 +312,7 @@ export default function BuyerDashboard() {
       const fullName = joinName(profileForm.first_name, profileForm.last_name);
 
       if (!fullName) {
-        alert('Please enter your first and last name.');
+        showAlert('Please enter your first and last name.');
         return;
       }
 
@@ -332,17 +339,17 @@ export default function BuyerDashboard() {
 
       if (error) {
         if (error.message?.includes('phone') || error.message?.includes('address')) {
-          alert('Saving an address needs the phone/address columns. Re-run supabase-admin-policies.sql in Supabase.');
+          showAlert('Saving an address needs the phone/address columns. Re-run supabase-admin-policies.sql in Supabase.');
           return;
         }
         throw error;
       }
 
       setProfile((prev) => ({ ...prev, ...profileForm, full_name: fullName }));
-      alert('Profile updated!');
+      showToast('Profile updated!', 'success');
     } catch (error) {
       console.error('Error saving profile:', error);
-      alert('Failed to update profile: ' + error.message);
+      showAlert('Failed to update profile: ' + error.message);
     } finally {
       setSavingProfile(false);
     }
@@ -355,7 +362,7 @@ export default function BuyerDashboard() {
   const emailPasswordReset = async () => {
     const address = profile?.email || user?.email;
     if (!address) {
-      alert('No email address is saved on this account.');
+      showAlert('No email address is saved on this account.');
       return;
     }
 
@@ -363,10 +370,10 @@ export default function BuyerDashboard() {
     try {
       const { error } = await sendPasswordResetEmail(address);
       if (error) throw error;
-      alert(`We sent a password reset code and link to ${address}. Check your inbox and spam folder.`);
+      showAlert({ tone: 'success', title: 'Check your email', message: `We sent a password reset code and link to ${address}. Check your inbox and spam folder.` });
     } catch (error) {
       console.error('Error sending the reset email:', error);
-      alert(error.message || 'Could not send the reset email. Please try again in a few minutes.');
+      showAlert(error.message || 'Could not send the reset email. Please try again in a few minutes.');
     } finally {
       setSendingReset(false);
     }
@@ -375,12 +382,12 @@ export default function BuyerDashboard() {
   const changePassword = async () => {
     const passwordProblem = describePasswordProblem(passwordForm.next);
     if (passwordProblem) {
-      alert(passwordProblem);
+      showAlert(passwordProblem);
       return;
     }
 
     if (passwordForm.next !== passwordForm.confirm) {
-      alert('New passwords do not match.');
+      showAlert('New passwords do not match.');
       return;
     }
 
@@ -391,7 +398,7 @@ export default function BuyerDashboard() {
       });
 
       if (verifyError) {
-        alert('Current password is incorrect.');
+        showAlert('Current password is incorrect.');
         return;
       }
 
@@ -399,10 +406,10 @@ export default function BuyerDashboard() {
       if (error) throw error;
 
       setPasswordForm({ current: '', next: '', confirm: '' });
-      alert('Password updated!');
+      showToast('Password updated!', 'success');
     } catch (error) {
       console.error('Error changing password:', error);
-      alert('Failed to change password: ' + error.message);
+      showAlert('Failed to change password: ' + error.message);
     }
   };
 
@@ -412,19 +419,19 @@ export default function BuyerDashboard() {
     const comment = (draft.comment || '').trim();
 
     if (!Number.isInteger(rating) || rating < 1 || rating > 5) {
-      alert('Please choose a star rating from 1 to 5.');
+      showAlert('Please choose a star rating from 1 to 5.');
       return;
     }
 
     if (comment.length > 1000) {
-      alert('Please keep your review under 1,000 characters.');
+      showAlert('Please keep your review under 1,000 characters.');
       return;
     }
 
     // The UI only offers delivered items, but re-check so a stale tab cannot
     // submit a review for something that was never delivered.
     if (!reviewableItems.some((entry) => entry.product_id === item.product_id)) {
-      alert('This item is not ready for review. Only delivered items can be reviewed.');
+      showAlert('This item is not ready for review. Only delivered items can be reviewed.');
       return;
     }
 
@@ -448,10 +455,10 @@ export default function BuyerDashboard() {
 
       setReviews(data || []);
       setReviewDrafts((prev) => ({ ...prev, [item.product_id]: { rating: 5, comment: '' } }));
-      alert('Thank you for your review!');
+      showToast('Thank you for your review!', 'success');
     } catch (error) {
       console.error('Error saving review:', error);
-      alert('Failed to save review: ' + error.message);
+      showAlert('Failed to save review: ' + error.message);
     } finally {
       setSavingReview(false);
     }
@@ -459,9 +466,13 @@ export default function BuyerDashboard() {
 
   const handleCancelOrder = async (order) => {
     if (cancellingOrderId) return;
-    const confirmed = window.confirm(
-      `Cancel order ${formatOrderNumber(order.id)}? The items go back on sale and any reward points from this order are removed.`
-    );
+    const confirmed = await showConfirm({
+      tone: 'warning',
+      title: `Cancel order ${formatOrderNumber(order.id)}?`,
+      message: 'The items go back on sale and any reward points from this order are removed.',
+      confirmLabel: 'Cancel my order',
+      cancelLabel: 'Keep it',
+    });
     if (!confirmed) return;
 
     setCancellingOrderId(order.id);
@@ -471,10 +482,10 @@ export default function BuyerDashboard() {
       // Points may have changed, so refresh the profile card too
       const { data } = await supabase.from('profiles').select('*').eq('id', user.id).maybeSingle();
       if (data) setProfile(data);
-      alert(`Order ${formatOrderNumber(order.id)} was cancelled.`);
+      showToast(`Order ${formatOrderNumber(order.id)} was cancelled.`, 'success');
     } catch (error) {
       console.error('Error cancelling order:', error);
-      alert(error.message || 'Could not cancel the order. Please contact the shop.');
+      showAlert(error.message || 'Could not cancel the order. Please contact the shop.');
     } finally {
       setCancellingOrderId(null);
     }
@@ -1132,7 +1143,15 @@ export default function BuyerDashboard() {
                           <button
                             type="button"
                             onClick={() => {
-                              if (window.confirm('Remove everything from your cart?')) writeCart([]);
+                              showConfirm({
+                                tone: 'warning',
+                                title: 'Empty your cart?',
+                                message: 'Every item will be removed. Your saved wishlist is not affected.',
+                                confirmLabel: 'Clear cart',
+                                cancelLabel: 'Keep items',
+                              }).then((ok) => {
+                                if (ok) writeCart([]);
+                              });
                             }}
                             className="min-h-[48px] rounded-full border-2 border-gray-200 px-6 font-semibold text-gray-700 transition-colors hover:bg-gray-50"
                           >
