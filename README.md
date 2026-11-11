@@ -22,6 +22,9 @@ This platform now supports **multiple sellers** who can independently manage the
 - 📦 **Order Tracking** - Order numbers, status timeline, cancelling while pending, and an "Order Received" button
 - 🛒 **Cart in the dashboard** - View, edit and check out without leaving My Account
 - 🏪 **Shop Profiles** - Tap a shop name to see the shop and everything it sells
+- 🎨 **Product Choices** - Pick colour, size or flavour and a quantity before ordering
+- 📍 **Address Picker** - Province, city/municipality and barangay dropdowns at checkout
+- 🖼️ **Profile Pictures** - Customers, sellers and admins can upload their own
 - 💳 **Payment Instructions** - GCash / bank details from Admin → Settings shown at checkout
 - 🔑 **Forgot Password** - Reset link by email
 - 📧 **Email Verification** - A 6-digit code is emailed when registering
@@ -70,6 +73,7 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=your_anon_key
 5. supabase-checkout-security.sql       # Server-side checkout, order status, cancellations
 6. supabase-auth-roles-fix.sql          # Account roles (seller vs customer) + first/last name
 7. supabase-buyer-confirm-order.sql     # "Order Received" button for customers
+8. supabase-product-options.sql         # Product choices, order variants, review authors, profile pictures
 ```
 This creates all tables, triggers, and sample data. Never run `supabase-final-fixes.sql`
 on the live database; it re-opens testing permissions.

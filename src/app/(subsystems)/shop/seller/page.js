@@ -47,6 +47,17 @@ export default function SellerLoginPage() {
     }
   }, [user, seller, router, mode]);
 
+  // "Sell on CONNECT-Daet" links here to open an account, so ?mode=signup
+  // starts on the registration form instead of the login one.
+  useEffect(() => {
+    try {
+      const requested = new URLSearchParams(window.location.search).get('mode');
+      if (requested === 'signup' || requested === 'login') setMode(requested);
+    } catch (error) {
+      console.error('Could not read the requested mode:', error);
+    }
+  }, []);
+
   // Countdown before another code can be requested
   useEffect(() => {
     if (resendIn <= 0) return undefined;

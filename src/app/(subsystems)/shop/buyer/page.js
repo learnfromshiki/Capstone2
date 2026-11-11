@@ -14,6 +14,9 @@ import { describePasswordProblem, isPasswordValid } from '@/lib/passwordPolicy';
 import { joinName, splitName } from '@/lib/profile';
 import { ROLE_LABELS } from '@/lib/roles';
 import { useDialog } from '@/components/ui/Dialog';
+import { cartLineId, describeSelection } from '@/lib/productOptions';
+import Avatar from '@/components/ui/Avatar';
+import AvatarUpload from '@/components/ui/AvatarUpload';
 
 const ORDER_STEPS = [
   { key: 'pending', label: 'Placed' },
@@ -203,7 +206,15 @@ export default function BuyerDashboard() {
     if (!cartKey) return [];
     try {
       const stored = localStorage.getItem(cartKey);
-      return stored ? JSON.parse(stored) : [];
+      const parsed = stored ? JSON.parse(stored) : [];
+
+      // Carts saved before product options existed have no line id.
+      return (Array.isArray(parsed) ? parsed : []).map((item) => ({
+        ...item,
+        productId: item.productId || item.id,
+        selectedOptions: item.selectedOptions || {},
+        lineId: item.lineId || cartLineId(item.productId || item.id, item.selectedOptions),
+      }));
     } catch (error) {
       console.error('Error reading the cart:', error);
       return [];
@@ -234,12 +245,12 @@ export default function BuyerDashboard() {
   );
   const cartCount = cart.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0);
 
-  const changeCartQuantity = (productId, quantity) => {
-    const item = cart.find((entry) => entry.id === productId);
+  const changeCartQuantity = (lineId, quantity) => {
+    const item = cart.find((entry) => entry.lineId === lineId);
     if (!item) return;
 
     if (quantity <= 0) {
-      writeCart(cart.filter((entry) => entry.id !== productId));
+      removeCartLine(item);
       return;
     }
 
@@ -249,7 +260,20 @@ export default function BuyerDashboard() {
       return;
     }
 
-    writeCart(cart.map((entry) => (entry.id === productId ? { ...entry, quantity } : entry)));
+    writeCart(cart.map((entry) => (entry.lineId === lineId ? { ...entry, quantity } : entry)));
+  };
+
+  /** Taking something out of the cart is easy to do by accident, so ask. */
+  const removeCartLine = async (item) => {
+    const confirmed = await showConfirm({
+      tone: 'warning',
+      title: 'Remove this item?',
+      message: `"${item.name}" will be taken out of your cart.`,
+      confirmLabel: 'Remove',
+      cancelLabel: 'Keep it',
+    });
+
+    if (confirmed) writeCart(cart.filter((entry) => entry.lineId !== item.lineId));
   };
 
   const handleCheckoutSuccess = () => {
@@ -284,6 +308,15 @@ export default function BuyerDashboard() {
   };
 
   const handleLogout = async () => {
+    const confirmed = await showConfirm({
+      tone: 'question',
+      title: 'Log out?',
+      message: 'You will need to sign in again to see your orders and cart.',
+      confirmLabel: 'Log out',
+      cancelLabel: 'Stay signed in',
+    });
+    if (!confirmed) return;
+
     // signOut clears the session and navigates to the shop itself, so the
     // dashboard can never linger with stale data.
     await signOut({ redirectTo: '/shop' });
@@ -438,12 +471,24 @@ export default function BuyerDashboard() {
     setSavingReview(true);
 
     try {
-      const { error } = await supabase.from('shop_reviews').insert({
+      const review = {
         product_id: item.product_id,
         user_id: user.id,
         rating,
         comment: comment || null,
+      };
+
+      // Copy the author's name and picture onto the review, so other shoppers
+      // can see who wrote it without being able to read profiles.
+      let { error } = await supabase.from('shop_reviews').insert({
+        ...review,
+        reviewer_name: profile?.full_name || (user.email || '').split('@')[0] || 'Customer',
+        reviewer_avatar_url: profile?.avatar_url || null,
       });
+
+      if (error && /reviewer_name|reviewer_avatar_url/.test(error.message || '')) {
+        ({ error } = await supabase.from('shop_reviews').insert(review));
+      }
 
       if (error) throw error;
 
@@ -608,19 +653,17 @@ export default function BuyerDashboard() {
             </div>
             <div className="flex items-center gap-2 sm:gap-4">
               <div className="hidden items-center gap-2 sm:flex">
-                <div className="w-8 h-8 bg-white/20 rounded-full flex items-center justify-center">
-                  <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" />
-                  </svg>
-                </div>
+                <Avatar src={profile?.avatar_url} name={profile?.full_name} email={user?.email} size="sm" />
                 <div className="max-w-[12rem] text-right">
                   <p className="truncate text-sm font-semibold">{profile?.full_name || user?.email}</p>
                   <p className="text-xs text-white/80">Customer</p>
                 </div>
               </div>
+              {/* The tab strip below carries Log Out on phones, so this one
+                  only appears once there is room for it. */}
               <button
                 onClick={handleLogout}
-                className="min-h-[44px] rounded-lg bg-white/10 px-3 text-sm font-medium transition-colors hover:bg-white/20 sm:px-4"
+                className="hidden min-h-[44px] rounded-lg bg-white/10 px-4 text-sm font-medium transition-colors hover:bg-white/20 sm:block"
               >
                 Log Out
               </button>
@@ -956,7 +999,14 @@ export default function BuyerDashboard() {
                             <h4 className="font-semibold mb-2 text-gray-900">Items:</h4>
                             {order.shop_order_items?.map((item, idx) => (
                               <div key={idx} className="flex justify-between text-sm text-gray-600 mb-1">
-                                <span>{item.product_name} x{item.quantity}</span>
+                                <span>
+                                  {item.product_name} x{item.quantity}
+                                  {describeSelection(item.options) && (
+                                    <span className="block text-xs text-gray-500">
+                                      {describeSelection(item.options)}
+                                    </span>
+                                  )}
+                                </span>
                                 <span className="font-semibold">₱{(Number(item.price) * Number(item.quantity)).toFixed(2)}</span>
                               </div>
                             ))}
@@ -1066,7 +1116,7 @@ export default function BuyerDashboard() {
                     <>
                       <div className="space-y-4">
                         {cart.map((item) => (
-                          <div key={item.id} className="flex flex-col gap-3 rounded-xl border border-gray-100 p-4 sm:flex-row sm:items-center">
+                          <div key={item.lineId} className="flex flex-col gap-3 rounded-xl border border-gray-100 p-4 sm:flex-row sm:items-center">
                             <div className="h-20 w-20 flex-shrink-0 overflow-hidden rounded-lg bg-gray-100">
                               {item.image_url ? (
                                 <img src={item.image_url} alt={item.name} className="h-full w-full object-cover" />
@@ -1077,11 +1127,16 @@ export default function BuyerDashboard() {
 
                             <div className="min-w-0 flex-1">
                               <Link
-                                href={`/shop?product=${item.id}`}
+                                href={`/shop?product=${item.productId || item.id}`}
                                 className="font-semibold text-gray-900 line-clamp-2 hover:text-blue-600"
                               >
                                 {item.name}
                               </Link>
+                              {describeSelection(item.selectedOptions) && (
+                                <p className="text-xs font-medium text-gray-500">
+                                  {describeSelection(item.selectedOptions)}
+                                </p>
+                              )}
                               <p className="font-bold text-blue-600">₱{Number(item.price).toFixed(2)}</p>
                             </div>
 
@@ -1089,7 +1144,7 @@ export default function BuyerDashboard() {
                               <div className="flex items-center rounded-lg border border-gray-200">
                                 <button
                                   type="button"
-                                  onClick={() => changeCartQuantity(item.id, Number(item.quantity) - 1)}
+                                  onClick={() => changeCartQuantity(item.lineId, Number(item.quantity) - 1)}
                                   aria-label={`Remove one ${item.name}`}
                                   className="flex h-11 w-11 items-center justify-center text-lg font-bold text-gray-600 hover:bg-gray-50"
                                 >
@@ -1098,7 +1153,7 @@ export default function BuyerDashboard() {
                                 <span className="w-10 text-center font-semibold">{item.quantity}</span>
                                 <button
                                   type="button"
-                                  onClick={() => changeCartQuantity(item.id, Number(item.quantity) + 1)}
+                                  onClick={() => changeCartQuantity(item.lineId, Number(item.quantity) + 1)}
                                   aria-label={`Add one ${item.name}`}
                                   className="flex h-11 w-11 items-center justify-center text-lg font-bold text-gray-600 hover:bg-gray-50"
                                 >
@@ -1115,7 +1170,7 @@ export default function BuyerDashboard() {
 
                               <button
                                 type="button"
-                                onClick={() => writeCart(cart.filter((entry) => entry.id !== item.id))}
+                                onClick={() => removeCartLine(item)}
                                 aria-label={`Remove ${item.name} from the cart`}
                                 className="flex h-11 w-11 items-center justify-center rounded-lg text-red-600 hover:bg-red-50"
                               >
@@ -1381,6 +1436,17 @@ export default function BuyerDashboard() {
                 </div>
                 <div className="p-6">
                   <div className="space-y-4">
+                    <div className="border-b pb-5">
+                      <p className="mb-3 text-sm font-semibold text-gray-700">Profile Picture</p>
+                      <AvatarUpload
+                        userId={user?.id}
+                        url={profile?.avatar_url}
+                        name={profile?.full_name}
+                        email={user?.email}
+                        onChange={(url) => setProfile((prev) => ({ ...(prev || {}), avatar_url: url }))}
+                      />
+                    </div>
+
                     <div className="grid gap-4 sm:grid-cols-2">
                       <div>
                         <label htmlFor="profileFirstName" className="block text-sm font-semibold text-gray-700 mb-2">

@@ -10,6 +10,8 @@ import ProductDetailsModal from '@/components/shop/ProductDetailsModal';
 import AuthModal from '@/components/AuthModal';
 import { useDialog } from '@/components/ui/Dialog';
 import ShopProfileModal from '@/components/shop/ShopProfileModal';
+import ProductOptionsModal from '@/components/shop/ProductOptionsModal';
+import { cartLineId, describeSelection, hasOptions } from '@/lib/productOptions';
 import ShopFooter from '@/components/shop/ShopFooter';
 
 export default function ShopPage() {
@@ -22,11 +24,24 @@ export default function ShopPage() {
   const [checkoutRequest, setCheckoutRequest] = useState(0);
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [selectedSellerId, setSelectedSellerId] = useState(null);
+  // The product whose options sheet is open, and why it was opened
+  const [optionsFor, setOptionsFor] = useState(null);
   const [reviewsByProduct, setReviewsByProduct] = useState({});
   const [reviewableProducts, setReviewableProducts] = useState({});
 
   const [pendingProductId, setPendingProductId] = useState(null);
-  const { showToast } = useDialog();
+  const { showToast, showConfirm } = useDialog();
+
+  const confirmSignOut = async () => {
+    const confirmed = await showConfirm({
+      tone: 'question',
+      title: 'Log out?',
+      message: 'You will need to sign in again to shop or see your orders. Your cart is kept.',
+      confirmLabel: 'Log out',
+      cancelLabel: 'Stay signed in',
+    });
+    if (confirmed) signOut();
+  };
 
   // Links from the dashboard: ?cart=1 opens the cart, ?product=<id> opens that
   // product so a wishlist or "View" button lands on the product itself.
@@ -81,7 +96,18 @@ export default function ShopPage() {
 
     try {
       const savedCart = localStorage.getItem(cartKey);
-      setCart(savedCart ? JSON.parse(savedCart) : []);
+      const parsed = savedCart ? JSON.parse(savedCart) : [];
+
+      // Carts saved before product options existed have no line id; give them
+      // one so the rest of the cart code can rely on it.
+      setCart(
+        (Array.isArray(parsed) ? parsed : []).map((item) => ({
+          ...item,
+          productId: item.productId || item.id,
+          selectedOptions: item.selectedOptions || {},
+          lineId: item.lineId || cartLineId(item.productId || item.id, item.selectedOptions),
+        }))
+      );
     } catch (error) {
       console.error('Error loading cart:', error);
       setCart([]);
@@ -194,11 +220,17 @@ export default function ShopPage() {
   // card can show the rating its buyers gave.
   const fetchReviews = async () => {
     try {
-      const { data, error } = await supabase
-        .from('shop_reviews')
-        .select('id, product_id, rating, comment, created_at')
-        .order('created_at', { ascending: false })
-        .limit(300);
+      const columns = 'id, product_id, rating, comment, created_at';
+      const read = (select) =>
+        supabase.from('shop_reviews').select(select).order('created_at', { ascending: false }).limit(300);
+
+      // The author columns arrive with supabase-product-options.sql; fall back
+      // so an older database still shows its reviews.
+      let { data, error } = await read(`${columns}, reviewer_name, reviewer_avatar_url`);
+
+      if (error && /reviewer_name|reviewer_avatar_url|column/i.test(error.message || '')) {
+        ({ data, error } = await read(columns));
+      }
 
       if (error) {
         console.warn('Reviews are unavailable:', error.message);
@@ -289,12 +321,25 @@ export default function ShopPage() {
       throw new Error('Only delivered orders can be reviewed.');
     }
 
-    const { error } = await supabase.from('shop_reviews').insert({
+    // The author's name and picture are copied onto the review: profiles can
+    // only be read by their owner, so other shoppers could never look them up.
+    const review = {
       product_id: product.id,
       user_id: user.id,
       rating: value,
       comment: text || null,
+    };
+
+    let { error } = await supabase.from('shop_reviews').insert({
+      ...review,
+      reviewer_name: profile?.full_name || (user.email || '').split('@')[0] || 'Customer',
+      reviewer_avatar_url: profile?.avatar_url || null,
     });
+
+    // Database without the author columns yet: save the review itself.
+    if (error && /reviewer_name|reviewer_avatar_url/.test(error.message || '')) {
+      ({ error } = await supabase.from('shop_reviews').insert(review));
+    }
 
     if (error) {
       if (error.code === '23505' || /duplicate|unique/i.test(error.message || '')) {
@@ -312,64 +357,97 @@ export default function ShopPage() {
     await fetchReviews();
   };
 
-  const addToCart = (product, quantity = 1) => {
-    // Check if user is logged in
+  /** Shared gate: a shopper must be signed in, active, and the item in stock. */
+  const canShop = (product) => {
     if (!user) {
       setShowAuthModal(true);
-      return;
+      return false;
     }
 
     if (isSuspended) {
       showToast('This account has been suspended. Please contact CONNECT-Daet support.', 'error');
-      return;
+      return false;
     }
 
-    // Check if product has stock
     if (!product.stock || product.stock <= 0) {
       showToast('Sorry, this product is out of stock.', 'error');
-      return;
+      return false;
     }
 
-    // Check the limit before updating state: an alert inside a state updater
-    // can fire twice.
-    const alreadyInCart = cart.find((item) => item.id === product.id);
-    if (alreadyInCart && alreadyInCart.quantity >= product.stock) {
-      showToast(`Cannot add more. Only ${product.stock} in stock.`, 'error');
-      return;
+    return true;
+  };
+
+  /**
+   * Put a chosen variant into the cart. Each combination of product and
+   * choices is its own line, so one red and one blue are counted separately.
+   */
+  const addLineToCart = (product, quantity = 1, selectedOptions = {}) => {
+    const lineId = cartLineId(product.id, selectedOptions);
+    const stock = Number(product.stock) || 0;
+
+    const existing = cart.find((item) => item.lineId === lineId);
+    if (existing && existing.quantity >= stock) {
+      showToast(`Cannot add more. Only ${stock} in stock.`, 'error');
+      return false;
     }
 
     setCart((prevCart) => {
-      const existingItem = prevCart.find((item) => item.id === product.id);
+      const current = prevCart.find((item) => item.lineId === lineId);
 
-      if (existingItem) {
-        if (existingItem.quantity >= product.stock) return prevCart;
-
+      if (current) {
         return prevCart.map((item) =>
-          item.id === product.id
-            ? { ...item, quantity: Math.min(item.quantity + quantity, product.stock) }
+          item.lineId === lineId
+            ? { ...item, quantity: Math.min(item.quantity + quantity, stock) }
             : item
         );
       }
-      return [...prevCart, { ...product, quantity: Math.min(quantity, product.stock) }];
+
+      return [
+        ...prevCart,
+        {
+          ...product,
+          lineId,
+          productId: product.id,
+          selectedOptions,
+          quantity: Math.min(quantity, stock),
+        },
+      ];
     });
 
-    // Adding to the cart keeps the customer on the product list. Only "Buy Now"
-    // opens the cart and moves on to checkout; the cart button in the header
-    // carries the running count.
-    showToast(`${product.name} added to your cart.`, 'success');
+    return true;
   };
 
-  const removeFromCart = (productId) => {
-    setCart((prevCart) => prevCart.filter((item) => item.id !== productId));
+  /**
+   * "Add to Cart" on a card. A product with choices opens the options sheet
+   * first, exactly as Shopee and Lazada do; a plain product goes straight in.
+   */
+  const addToCart = (product, quantity = 1) => {
+    if (!canShop(product)) return;
+
+    if (hasOptions(product)) {
+      setSelectedProduct(null);
+      setOptionsFor({ product, intent: 'cart' });
+      return;
+    }
+
+    if (addLineToCart(product, quantity)) {
+      // Adding to the cart keeps the customer on the product list. Only
+      // "Buy Now" moves on to checkout; the cart button carries the count.
+      showToast(`${product.name} added to your cart.`, 'success');
+    }
   };
 
-  const updateQuantity = (productId, quantity) => {
-    const item = cart.find((entry) => entry.id === productId);
+  const removeFromCart = (lineId) => {
+    setCart((prevCart) => prevCart.filter((item) => item.lineId !== lineId));
+  };
+
+  const updateQuantity = (lineId, quantity) => {
+    const item = cart.find((entry) => entry.lineId === lineId);
 
     if (!item) return;
 
     if (quantity <= 0) {
-      removeFromCart(productId);
+      removeFromCart(lineId);
       return;
     }
 
@@ -380,32 +458,33 @@ export default function ShopPage() {
     }
 
     setCart((prevCart) =>
-      prevCart.map((entry) =>
-        entry.id === productId ? { ...entry, quantity } : entry
-      )
+      prevCart.map((entry) => (entry.lineId === lineId ? { ...entry, quantity } : entry))
     );
   };
 
-  // Buy Now puts the item in the cart, opens the drawer and jumps into checkout
-  const buyNow = (product, quantity = 1) => {
-    if (!user) {
-      setShowAuthModal(true);
+  /** "Buy Now" always opens the options sheet, where quantity is chosen. */
+  const buyNow = (product) => {
+    if (!canShop(product)) return;
+
+    setSelectedProduct(null);
+    setOptionsFor({ product, intent: 'buy' });
+  };
+
+  /** What the options sheet hands back. */
+  const handleOptionsConfirm = ({ product, quantity, selected, action }) => {
+    const added = addLineToCart(product, quantity, selected);
+    setOptionsFor(null);
+    if (!added) return;
+
+    const summary = describeSelection(selected);
+
+    if (action === 'buy') {
+      setShowCart(true);
+      setCheckoutRequest((request) => request + 1);
       return;
     }
 
-    if (isSuspended) {
-      showToast('This account has been suspended. Please contact CONNECT-Daet support.', 'error');
-      return;
-    }
-
-    if (!product.stock || product.stock <= 0) {
-      showToast('Sorry, this product is out of stock.', 'error');
-      return;
-    }
-
-    addToCart(product, quantity);
-    setShowCart(true);
-    setCheckoutRequest((request) => request + 1);
+    showToast(`${product.name}${summary ? ` (${summary})` : ''} added to your cart.`, 'success');
   };
 
   const clearCart = () => {
@@ -472,11 +551,10 @@ export default function ShopPage() {
       return matchesCategory && matchesStock && matchesSearch;
     })
     .sort((a, b) => {
-      // Sold-out items always go last so shoppers see what they can buy first
-      const aOut = (Number(a.stock) || 0) <= 0;
-      const bOut = (Number(b.stock) || 0) <= 0;
-      if (aOut !== bOut) return aOut ? 1 : -1;
-
+      // The chosen order is applied exactly as its label says. Sold-out items
+      // are NOT pushed to the end: doing that made "Name: A to Z" look broken
+      // when a sold-out product should have come first. Use "In stock only"
+      // to hide them instead.
       switch (sortBy) {
         case 'price-asc':
           return (Number(a.price) || 0) - (Number(b.price) || 0);
@@ -556,7 +634,7 @@ export default function ShopPage() {
                     </Link>
                   </div>
                   <button
-                    onClick={signOut}
+                    onClick={confirmSignOut}
                     className="min-h-[44px] px-2 text-sm text-gray-600 hover:text-gray-900 font-medium"
                   >
                     Logout
@@ -643,43 +721,46 @@ export default function ShopPage() {
               </button>
             ))}
           </div>
+
+          {/* Result count and sorting live in the sticky bar, so they stay
+              reachable while scrolling through a long list of products. */}
+          {!loading && (
+            <div className="mt-3 flex flex-col gap-2 border-t pt-3 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-sm text-gray-600">
+                Showing <span className="font-semibold text-gray-900">{filteredProducts.length}</span>{' '}
+                {filteredProducts.length === 1 ? 'product' : 'products'}
+                {filter !== 'all' && ` in ${categories.find((c) => c.value === filter)?.label || filter}`}
+              </p>
+              <div className="flex flex-wrap items-center gap-3">
+                <label className="flex min-h-[44px] cursor-pointer items-center gap-2 text-sm text-gray-700">
+                  <input
+                    type="checkbox"
+                    checked={inStockOnly}
+                    onChange={(e) => setInStockOnly(e.target.checked)}
+                    className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  In stock only
+                </label>
+                <label className="flex items-center gap-2 text-sm text-gray-700">
+                  <span className="sr-only sm:not-sr-only">Sort by</span>
+                  <select
+                    value={sortBy}
+                    onChange={(e) => setSortBy(e.target.value)}
+                    className="min-h-[44px] rounded-lg border-2 border-gray-200 bg-white px-3 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="newest">Newest</option>
+                    <option value="price-asc">Price: Low to High</option>
+                    <option value="price-desc">Price: High to Low</option>
+                    <option value="rating">Top Rated</option>
+                    <option value="name">Name: A to Z</option>
+                  </select>
+                </label>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Results Count */}
-      {!loading && (
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <p className="text-sm text-gray-600">
-            Showing <span className="font-semibold text-gray-900">{filteredProducts.length}</span> {filteredProducts.length === 1 ? 'product' : 'products'}
-            {filter !== 'all' && ` in ${categories.find(c => c.value === filter)?.label || filter}`}
-          </p>
-          <div className="flex flex-wrap items-center gap-3">
-            <label className="flex min-h-[44px] cursor-pointer items-center gap-2 text-sm text-gray-700">
-              <input
-                type="checkbox"
-                checked={inStockOnly}
-                onChange={(e) => setInStockOnly(e.target.checked)}
-                className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-              />
-              In stock only
-            </label>
-            <label className="flex items-center gap-2 text-sm text-gray-700">
-              <span className="sr-only sm:not-sr-only">Sort by</span>
-              <select
-                value={sortBy}
-                onChange={(e) => setSortBy(e.target.value)}
-                className="min-h-[44px] rounded-lg border-2 border-gray-200 bg-white px-3 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="newest">Newest</option>
-                <option value="price-asc">Price: Low to High</option>
-                <option value="price-desc">Price: High to Low</option>
-                <option value="rating">Top Rated</option>
-                <option value="name">Name: A to Z</option>
-              </select>
-            </label>
-          </div>
-        </div>
-      )}
 
       {/* Products Grid */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-12">
@@ -774,6 +855,14 @@ export default function ShopPage() {
         onClose={() => setSelectedProduct(null)}
         onAddToCart={addToCart}
         onBuyNow={buyNow}
+      />
+
+      {/* Choose options (Buy Now / products with variants) */}
+      <ProductOptionsModal
+        product={optionsFor?.product || null}
+        intent={optionsFor?.intent || 'cart'}
+        onClose={() => setOptionsFor(null)}
+        onConfirm={handleOptionsConfirm}
       />
 
       {/* Shop profile */}

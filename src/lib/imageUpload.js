@@ -107,3 +107,50 @@ export const validateImage = (imageInput) => {
   }
   return false;
 };
+
+/**
+ * Upload a profile picture. Everyone (customer, seller, admin) writes into a
+ * folder named after their own user id, which is what the storage policy in
+ * supabase-product-options.sql checks.
+ *
+ * @param {File} file
+ * @returns {Promise<{url: string, error: null} | {url: null, error: Error}>}
+ */
+export const uploadProfileImage = async (file) => {
+  try {
+    const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
+    if (!validTypes.includes(file.type)) {
+      throw new Error('Please choose a JPG, PNG, GIF or WebP image.');
+    }
+
+    const maxSize = 2 * 1024 * 1024; // 2MB
+    if (file.size > maxSize) {
+      throw new Error('That picture is too large. Please choose one under 2MB.');
+    }
+
+    const { data: authData } = await supabase.auth.getUser();
+    const userId = authData?.user?.id;
+    if (!userId) throw new Error('Please sign in again before changing your picture.');
+
+    const fileExt = (file.name.split('.').pop() || 'jpg').toLowerCase();
+    const fileName = `${userId}/${Date.now()}.${fileExt}`;
+
+    const { error } = await supabase.storage
+      .from('profile-images')
+      .upload(fileName, file, { cacheControl: '3600', upsert: true });
+
+    if (error) {
+      if (/bucket.*not found/i.test(error.message || '')) {
+        throw new Error('Profile pictures are not set up yet. Run supabase-product-options.sql in Supabase.');
+      }
+      throw error;
+    }
+
+    const { data: { publicUrl } } = supabase.storage.from('profile-images').getPublicUrl(fileName);
+
+    return { url: publicUrl, error: null };
+  } catch (error) {
+    console.error('Error uploading the profile picture:', error);
+    return { url: null, error };
+  }
+};

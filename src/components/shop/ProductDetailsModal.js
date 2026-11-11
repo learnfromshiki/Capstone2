@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import StarRating from './StarRating';
+import Avatar from '@/components/ui/Avatar';
 
 const formatReviewDate = (value) => {
   if (!value) return '';
@@ -298,23 +299,35 @@ export default function ProductDetailsModal({
           ) : (
             <ul className="space-y-3">
               {reviews.slice(0, 3).map((review) => (
-                <li key={review.id} className="bg-gray-50 rounded-xl p-4">
-                  <div className="flex items-center justify-between gap-3 mb-1.5">
-                    <div className="flex items-center gap-2">
+                <li key={review.id} className="flex gap-3 rounded-xl bg-gray-50 p-4">
+                  {/* Who wrote it: the name and picture are stored on the
+                      review itself, because profiles are private. */}
+                  <Avatar
+                    src={review.reviewer_avatar_url}
+                    name={review.reviewer_name}
+                    size="sm"
+                    className="mt-0.5"
+                  />
+
+                  <div className="min-w-0 flex-1">
+                    <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+                      <p className="truncate text-sm font-semibold text-gray-900">
+                        {review.reviewer_name || 'Customer'}
+                      </p>
+                      <span className="text-xs text-gray-500">{formatReviewDate(review.created_at)}</span>
+                    </div>
+
+                    <div className="mb-1.5 flex items-center gap-2">
                       <StarRating rating={review.rating} />
-                      <span className="text-[11px] font-semibold text-green-700 bg-green-100 px-2 py-0.5 rounded-full">
+                      <span className="rounded-full bg-green-100 px-2 py-0.5 text-[11px] font-semibold text-green-700">
                         Verified purchase
                       </span>
                     </div>
-                    <span className="text-xs text-gray-500">
-                      {formatReviewDate(review.created_at)}
-                    </span>
+
+                    {review.comment && (
+                      <p className="whitespace-pre-line text-sm leading-relaxed text-gray-700">{review.comment}</p>
+                    )}
                   </div>
-                  {review.comment && (
-                    <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-line">
-                      {review.comment}
-                    </p>
-                  )}
                 </li>
               ))}
             </ul>

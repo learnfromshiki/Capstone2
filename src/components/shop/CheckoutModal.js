@@ -7,6 +7,9 @@ import { useAuth } from '@/contexts/AuthContext';
 import { estimateRewardPoints, formatOrderNumber, isMissingFunction, PAYMENT_LABELS } from '@/lib/orders';
 import { fetchShopSettings } from '@/lib/shopSettings';
 import PaymentInstructions from './PaymentInstructions';
+import { describeSelection } from '@/lib/productOptions';
+import AddressFields from './AddressFields';
+import { formatAddress, parseAddress } from '@/lib/philippineAddresses';
 
 const MAX_QUANTITY = 9999;
 
@@ -44,6 +47,15 @@ export default function CheckoutModal({ cart, total, onClose, onSuccess, onRequi
   const [shopSettings, setShopSettings] = useState(null);
   const [saveDetails, setSaveDetails] = useState(false);
   const [savedProfile, setSavedProfile] = useState({ phone: '', address: '' });
+  // The address as separate parts; formData.address keeps the single line that
+  // is stored on the order.
+  const [addressParts, setAddressParts] = useState({
+    province: '',
+    city: '',
+    barangay: '',
+    street: '',
+    landmark: '',
+  });
   const [error, setError] = useState('');
   const [formData, setFormData] = useState({
     fullName: '',
@@ -78,6 +90,7 @@ export default function CheckoutModal({ cart, total, onClose, onSuccess, onRequi
       if (cancelled || profileError || !data) return;
 
       setSavedProfile({ phone: data.phone || '', address: data.address || '' });
+      if (data.address) setAddressParts(parseAddress(data.address));
       setFormData((prev) => ({
         ...prev,
         fullName: prev.fullName || data.full_name || '',
@@ -138,8 +151,28 @@ export default function CheckoutModal({ cart, total, onClose, onSuccess, onRequi
       return false;
     }
 
+    if (!addressParts.province.trim()) {
+      setError('Please choose your province.');
+      return false;
+    }
+
+    if (!addressParts.city.trim()) {
+      setError('Please choose your city or municipality.');
+      return false;
+    }
+
+    if (!addressParts.barangay.trim()) {
+      setError('Please choose your barangay.');
+      return false;
+    }
+
+    if (addressParts.street.trim().length < 3) {
+      setError('Please enter your house number and street.');
+      return false;
+    }
+
     if (formData.address.trim().length < 5) {
-      setError('Please enter your complete delivery address (house no., street, barangay, town).');
+      setError('Please complete your delivery address.');
       return false;
     }
 
@@ -185,7 +218,12 @@ export default function CheckoutModal({ cart, total, onClose, onSuccess, onRequi
         throw new Error(`The quantity for ${item.name || 'an item'} is invalid. Use a whole number from 1 to ${MAX_QUANTITY}.`);
       }
 
-      return { id: item.id, quantity };
+      return {
+        id: item.productId || item.id,
+        lineId: item.lineId || item.id,
+        selectedOptions: item.selectedOptions || {},
+        quantity,
+      };
     });
 
     const uniqueIds = [...new Set(normalized.map((item) => item.id))];
@@ -259,6 +297,8 @@ export default function CheckoutModal({ cart, total, onClose, onSuccess, onRequi
 
       return {
         id: product.id,
+        lineId: item.lineId,
+        selectedOptions: item.selectedOptions,
         name: product.name,
         seller_id: product.seller_id || null,
         price,
@@ -329,7 +369,15 @@ export default function CheckoutModal({ cart, total, onClose, onSuccess, onRequi
    */
   const placeOrderOnServer = async () => {
     const { data, error: rpcError } = await supabase.rpc('place_order', {
-      p_items: cart.map((item) => ({ product_id: item.id, quantity: Number(item.quantity) })),
+      p_items: cart.map((item) => ({
+        product_id: item.productId || item.id,
+        quantity: Number(item.quantity),
+        // What the shopper chose (colour, size...). The database checks it
+        // against what the seller actually offers.
+        options: item.selectedOptions && Object.keys(item.selectedOptions).length > 0
+          ? item.selectedOptions
+          : null,
+      })),
       p_customer_name: formData.fullName.trim(),
       p_customer_email: formData.email.trim(),
       p_customer_phone: formData.phone.trim(),
@@ -618,20 +666,20 @@ export default function CheckoutModal({ cart, total, onClose, onSuccess, onRequi
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Delivery Address *
-                </label>
-                <textarea
-                  name="address"
-                  autoComplete="street-address"
-                  placeholder="House no., street, barangay, town/city"
-                  maxLength={500}
-                  value={formData.address}
-                  onChange={handleInputChange}
-                  rows="3"
-                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  required
+                <p className="mb-3 text-sm font-semibold text-gray-900">Delivery Address *</p>
+                <AddressFields
+                  value={addressParts}
+                  onChange={(next) => {
+                    setAddressParts(next);
+                    // Keep the single stored line in step with the parts
+                    setFormData((prev) => ({ ...prev, address: formatAddress(next) }));
+                  }}
                 />
+                {formData.address && (
+                  <p className="mt-2 rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-600">
+                    Delivering to: <span className="font-medium text-gray-800">{formData.address}</span>
+                  </p>
+                )}
               </div>
 
               <div>
@@ -698,8 +746,13 @@ export default function CheckoutModal({ cart, total, onClose, onSuccess, onRequi
             <div className="bg-gray-50 rounded-xl p-4 mb-6">
               <h3 className="font-semibold mb-2">Order Summary</h3>
               {summaryItems.map((item) => (
-                <div key={item.id} className="flex justify-between gap-3 text-sm mb-1">
-                  <span className="min-w-0 break-words">{item.name} x{item.quantity}</span>
+                <div key={item.lineId || item.id} className="flex justify-between gap-3 text-sm mb-1">
+                  <span className="min-w-0 break-words">
+                    {item.name} x{item.quantity}
+                    {describeSelection(item.selectedOptions) && (
+                      <span className="block text-xs text-gray-500">{describeSelection(item.selectedOptions)}</span>
+                    )}
+                  </span>
                   <span className="flex-shrink-0">₱{(Number(item.price) * Number(item.quantity)).toFixed(2)}</span>
                 </div>
               ))}

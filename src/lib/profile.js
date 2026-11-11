@@ -1,6 +1,6 @@
 import { supabase } from './supabaseClient';
 
-const BASE_PROFILE_COLUMNS = 'id, full_name, email, user_type, is_suspended, points';
+const BASE_PROFILE_COLUMNS = 'id, full_name, email, user_type, is_suspended, points, avatar_url';
 const EXTENDED_PROFILE_COLUMNS = `${BASE_PROFILE_COLUMNS}, first_name, last_name`;
 
 /** Postgres "column does not exist" / PostgREST "unknown column". */

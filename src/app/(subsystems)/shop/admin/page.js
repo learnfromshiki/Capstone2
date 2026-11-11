@@ -15,6 +15,8 @@ const peso = (value) =>
   `₱${(Number(value) || 0).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 import Link from 'next/link';
 import { useDialog } from '@/components/ui/Dialog';
+import AvatarUpload from '@/components/ui/AvatarUpload';
+import { describeSelection } from '@/lib/productOptions';
 
 const REPORT_CONFIG = {
   sales: {
@@ -115,6 +117,8 @@ export default function ShopAdminPage() {
   });
   const [uploadingImage, setUploadingImage] = useState(false);
   const [imagePreview, setImagePreview] = useState('');
+  const [adminUserId, setAdminUserId] = useState(null);
+  const [adminAvatarUrl, setAdminAvatarUrl] = useState('');
 
   // Site-wide notifications: a modal for anything that must be read or
   // confirmed, a corner toast for routine successes.
@@ -153,8 +157,20 @@ export default function ShopAdminPage() {
           // Keep the admin session inside this tab only (see supabaseClient.js)
           startAdminSession();
           setIsAuthenticated(true);
+          setAdminUserId(session.user.id);
           setAdminEmail(session.user.email || '');
           setAdminName(session.user.user_metadata?.full_name || 'Admin');
+
+          const { data: adminProfile } = await supabase
+            .from('profiles')
+            .select('avatar_url, full_name')
+            .eq('id', session.user.id)
+            .maybeSingle();
+
+          if (adminProfile) {
+            setAdminAvatarUrl(adminProfile.avatar_url || '');
+            if (adminProfile.full_name) setAdminName(adminProfile.full_name);
+          }
         }
       } catch (error) {
         console.error('Error verifying admin access:', error);
@@ -236,6 +252,7 @@ export default function ShopAdminPage() {
 
       startAdminSession();
       setIsAuthenticated(true);
+      setAdminUserId(data.user.id);
       setAdminName(data.user.user_metadata?.full_name || 'Admin');
       setAdminEmail(data.user.email || adminEmail.trim());
     } catch (error) {
@@ -247,6 +264,15 @@ export default function ShopAdminPage() {
   };
 
   const handleLogout = async () => {
+    const confirmed = await showConfirm({
+      tone: 'question',
+      title: 'Log out of the admin panel?',
+      message: 'You will need to sign in again to manage the marketplace.',
+      confirmLabel: 'Log out',
+      cancelLabel: 'Stay signed in',
+    });
+    if (!confirmed) return;
+
     setIsAuthenticated(false);
 
     try {
@@ -2105,6 +2131,11 @@ export default function ShopAdminPage() {
                     {order.shop_order_items?.map((item, idx) => (
                       <div key={idx} className="text-sm text-gray-600">
                         {item.product_name} x{item.quantity} - {peso(Number(item.price) * Number(item.quantity))}
+                        {describeSelection(item.options) && (
+                          <span className="block text-xs font-medium text-blue-700">
+                            {describeSelection(item.options)}
+                          </span>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -2587,6 +2618,16 @@ export default function ShopAdminPage() {
                   Admin Account
                 </h4>
                 <div className="space-y-4">
+                  <div className="border-b pb-4">
+                    <p className="mb-3 text-sm font-semibold text-gray-700">Profile Picture</p>
+                    <AvatarUpload
+                      userId={adminUserId}
+                      url={adminAvatarUrl}
+                      name={adminName}
+                      email={adminEmail}
+                      onChange={setAdminAvatarUrl}
+                    />
+                  </div>
                   <div>
                     <label className="block text-sm font-semibold mb-2 text-gray-700">Email</label>
                     <input

@@ -68,8 +68,14 @@ export default function ShopFooter() {
               </Link>
             </li>
             <li>
-              <Link className="hover:text-blue-600" href="/shop/seller">
+              {/* Straight to the seller sign-up form, not the login screen */}
+              <Link className="hover:text-blue-600" href="/shop/seller?mode=signup">
                 Sell on CONNECT-Daet
+              </Link>
+            </li>
+            <li>
+              <Link className="hover:text-blue-600" href="/terms">
+                Terms &amp; Privacy
               </Link>
             </li>
           </ul>

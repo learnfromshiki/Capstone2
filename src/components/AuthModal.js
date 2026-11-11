@@ -42,6 +42,7 @@ export default function AuthModal({ isOpen, onClose, mode: initialMode = 'login'
 
   const [confirmPassword, setConfirmPassword] = useState('');
   const [capsLockOn, setCapsLockOn] = useState(false);
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
 
   const {
     signIn,
@@ -120,6 +121,11 @@ export default function AuthModal({ isOpen, onClose, mode: initialMode = 'login'
 
     if (accountType === 'seller' && !businessName.trim()) {
       setError('Please enter your shop name.');
+      return false;
+    }
+
+    if (!acceptedTerms) {
+      setError('Please read and accept the Terms of Service and Privacy Policy to continue.');
       return false;
     }
 
@@ -588,6 +594,17 @@ export default function AuthModal({ isOpen, onClose, mode: initialMode = 'login'
                 required
               />
 
+              <label htmlFor="showResetPassword" className="mt-2 flex cursor-pointer items-center">
+                <input
+                  type="checkbox"
+                  id="showResetPassword"
+                  checked={showPassword}
+                  onChange={(e) => setShowPassword(e.target.checked)}
+                  className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-600 focus:ring-2"
+                />
+                <span className="ml-2 text-xs font-medium text-gray-700">Show password</span>
+              </label>
+
               {capsLockOn && (
                 <p role="status" className="mt-1.5 flex items-center gap-1 text-xs font-medium text-amber-700">
                   <span aria-hidden="true">⇪</span> Caps Lock is on
@@ -638,6 +655,18 @@ export default function AuthModal({ isOpen, onClose, mode: initialMode = 'login'
                 </p>
               )}
 
+              {/* Right under the box it applies to, not further down the form */}
+              <label htmlFor="showPassword" className="mt-2 flex cursor-pointer items-center">
+                <input
+                  type="checkbox"
+                  id="showPassword"
+                  checked={showPassword}
+                  onChange={(e) => setShowPassword(e.target.checked)}
+                  className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-600 focus:ring-2"
+                />
+                <span className="ml-2 text-xs font-medium text-gray-700">Show password</span>
+              </label>
+
               {mode === 'signup' && (
                 <div id="password-rules">
                   <PasswordRequirements value={password} />
@@ -658,17 +687,27 @@ export default function AuthModal({ isOpen, onClose, mode: initialMode = 'login'
             </div>
           )}
 
-          {/* Show Password Checkbox */}
-          {(mode === 'login' || mode === 'signup' || mode === 'reset') && (
-            <label htmlFor="showPassword" className="flex min-h-[44px] cursor-pointer items-center">
+          {/* Terms, on the screen where an account is created */}
+          {mode === 'signup' && (
+            <label htmlFor="acceptTerms" className="flex cursor-pointer items-start gap-2">
               <input
                 type="checkbox"
-                id="showPassword"
-                checked={showPassword}
-                onChange={(e) => setShowPassword(e.target.checked)}
-                className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-600 focus:ring-2"
+                id="acceptTerms"
+                checked={acceptedTerms}
+                onChange={(e) => setAcceptedTerms(e.target.checked)}
+                className="mt-0.5 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-2 focus:ring-blue-600"
               />
-              <span className="ml-2 text-xs font-medium text-gray-700">Show password</span>
+              <span className="text-xs leading-relaxed text-gray-600">
+                I have read and agree to the{' '}
+                <a href="/terms" target="_blank" rel="noopener noreferrer" className="font-semibold text-blue-600 hover:underline">
+                  Terms of Service
+                </a>{' '}
+                and{' '}
+                <a href="/terms#privacy" target="_blank" rel="noopener noreferrer" className="font-semibold text-blue-600 hover:underline">
+                  Privacy Policy
+                </a>
+                .
+              </span>
             </label>
           )}
 
@@ -717,12 +756,28 @@ export default function AuthModal({ isOpen, onClose, mode: initialMode = 'login'
           <button
             type="submit"
             disabled={
-              loading || ((mode === 'signup' || mode === 'reset') && !isPasswordValid(password))
+              loading ||
+              ((mode === 'signup' || mode === 'reset') && !isPasswordValid(password)) ||
+              (mode === 'signup' && !acceptedTerms)
             }
             className="w-full min-h-[44px] bg-blue-600 text-white py-3 rounded-full font-bold hover:bg-blue-700 transition-all shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed text-sm"
           >
             {loading ? 'Please wait...' : submitLabel}
           </button>
+
+          {mode === 'login' && (
+            <p className="text-center text-[11px] leading-relaxed text-gray-500">
+              By signing in you agree to our{' '}
+              <a href="/terms" target="_blank" rel="noopener noreferrer" className="font-semibold text-blue-600 hover:underline">
+                Terms of Service
+              </a>{' '}
+              and{' '}
+              <a href="/terms#privacy" target="_blank" rel="noopener noreferrer" className="font-semibold text-blue-600 hover:underline">
+                Privacy Policy
+              </a>
+              .
+            </p>
+          )}
 
           <div className="text-center pt-1">
             <button
@@ -735,16 +790,6 @@ export default function AuthModal({ isOpen, onClose, mode: initialMode = 'login'
                 : mode === 'signup'
                 ? 'Already have an account? Log In'
                 : 'Back to Log In'}
-            </button>
-          </div>
-
-          <div className="text-center">
-            <button
-              type="button"
-              onClick={onClose}
-              className="min-h-[44px] px-3 text-xs text-gray-500 hover:text-gray-700"
-            >
-              Keep browsing (sign in later to shop)
             </button>
           </div>
         </form>

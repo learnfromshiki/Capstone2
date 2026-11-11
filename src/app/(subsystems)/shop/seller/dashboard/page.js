@@ -9,7 +9,10 @@ import { formatOrderNumber, getAllowedStatuses, PAYMENT_LABELS, STATUS_LABELS, t
 import PasswordRequirements from '@/components/PasswordRequirements';
 import { describePasswordProblem, isPasswordValid } from '@/lib/passwordPolicy';
 import { fetchProfileRow, joinName, splitName } from '@/lib/profile';
+import { describeSelection, readOptions } from '@/lib/productOptions';
 import { useDialog } from '@/components/ui/Dialog';
+import Avatar from '@/components/ui/Avatar';
+import AvatarUpload from '@/components/ui/AvatarUpload';
 import Link from 'next/link';
 
 // Totals for this seller's items over the selected range, used by the dashboard chart
@@ -82,6 +85,7 @@ export default function SellerDashboard() {
   // The owner's own name, kept on the profiles row (the shop name is separate)
   const [ownerName, setOwnerName] = useState({ first_name: '', last_name: '' });
   const [savingOwnerName, setSavingOwnerName] = useState(false);
+  const [avatarUrl, setAvatarUrl] = useState('');
   const [passwordForm, setPasswordForm] = useState({ current: '', next: '', confirm: '' });
   const [showPassword, setShowPassword] = useState(false);
   const [changingPassword, setChangingPassword] = useState(false);
@@ -115,6 +119,8 @@ export default function SellerDashboard() {
     image_url: '',
     artisan_name: '',
     imageFile: null,
+    // What the buyer gets to choose: [{ name: 'Colour', values: ['Red'] }]
+    options: [],
   });
 
   useEffect(() => {
@@ -204,7 +210,7 @@ export default function SellerDashboard() {
 
     const { data: myItems, error: itemsError } = await supabase
       .from('shop_order_items')
-      .select('id, order_id, product_id, product_name, quantity, price')
+      .select('id, order_id, product_id, product_name, quantity, price, options')
       .in('product_id', productIds);
 
     if (itemsError) throw itemsError;
@@ -439,6 +445,16 @@ export default function SellerDashboard() {
     setSavingProduct(true);
 
     try {
+      // Keep only complete groups: a name and at least one value.
+      const options = (newProduct.options || [])
+        .map((group) => ({
+          name: (group.name || '').trim(),
+          values: (Array.isArray(group.values) ? group.values : [])
+            .map((value) => String(value).trim())
+            .filter(Boolean),
+        }))
+        .filter((group) => group.name && group.values.length > 0);
+
       const payload = {
         name,
         description,
@@ -447,6 +463,7 @@ export default function SellerDashboard() {
         category: newProduct.category,
         image_url: newProduct.image_url || null,
         artisan_name: newProduct.artisan_name.trim() || null,
+        options,
       };
 
       if (editingProductId) {
@@ -566,6 +583,25 @@ export default function SellerDashboard() {
     }
   };
 
+  // ---- product choices (colour, size, flavour...) ----
+  const addOptionGroup = () =>
+    setNewProduct((prev) => ({
+      ...prev,
+      options: [...(prev.options || []), { name: '', values: [] }],
+    }));
+
+  const updateOptionGroup = (index, patch) =>
+    setNewProduct((prev) => ({
+      ...prev,
+      options: (prev.options || []).map((group, i) => (i === index ? { ...group, ...patch } : group)),
+    }));
+
+  const removeOptionGroup = (index) =>
+    setNewProduct((prev) => ({
+      ...prev,
+      options: (prev.options || []).filter((_, i) => i !== index),
+    }));
+
   const openEditProduct = (product) => {
     setEditingProductId(product.id);
     setNewProduct({
@@ -577,6 +613,7 @@ export default function SellerDashboard() {
       image_url: product.image_url || '',
       artisan_name: product.artisan_name || '',
       imageFile: null,
+      options: readOptions(product),
     });
     setImagePreview(product.image_url || '');
     setShowAddProduct(true);
@@ -594,6 +631,7 @@ export default function SellerDashboard() {
       price: '',
       stock: '',
       category: 'handicrafts',
+      options: [],
       image_url: '',
       artisan_name: '',
       imageFile: null,
@@ -616,6 +654,7 @@ export default function SellerDashboard() {
         first_name: row.first_name || stored.firstName,
         last_name: row.last_name || stored.lastName,
       });
+      setAvatarUrl(row.avatar_url || '');
     })();
 
     return () => {
@@ -769,6 +808,15 @@ export default function SellerDashboard() {
   };
 
   const handleLogout = async () => {
+    const confirmed = await showConfirm({
+      tone: 'question',
+      title: 'Log out of your shop?',
+      message: 'You will need to sign in again to manage products and orders.',
+      confirmLabel: 'Log out',
+      cancelLabel: 'Stay signed in',
+    });
+    if (!confirmed) return;
+
     loggingOut = true;
     await signOut();
     window.location.href = '/shop';
@@ -1070,11 +1118,7 @@ export default function SellerDashboard() {
               )}
             </button>
             <div className="flex items-center gap-2">
-              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-100">
-                <svg className="w-6 h-6 text-blue-700" fill="currentColor" viewBox="0 0 20 20">
-                  <path d="M3 1a1 1 0 000 2h1.22l.305 1.222a.997.997 0 00.01.042l1.358 5.43-.893.892C3.74 11.846 4.632 14 6.414 14H15a1 1 0 000-2H6.414l1-1H14a1 1 0 00.894-.553l3-6A1 1 0 0017 3H6.28l-.31-1.243A1 1 0 005 1H3zM16 16.5a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0zM6.5 18a1.5 1.5 0 100-3 1.5 1.5 0 000 3z" />
-                </svg>
-              </div>
+              <Avatar src={avatarUrl} name={joinName(ownerName.first_name, ownerName.last_name)} email={user?.email} size="md" />
               <div className="max-w-[10rem] text-left sm:max-w-none sm:text-right">
                 <p className="truncate text-sm font-semibold text-gray-900">{seller.business_name}</p>
                 <p className="text-xs text-gray-600">Seller</p>
@@ -1098,6 +1142,15 @@ export default function SellerDashboard() {
               {tab.label}
             </button>
           ))}
+
+          {/* The sidebar (and its Log Out) is hidden on phones, so the tab
+              strip carries one. */}
+          <button
+            onClick={handleLogout}
+            className="ml-auto min-h-[44px] whitespace-nowrap rounded-lg bg-red-50 px-3 text-sm font-semibold text-red-600 transition-colors hover:bg-red-100"
+          >
+            Log Out
+          </button>
         </nav>
 
         {/* Scrollable Content */}
@@ -1572,6 +1625,11 @@ export default function SellerDashboard() {
                     {order.my_items?.map((item) => (
                       <div key={item.id} className="text-sm text-gray-600">
                         {item.product_name} x{item.quantity} - ₱{(Number(item.price) * Number(item.quantity)).toLocaleString()}
+                        {describeSelection(item.options) && (
+                          <span className="block text-xs font-medium text-blue-700">
+                            {describeSelection(item.options)}
+                          </span>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -1770,6 +1828,20 @@ export default function SellerDashboard() {
                       <span className="px-3 py-1 bg-blue-100 text-blue-700 text-xs font-semibold rounded-full">Verified Seller</span>
                     </div>
                   </div>
+                </div>
+
+                <div className="pt-6 border-t">
+                  <h4 className="font-semibold text-gray-900 mb-1">Profile Picture</h4>
+                  <p className="text-sm text-gray-600 mb-4">
+                    Shown in your dashboard. Your shop logo is set separately in Shop Settings.
+                  </p>
+                  <AvatarUpload
+                    userId={user?.id}
+                    url={avatarUrl}
+                    name={joinName(ownerName.first_name, ownerName.last_name)}
+                    email={user?.email}
+                    onChange={setAvatarUrl}
+                  />
                 </div>
 
                 <div className="pt-6 border-t">
@@ -2080,6 +2152,81 @@ export default function SellerDashboard() {
                   onChange={(e) => setNewProduct({ ...newProduct, artisan_name: e.target.value })}
                   className="w-full px-4 py-3 border-2 rounded-xl focus:ring-2 focus:ring-blue-500"
                 />
+              </div>
+
+              {/* Choices the buyer makes before adding to the cart */}
+              <div className="rounded-xl border-2 border-dashed border-gray-200 p-4">
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div>
+                    <p className="text-sm font-semibold text-gray-900">Product Choices (optional)</p>
+                    <p className="mt-1 text-xs text-gray-500">
+                      Colour, size, flavour and so on. Buyers must pick one of each before they can order.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={addOptionGroup}
+                    className="min-h-[40px] rounded-lg border-2 border-blue-200 px-3 text-xs font-semibold text-blue-600 hover:bg-blue-50"
+                  >
+                    + Add a choice
+                  </button>
+                </div>
+
+                {(newProduct.options || []).length === 0 ? (
+                  <p className="mt-3 text-xs text-gray-400">
+                    No choices yet. Leave this empty for a product that comes only one way.
+                  </p>
+                ) : (
+                  <div className="mt-4 space-y-4">
+                    {(newProduct.options || []).map((group, index) => (
+                      <div key={index} className="rounded-lg bg-gray-50 p-3">
+                        <div className="flex gap-2">
+                          <input
+                            type="text"
+                            value={group.name}
+                            onChange={(e) => updateOptionGroup(index, { name: e.target.value })}
+                            placeholder="Choice name, e.g. Colour"
+                            maxLength={30}
+                            className="min-h-[44px] flex-1 rounded-lg border-2 px-3 text-sm focus:ring-2 focus:ring-blue-500"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => removeOptionGroup(index)}
+                            aria-label={`Remove the ${group.name || 'unnamed'} choice`}
+                            className="min-h-[44px] rounded-lg bg-red-50 px-3 text-sm font-semibold text-red-600 hover:bg-red-100"
+                          >
+                            Remove
+                          </button>
+                        </div>
+
+                        <input
+                          type="text"
+                          value={(group.values || []).join(', ')}
+                          onChange={(e) =>
+                            updateOptionGroup(index, {
+                              values: e.target.value.split(',').map((value) => value.trimStart()),
+                            })
+                          }
+                          placeholder="Options, separated by commas: Red, Blue, Green"
+                          className="mt-2 min-h-[44px] w-full rounded-lg border-2 px-3 text-sm focus:ring-2 focus:ring-blue-500"
+                        />
+
+                        {(group.values || []).filter(Boolean).length > 0 && (
+                          <div className="mt-2 flex flex-wrap gap-1.5">
+                            {group.values.filter(Boolean).map((value, valueIndex) => (
+                              <span
+                                key={valueIndex}
+                                className="rounded-full bg-white px-3 py-1 text-xs font-medium text-gray-700 shadow-sm"
+                              >
+                                {value.trim()}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               <div>

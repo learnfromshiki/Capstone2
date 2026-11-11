@@ -2,9 +2,25 @@
 
 import { useEffect, useRef, useState } from 'react';
 import CheckoutModal from './CheckoutModal';
+import { describeSelection } from '@/lib/productOptions';
+import { useDialog } from '@/components/ui/Dialog';
 
 export default function Cart({ cart, isOpen, onClose, onUpdateQuantity, onRemoveItem, total, onClearCart, onOrderPlaced, checkoutRequest = 0, onRequireAuth }) {
   const [showCheckout, setShowCheckout] = useState(false);
+  const { showConfirm } = useDialog();
+
+  /** Removing something from the cart is easy to do by accident, so ask. */
+  const confirmRemove = async (item) => {
+    const confirmed = await showConfirm({
+      tone: 'warning',
+      title: 'Remove this item?',
+      message: `"${item.name}" will be taken out of your cart.`,
+      confirmLabel: 'Remove',
+      cancelLabel: 'Keep it',
+    });
+
+    if (confirmed) onRemoveItem(item.lineId);
+  };
 
   // Escape closes the cart (the checkout window handles its own Escape)
   useEffect(() => {
@@ -86,7 +102,7 @@ export default function Cart({ cart, isOpen, onClose, onUpdateQuantity, onRemove
             <div className="space-y-4">
               {cart.map((item) => (
                 <div
-                  key={item.id}
+                  key={item.lineId}
                   className="bg-white rounded-xl p-4 flex gap-4 shadow-sm hover:shadow-md transition-shadow border border-gray-100"
                 >
                   {/* Product Image */}
@@ -113,7 +129,7 @@ export default function Cart({ cart, isOpen, onClose, onUpdateQuantity, onRemove
                         {item.name}
                       </h3>
                       <button
-                        onClick={() => onRemoveItem(item.id)}
+                        onClick={() => confirmRemove(item)}
                         aria-label={`Remove ${item.name} from cart`}
                         className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg text-red-500 hover:bg-red-50 flex-shrink-0 transition-colors"
                         title="Remove item"
@@ -124,6 +140,12 @@ export default function Cart({ cart, isOpen, onClose, onUpdateQuantity, onRemove
                       </button>
                     </div>
                     
+                    {describeSelection(item.selectedOptions) && (
+                      <p className="mb-1 text-xs font-medium text-gray-500">
+                        {describeSelection(item.selectedOptions)}
+                      </p>
+                    )}
+
                     <p className="text-blue-600 font-bold text-lg mb-3">
                       ₱{Number(item.price).toFixed(2)}
                     </p>
@@ -132,7 +154,7 @@ export default function Cart({ cart, isOpen, onClose, onUpdateQuantity, onRemove
                     <div className="flex items-center justify-between gap-3">
                       <div className="flex items-center gap-2 bg-gray-100 rounded-lg p-1">
                         <button
-                          onClick={() => onUpdateQuantity(item.id, item.quantity - 1)}
+                          onClick={() => onUpdateQuantity(item.lineId, item.quantity - 1)}
                           aria-label={`Decrease quantity of ${item.name}`}
                           className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-md bg-white font-bold text-gray-700 shadow-sm transition-colors hover:bg-gray-50"
                         >
@@ -142,7 +164,7 @@ export default function Cart({ cart, isOpen, onClose, onUpdateQuantity, onRemove
                         </button>
                         <span className="w-8 text-center font-bold text-gray-900" aria-live="polite">{item.quantity}</span>
                         <button
-                          onClick={() => onUpdateQuantity(item.id, item.quantity + 1)}
+                          onClick={() => onUpdateQuantity(item.lineId, item.quantity + 1)}
                           disabled={Number(item.quantity) >= Number(item.stock)}
                           aria-label={`Increase quantity of ${item.name}`}
                           className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-md bg-white font-bold text-gray-700 shadow-sm transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
