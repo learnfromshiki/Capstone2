@@ -64,7 +64,7 @@ function StarPicker({ value, onChange }) {
 }
 
 export default function BuyerDashboard() {
-  const { user, role, loading: authLoading, signOut } = useAuth();
+  const { user, role, loading: authLoading, signOut, sendPasswordResetEmail } = useAuth();
   const router = useRouter();
 
   const [orders, setOrders] = useState([]);
@@ -81,6 +81,7 @@ export default function BuyerDashboard() {
   const [reviewDrafts, setReviewDrafts] = useState({});
   const [suspended, setSuspended] = useState(false);
   const [cancellingOrderId, setCancellingOrderId] = useState(null);
+  const [sendingReset, setSendingReset] = useState(false);
   const [shopSettings, setShopSettings] = useState(null);
 
   // Open a specific tab from a link, e.g. "Track my order" after checkout
@@ -256,6 +257,30 @@ export default function BuyerDashboard() {
       alert('Failed to update profile: ' + error.message);
     } finally {
       setSavingProfile(false);
+    }
+  };
+
+  /**
+   * For someone who cannot remember their current password: email them a reset
+   * code and link instead of leaving the Change Password form unusable.
+   */
+  const emailPasswordReset = async () => {
+    const address = profile?.email || user?.email;
+    if (!address) {
+      alert('No email address is saved on this account.');
+      return;
+    }
+
+    setSendingReset(true);
+    try {
+      const { error } = await sendPasswordResetEmail(address);
+      if (error) throw error;
+      alert(`We sent a password reset code and link to ${address}. Check your inbox and spam folder.`);
+    } catch (error) {
+      console.error('Error sending the reset email:', error);
+      alert(error.message || 'Could not send the reset email. Please try again in a few minutes.');
+    } finally {
+      setSendingReset(false);
     }
   };
 
@@ -702,7 +727,7 @@ export default function BuyerDashboard() {
                     <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                       {products.slice(0, 12).map((product) => (
                         <div key={product.id} className="border border-gray-100 rounded-xl overflow-hidden bg-white">
-                          <Link href="/shop" className="block h-32 bg-gray-100 overflow-hidden">
+                          <Link href={`/shop?product=${product.id}`} className="block h-32 bg-gray-100 overflow-hidden">
                             {product.image_url ? (
                               <img src={product.image_url} alt={product.name} className="w-full h-full object-cover" />
                             ) : (
@@ -714,7 +739,7 @@ export default function BuyerDashboard() {
                             <p className="text-blue-600 font-bold mt-1">₱{Number(product.price).toFixed(2)}</p>
                             <div className="flex gap-2 mt-3">
                               <Link
-                                href="/shop"
+                                href={`/shop?product=${product.id}`}
                                 className="flex-1 text-center text-xs bg-blue-600 text-white rounded-lg py-2 font-semibold hover:bg-blue-700 transition-colors"
                               >
                                 View
@@ -839,9 +864,17 @@ export default function BuyerDashboard() {
 
             {activeTab === 'wishlist' && (
               <div className="bg-white rounded-xl shadow-sm border border-gray-100">
-                <div className="p-6 border-b">
-                  <h2 className="text-2xl font-bold text-gray-900">Wishlist</h2>
-                  <p className="text-sm text-gray-600 mt-1">Saved favorites on this device.</p>
+                <div className="flex flex-col gap-3 border-b p-6 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <h2 className="text-2xl font-bold text-gray-900">Wishlist</h2>
+                    <p className="text-sm text-gray-600 mt-1">Saved favorites on this device.</p>
+                  </div>
+                  <Link
+                    href="/shop"
+                    className="inline-flex min-h-[44px] items-center justify-center rounded-lg bg-blue-600 px-5 text-sm font-semibold text-white transition-colors hover:bg-blue-700"
+                  >
+                    Continue Shopping →
+                  </Link>
                 </div>
                 <div className="p-6">
                   {wishlistProducts.length === 0 ? (
@@ -851,12 +884,20 @@ export default function BuyerDashboard() {
                       </svg>
                       <h3 className="text-lg font-semibold text-gray-900 mb-2">Your Wishlist is Empty</h3>
                       <p className="text-gray-600 mb-4">Tap the ♥ on a product in Home to save it here.</p>
-                      <button
-                        onClick={() => setActiveTab('home')}
-                        className="inline-block px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition-colors"
-                      >
-                        Browse Products
-                      </button>
+                      <div className="flex flex-wrap items-center justify-center gap-3">
+                        <Link
+                          href="/shop"
+                          className="inline-flex min-h-[44px] items-center rounded-lg bg-blue-600 px-6 font-medium text-white transition-colors hover:bg-blue-700"
+                        >
+                          Browse the Shop
+                        </Link>
+                        <button
+                          onClick={() => setActiveTab('home')}
+                          className="inline-flex min-h-[44px] items-center rounded-lg bg-gray-100 px-6 font-medium text-gray-700 transition-colors hover:bg-gray-200"
+                        >
+                          Recommended for me
+                        </button>
+                      </div>
                     </div>
                   ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -870,12 +911,12 @@ export default function BuyerDashboard() {
                           <div className="flex-1 min-w-0">
                             <p className="font-semibold text-gray-900 line-clamp-2">{product.name}</p>
                             <p className="text-blue-600 font-bold">₱{Number(product.price).toFixed(2)}</p>
-                            <div className="flex gap-2 mt-2">
+                            <div className="flex flex-wrap gap-2 mt-2">
                               <Link
-                                href="/shop"
+                                href={`/shop?product=${product.id}`}
                                 className="inline-flex min-h-[44px] items-center rounded-lg bg-blue-600 px-4 text-xs font-semibold text-white hover:bg-blue-700"
                               >
-                                Shop
+                                View Product
                               </Link>
                               <button
                                 onClick={() => toggleWishlist(product.id)}
@@ -1115,6 +1156,20 @@ export default function BuyerDashboard() {
                       >
                         Update Password
                       </button>
+
+                      <div className="border-t pt-3">
+                        <p className="text-sm text-gray-600">
+                          Forgot your current password? We can email you a reset code instead.
+                        </p>
+                        <button
+                          type="button"
+                          onClick={emailPasswordReset}
+                          disabled={sendingReset}
+                          className="mt-2 min-h-[44px] rounded-lg border-2 border-blue-200 px-4 font-semibold text-blue-600 transition-colors hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          {sendingReset ? 'Sending...' : 'Email me a reset code'}
+                        </button>
+                      </div>
                     </div>
                   </div>
 

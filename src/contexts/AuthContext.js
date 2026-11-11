@@ -171,6 +171,48 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  /**
+   * Start a password reset. Supabase emails both a 6-digit code and a link
+   * (see EMAIL-VERIFICATION-SETUP.md for the template), so the person can
+   * either type the code here or open /reset-password from the email.
+   */
+  const sendPasswordResetEmail = async (email) => {
+    try {
+      const redirectTo =
+        typeof window !== 'undefined' ? `${window.location.origin}/reset-password` : undefined;
+
+      const { error } = await supabase.auth.resetPasswordForEmail((email || '').trim(), { redirectTo });
+      if (error) throw error;
+      return { error: null };
+    } catch (error) {
+      return { error };
+    }
+  };
+
+  /**
+   * Finish a password reset with the code from the email. The recovery code
+   * signs the person in just long enough to set the new password; they are
+   * signed out afterwards so the new password is used from the next login.
+   */
+  const resetPasswordWithCode = async (email, token, newPassword) => {
+    try {
+      const { error: verifyError } = await supabase.auth.verifyOtp({
+        email: (email || '').trim(),
+        token: (token || '').replace(/\D/g, ''),
+        type: 'recovery',
+      });
+      if (verifyError) throw verifyError;
+
+      const { error: updateError } = await supabase.auth.updateUser({ password: newPassword });
+      if (updateError) throw updateError;
+
+      await signOut({ redirectTo: null });
+      return { error: null };
+    } catch (error) {
+      return { error };
+    }
+  };
+
   const signIn = async (email, password) => {
     try {
       const { data, error } = await supabase.auth.signInWithPassword({
@@ -266,6 +308,8 @@ export const AuthProvider = ({ children }) => {
     signOut,
     verifyEmailCode,
     resendEmailCode,
+    sendPasswordResetEmail,
+    resetPasswordWithCode,
     refreshAccount,
   };
 

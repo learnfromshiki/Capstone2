@@ -8,6 +8,7 @@ import ProductCard from '@/components/shop/ProductCard';
 import Cart from '@/components/shop/Cart';
 import ProductDetailsModal from '@/components/shop/ProductDetailsModal';
 import AuthModal from '@/components/AuthModal';
+import Toast from '@/components/Toast';
 import ShopFooter from '@/components/shop/ShopFooter';
 
 export default function ShopPage() {
@@ -22,10 +23,29 @@ export default function ShopPage() {
   const [reviewsByProduct, setReviewsByProduct] = useState({});
   const [reviewableProducts, setReviewableProducts] = useState({});
 
-  // Open the cart when arriving from the buyer dashboard "My Cart" link
+  const [toast, setToast] = useState(null);
+  const [pendingProductId, setPendingProductId] = useState(null);
+
+  const showToast = (message, type = 'success') => setToast({ message, type });
+
+  // Links from the dashboard: ?cart=1 opens the cart, ?product=<id> opens that
+  // product so a wishlist or "View" button lands on the product itself.
   useEffect(() => {
-    if (typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('cart') === '1') {
-      setShowCart(true);
+    if (typeof window === 'undefined') return;
+
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('cart') === '1') setShowCart(true);
+
+    const productId = params.get('product');
+    if (productId) setPendingProductId(productId);
+
+    // Tidy the address bar so a refresh does not reopen the cart or the
+    // product window again.
+    if (params.has('cart') || params.has('product')) {
+      params.delete('cart');
+      params.delete('product');
+      const query = params.toString();
+      window.history.replaceState({}, '', window.location.pathname + (query ? `?${query}` : ''));
     }
   }, []);
   const [searchQuery, setSearchQuery] = useState('');
@@ -91,6 +111,21 @@ export default function ShopPage() {
     fetchCategories();
     fetchReviews();
   }, []);
+
+  // The product list arrives after the page, so wait for it before opening the
+  // product asked for in the link.
+  useEffect(() => {
+    if (!pendingProductId || products.length === 0) return;
+
+    const wanted = products.find((product) => product.id === pendingProductId);
+    setPendingProductId(null);
+
+    if (wanted) {
+      setSelectedProduct(wanted);
+    } else {
+      showToast('That product is no longer available.', 'info');
+    }
+  }, [pendingProductId, products]);
 
   const fetchProducts = async () => {
     try {
@@ -285,13 +320,13 @@ export default function ShopPage() {
     }
 
     if (isSuspended) {
-      alert('This account has been suspended. Please contact CONNECT-Daet support.');
+      showToast('This account has been suspended. Please contact CONNECT-Daet support.', 'error');
       return;
     }
 
     // Check if product has stock
     if (!product.stock || product.stock <= 0) {
-      alert('Sorry, this product is out of stock.');
+      showToast('Sorry, this product is out of stock.', 'error');
       return;
     }
 
@@ -299,8 +334,7 @@ export default function ShopPage() {
     // can fire twice.
     const alreadyInCart = cart.find((item) => item.id === product.id);
     if (alreadyInCart && alreadyInCart.quantity >= product.stock) {
-      alert(`Cannot add more. Only ${product.stock} in stock.`);
-      setShowCart(true);
+      showToast(`Cannot add more. Only ${product.stock} in stock.`, 'error');
       return;
     }
 
@@ -318,9 +352,11 @@ export default function ShopPage() {
       }
       return [...prevCart, { ...product, quantity: Math.min(quantity, product.stock) }];
     });
-    
-    // Open the cart so the customer sees what was just added
-    setShowCart(true);
+
+    // Adding to the cart keeps the customer on the product list. Only "Buy Now"
+    // opens the cart and moves on to checkout; the cart button in the header
+    // carries the running count.
+    showToast(`${product.name} added to your cart.`, 'success');
   };
 
   const removeFromCart = (productId) => {
@@ -339,7 +375,7 @@ export default function ShopPage() {
 
     const maxStock = Number(item.stock) || 0;
     if (quantity > maxStock) {
-      alert(`Only ${maxStock} of ${item.name} in stock.`);
+      showToast(`Only ${maxStock} of ${item.name} in stock.`, 'error');
       return;
     }
 
@@ -358,12 +394,12 @@ export default function ShopPage() {
     }
 
     if (isSuspended) {
-      alert('This account has been suspended. Please contact CONNECT-Daet support.');
+      showToast('This account has been suspended. Please contact CONNECT-Daet support.', 'error');
       return;
     }
 
     if (!product.stock || product.stock <= 0) {
-      alert('Sorry, this product is out of stock.');
+      showToast('Sorry, this product is out of stock.', 'error');
       return;
     }
 
@@ -733,6 +769,8 @@ export default function ShopPage() {
         onAddToCart={addToCart}
         onBuyNow={buyNow}
       />
+
+      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
 
       {/* Auth Modal */}
       <AuthModal

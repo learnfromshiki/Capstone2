@@ -20,51 +20,95 @@ export default function ResetPasswordPage() {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    let settled = false;
+    let cancelled = false;
 
-    // An expired or already-used link comes back with the error in the URL
-    const hash = new URLSearchParams(window.location.hash.replace(/^#/, ''));
-    const query = new URLSearchParams(window.location.search);
-    const linkError = hash.get('error_description') || query.get('error_description');
-    if (linkError) {
-      setError(linkError.replace(/\+/g, ' '));
+    const fail = (message) => {
+      if (cancelled) return;
+      setError(message || '');
       setStatus('invalid');
-      return undefined;
-    }
-
-    const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
-      if ((event === 'PASSWORD_RECOVERY' || event === 'SIGNED_IN') && session) {
-        settled = true;
-        setStatus('ready');
-      }
-    });
+    };
 
     (async () => {
-      // Newer Supabase links use a one-time ?code=
-      const code = query.get('code');
-      if (code) {
-        const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
-        if (exchangeError && !settled) {
-          setError(exchangeError.message);
-          setStatus('invalid');
-          return;
-        }
-      }
+      const hash = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+      const query = new URLSearchParams(window.location.search);
 
-      const { data } = await supabase.auth.getSession();
-      if (data?.session) {
-        settled = true;
-        setStatus('ready');
+      // An expired or already-used link comes back with the error in the URL
+      const linkError = hash.get('error_description') || query.get('error_description');
+      if (linkError) {
+        fail(linkError.replace(/\+/g, ' '));
         return;
       }
 
-      // Give the client a moment to read the token from the link
-      setTimeout(() => {
-        if (!settled) setStatus((current) => (current === 'checking' ? 'invalid' : current));
-      }, 2500);
+      // Supabase sends one of three shapes depending on the project's email
+      // template and auth flow. Handle all of them, and always prefer the token
+      // in the link over any session this browser already has, so opening the
+      // link while signed in as someone else cannot change the wrong password.
+      try {
+        const tokenHash = query.get('token_hash') || query.get('token');
+        const type = query.get('type') || 'recovery';
+
+        if (tokenHash) {
+          const { error: otpError } = await supabase.auth.verifyOtp({ token_hash: tokenHash, type });
+          if (otpError) {
+            fail(otpError.message);
+            return;
+          }
+          if (!cancelled) setStatus('ready');
+          return;
+        }
+
+        const code = query.get('code');
+        if (code) {
+          const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
+          if (exchangeError) {
+            fail(exchangeError.message);
+            return;
+          }
+          if (!cancelled) setStatus('ready');
+          return;
+        }
+
+        const accessToken = hash.get('access_token');
+        const refreshToken = hash.get('refresh_token');
+        if (accessToken && refreshToken) {
+          const { error: sessionError } = await supabase.auth.setSession({
+            access_token: accessToken,
+            refresh_token: refreshToken,
+          });
+          if (sessionError) {
+            fail(sessionError.message);
+            return;
+          }
+          if (!cancelled) setStatus('ready');
+          return;
+        }
+
+        // No token in the link: supabase-js may still be reading it, or the
+        // page was opened directly while a recovery session is already active.
+        const { data } = await supabase.auth.getSession();
+        if (data?.session) {
+          if (!cancelled) setStatus('ready');
+          return;
+        }
+
+        setTimeout(async () => {
+          if (cancelled) return;
+          const { data: retry } = await supabase.auth.getSession();
+          if (cancelled) return;
+          if (retry?.session) {
+            setStatus('ready');
+          } else {
+            fail('');
+          }
+        }, 2000);
+      } catch (unexpected) {
+        fail(unexpected?.message || '');
+      }
     })();
 
-    return () => listener?.subscription?.unsubscribe();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const handleSubmit = async (event) => {

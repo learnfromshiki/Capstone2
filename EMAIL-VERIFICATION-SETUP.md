@@ -1,4 +1,4 @@
-# Email verification code — setup (5 minutes)
+# Email setup: verification code and password reset (5 minutes)
 
 New customer and seller registrations now ask for a **6-digit code** that is
 emailed to the address being registered. The account is only created once the
@@ -70,6 +70,58 @@ template uses `{{ .ConfirmationURL }}`, which sends a link instead.
 
 ---
 
+## Step 2b — Make "Forgot password?" work (required)
+
+A reset email that leads to an "invalid or expired link" page, or that never
+arrives, is almost always one of these two settings.
+
+### a) Allow the reset page to be opened
+
+1. **Authentication → URL Configuration**.
+2. **Site URL**: your live address, e.g. `https://capstone2-tawny-iota.vercel.app`
+   (no trailing slash).
+3. **Redirect URLs**: add both lines, one per row:
+
+```
+https://capstone2-tawny-iota.vercel.app/reset-password
+http://localhost:3000/reset-password
+```
+
+Supabase refuses to send people to any address that is not on this list, and
+silently falls back to the Site URL instead — which is why the link can look
+like it does nothing.
+
+### b) Put the 6-digit code in the reset email
+
+1. **Authentication → Emails → Reset Password**.
+2. Replace the body with this and press **Save**:
+
+```html
+<h2>Reset your password</h2>
+
+<p>Your password reset code is:</p>
+
+<p style="font-size:32px;font-weight:bold;letter-spacing:8px;margin:24px 0;">{{ .Token }}</p>
+
+<p>Type this code on the "Reset Your Password" screen together with your new
+password. The code expires in 1 hour.</p>
+
+<p>Or click here to choose a new password instead:
+<a href="{{ .ConfirmationURL }}">Reset my password</a></p>
+
+<p>If you did not ask for this, you can ignore this email.</p>
+```
+
+This template carries **both** ways of resetting, so either works:
+
+- typing the 6-digit code straight into the Sign In window, which needs no
+  link and no redirect settings at all; or
+- opening the link, which lands on `/reset-password`.
+
+The code path is the reliable one — use it if the link still misbehaves.
+
+---
+
 ## Step 3 — Send from your own email address (optional)
 
 By default Supabase sends from its own address and **limits free projects to a
@@ -108,3 +160,6 @@ as it does with PHPMailer.
 | No email arrives | Check the spam folder. On a free project, Supabase's built-in mailer is rate-limited — wait a few minutes, or do Step 3. |
 | Registration signs people in with no code | **Confirm email** is off in Supabase (end of Step 1). |
 | "Too many attempts" | Supabase's rate limit. Wait 5–10 minutes. |
+| Reset email arrives but the link says invalid/expired | The address is not in **Redirect URLs** (Step 2b a), or the link was already used. Use the 6-digit code instead. |
+| Reset email never arrives | Free projects are limited to a few emails per hour, and password resets share that limit with sign-ups. Wait, or do Step 3. |
+| The reset email has no code in it | The Reset Password template still has no `{{ .Token }}`. Redo Step 2b b. |

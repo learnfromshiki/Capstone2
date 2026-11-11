@@ -16,7 +16,7 @@ const inputClass =
   'w-full min-h-[44px] px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-full focus:ring-2 focus:ring-blue-600 focus:border-transparent transition-all text-sm text-gray-900 placeholder-gray-400';
 
 export default function AuthModal({ isOpen, onClose, mode: initialMode = 'login' }) {
-  // 'login' | 'signup' | 'verify' | 'forgot'
+  // 'login' | 'signup' | 'verify' | 'forgot' | 'reset'
   const [mode, setMode] = useState(initialMode);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -36,7 +36,16 @@ export default function AuthModal({ isOpen, onClose, mode: initialMode = 'login'
   const [resendIn, setResendIn] = useState(0);
   const codeInputRef = useRef(null);
 
-  const { signIn, signUp, verifyEmailCode, resendEmailCode } = useAuth();
+  const [confirmPassword, setConfirmPassword] = useState('');
+
+  const {
+    signIn,
+    signUp,
+    verifyEmailCode,
+    resendEmailCode,
+    sendPasswordResetEmail,
+    resetPasswordWithCode,
+  } = useAuth();
 
   // Escape closes the sign-in window
   useEffect(() => {
@@ -56,7 +65,7 @@ export default function AuthModal({ isOpen, onClose, mode: initialMode = 'login'
   }, [resendIn]);
 
   useEffect(() => {
-    if (mode === 'verify') codeInputRef.current?.focus();
+    if (mode === 'verify' || mode === 'reset') codeInputRef.current?.focus();
   }, [mode]);
 
   if (!isOpen) return null;
@@ -119,11 +128,45 @@ export default function AuthModal({ isOpen, onClose, mode: initialMode = 'login'
 
     try {
       if (mode === 'forgot') {
-        const { error: resetError } = await supabase.auth.resetPasswordForEmail(email.trim(), {
-          redirectTo: `${window.location.origin}/reset-password`,
-        });
+        const { error: resetError } = await sendPasswordResetEmail(email);
         if (resetError) throw resetError;
-        setNotice('If an account exists for this email, a password reset link is on its way. Check your inbox and spam folder.');
+
+        setCode('');
+        setPassword('');
+        setConfirmPassword('');
+        setResendIn(RESEND_SECONDS);
+        switchMode('reset');
+        setNotice(
+          `If an account exists for ${email.trim()}, we sent a ${CODE_LENGTH}-digit code. Enter it below with your new password.`
+        );
+        return;
+      }
+
+      if (mode === 'reset') {
+        if (code.replace(/\D/g, '').length !== CODE_LENGTH) {
+          setError(`Please enter the ${CODE_LENGTH}-digit code from your email.`);
+          return;
+        }
+
+        const passwordProblem = describePasswordProblem(password);
+        if (passwordProblem) {
+          setError(passwordProblem);
+          return;
+        }
+
+        if (password !== confirmPassword) {
+          setError('The two passwords do not match.');
+          return;
+        }
+
+        const { error: resetError } = await resetPasswordWithCode(email, code, password);
+        if (resetError) throw resetError;
+
+        setPassword('');
+        setConfirmPassword('');
+        setCode('');
+        switchMode('login');
+        setNotice('Your password has been changed. Please sign in with your new password.');
         return;
       }
 
@@ -231,7 +274,8 @@ export default function AuthModal({ isOpen, onClose, mode: initialMode = 'login'
     setLoading(true);
 
     try {
-      const { error: resendError } = await resendEmailCode(email);
+      const { error: resendError } =
+        mode === 'reset' ? await sendPasswordResetEmail(email) : await resendEmailCode(email);
       if (resendError) throw resendError;
 
       setResendIn(RESEND_SECONDS);
@@ -251,7 +295,7 @@ export default function AuthModal({ isOpen, onClose, mode: initialMode = 'login'
   const title =
     mode === 'login'
       ? 'Welcome Back'
-      : mode === 'forgot'
+      : mode === 'forgot' || mode === 'reset'
       ? 'Reset Your Password'
       : mode === 'verify'
       ? 'Verify Your Email'
@@ -261,7 +305,9 @@ export default function AuthModal({ isOpen, onClose, mode: initialMode = 'login'
     mode === 'login'
       ? 'Sign in to continue shopping'
       : mode === 'forgot'
-      ? 'Enter your email and we will send you a reset link'
+      ? 'Enter your email and we will send you a reset code'
+      : mode === 'reset'
+      ? 'Enter the code we emailed you and choose a new password'
       : mode === 'verify'
       ? 'Enter the code we emailed you'
       : 'Join our e-commerce platform';
@@ -270,7 +316,9 @@ export default function AuthModal({ isOpen, onClose, mode: initialMode = 'login'
     mode === 'login'
       ? 'Log In'
       : mode === 'forgot'
-      ? 'Send Reset Link'
+      ? 'Send Reset Code'
+      : mode === 'reset'
+      ? 'Save New Password'
       : mode === 'verify'
       ? 'Verify Email'
       : 'Sign Up';
@@ -458,11 +506,11 @@ export default function AuthModal({ isOpen, onClose, mode: initialMode = 'login'
             </div>
           )}
 
-          {/* Verification code */}
-          {mode === 'verify' && (
+          {/* Verification code (email check and password reset) */}
+          {(mode === 'verify' || mode === 'reset') && (
             <div>
               <label htmlFor="verifyCode" className="block text-xs font-semibold text-gray-700 mb-1.5">
-                6-digit code
+                {mode === 'reset' ? '6-digit reset code' : '6-digit code'}
               </label>
               <input
                 id="verifyCode"
@@ -490,6 +538,40 @@ export default function AuthModal({ isOpen, onClose, mode: initialMode = 'login'
               >
                 {resendIn > 0 ? `Send a new code in ${resendIn}s` : 'Send a new code'}
               </button>
+            </div>
+          )}
+
+          {/* New password for the reset step */}
+          {mode === 'reset' && (
+            <div>
+              <label htmlFor="newPassword" className="block text-xs font-semibold text-gray-700 mb-1.5">
+                New password
+              </label>
+              <input
+                id="newPassword"
+                type={showPassword ? 'text' : 'password'}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className={inputClass}
+                placeholder="Choose a new password"
+                autoComplete="new-password"
+                required
+              />
+              <PasswordRequirements value={password} />
+
+              <label htmlFor="confirmPassword" className="mt-3 block text-xs font-semibold text-gray-700 mb-1.5">
+                Confirm new password
+              </label>
+              <input
+                id="confirmPassword"
+                type={showPassword ? 'text' : 'password'}
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                className={inputClass}
+                placeholder="Type it again"
+                autoComplete="new-password"
+                required
+              />
             </div>
           )}
 
@@ -532,7 +614,7 @@ export default function AuthModal({ isOpen, onClose, mode: initialMode = 'login'
           )}
 
           {/* Show Password Checkbox */}
-          {(mode === 'login' || mode === 'signup') && (
+          {(mode === 'login' || mode === 'signup' || mode === 'reset') && (
             <label htmlFor="showPassword" className="flex min-h-[44px] cursor-pointer items-center">
               <input
                 type="checkbox"
@@ -589,7 +671,9 @@ export default function AuthModal({ isOpen, onClose, mode: initialMode = 'login'
 
           <button
             type="submit"
-            disabled={loading || (mode === 'signup' && !isPasswordValid(password))}
+            disabled={
+              loading || ((mode === 'signup' || mode === 'reset') && !isPasswordValid(password))
+            }
             className="w-full min-h-[44px] bg-blue-600 text-white py-3 rounded-full font-bold hover:bg-blue-700 transition-all shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed text-sm"
           >
             {loading ? 'Please wait...' : submitLabel}
