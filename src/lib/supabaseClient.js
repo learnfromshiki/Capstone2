@@ -9,44 +9,70 @@ if (!supabaseUrl || !supabaseAnonKey) {
   console.error('Required: NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY');
 }
 
-// Keep the session for the current tab only. A refresh stays signed in, but a
-// new visit or tab starts signed out instead of restoring an old login forever.
-const authStorage =
-  typeof window !== 'undefined' ? window.sessionStorage : undefined;
-
-// Supabase names its cross-tab BroadcastChannel after the auth storage key, so
-// a shared key lets one tab's login replace the user in every other tab. Each
-// tab keeps its own id (sessionStorage survives reloads) to keep logins apart.
-const tabAuthStorageKey = (() => {
-  const fallback = 'connect-daet-auth';
-  if (typeof window === 'undefined') return fallback;
-
-  try {
-    const existingId = window.sessionStorage.getItem('connect-daet-tab-id');
-    if (existingId) return `connect-daet-auth-${existingId}`;
-
-    const id =
-      typeof window.crypto?.randomUUID === 'function'
-        ? window.crypto.randomUUID()
-        : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
-
-    window.sessionStorage.setItem('connect-daet-tab-id', id);
-    return `connect-daet-auth-${id}`;
-  } catch (error) {
-    console.error('Could not prepare tab auth storage:', error);
-    return fallback;
-  }
-})();
+/**
+ * One shared session for the whole browser.
+ *
+ * This used to keep a separate session per tab (sessionStorage plus a random
+ * per-tab key) so that several test accounts could be signed in side by side.
+ * For a real shop that behaves like a bug:
+ *   - opening a product in a new tab showed a signed-out header and an empty
+ *     cart, and "Add to cart" asked the customer to sign in again;
+ *   - coming back to the site later always started signed out;
+ *   - signing out in one tab left the other tabs still signed in, so the next
+ *     click there failed with an expired session.
+ *
+ * localStorage with one key is the normal setup: sign in once, stay signed in
+ * on every tab, and a single sign-out ends the session everywhere (Supabase
+ * broadcasts it between tabs).
+ *
+ * To test a customer and a seller at the same time, use one normal window and
+ * one private/incognito window - they do not share localStorage.
+ */
+const authStorage = typeof window !== 'undefined' ? window.localStorage : undefined;
 
 export const supabase = createClient(
-  supabaseUrl || '', 
+  supabaseUrl || '',
   supabaseAnonKey || '',
   {
     auth: {
-      storageKey: tabAuthStorageKey,
+      storageKey: 'connect-daet-auth',
       storage: authStorage,
       persistSession: true,
       autoRefreshToken: true,
-    }
+      // The password-reset and email-confirmation links carry the session in
+      // the URL and must be picked up when the page opens.
+      detectSessionInUrl: true,
+    },
   }
 );
+
+/**
+ * Remove any session this browser still has stored, including the key used by
+ * older builds of the site. Called when signing out so a stale token can never
+ * bring a closed session back on the next reload.
+ */
+export const clearStoredSession = () => {
+  if (typeof window === 'undefined') return;
+
+  try {
+    const stale = [];
+    for (let index = 0; index < window.localStorage.length; index += 1) {
+      const key = window.localStorage.key(index);
+      if (key && (key === 'connect-daet-auth' || key.startsWith('connect-daet-auth-') || key.startsWith('sb-'))) {
+        stale.push(key);
+      }
+    }
+    stale.forEach((key) => window.localStorage.removeItem(key));
+
+    const staleSession = [];
+    for (let index = 0; index < window.sessionStorage.length; index += 1) {
+      const key = window.sessionStorage.key(index);
+      if (key && (key.startsWith('connect-daet-auth') || key === 'connect-daet-tab-id')) {
+        staleSession.push(key);
+      }
+    }
+    staleSession.forEach((key) => window.sessionStorage.removeItem(key));
+  } catch (error) {
+    console.warn('Could not clear the stored session:', error?.message || error);
+  }
+};

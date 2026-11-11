@@ -22,6 +22,8 @@ This platform now supports **multiple sellers** who can independently manage the
 - 📦 **Order Tracking** - Order numbers, status timeline, and cancelling while still pending
 - 💳 **Payment Instructions** - GCash / bank details from Admin → Settings shown at checkout
 - 🔑 **Forgot Password** - Reset link by email
+- 📧 **Email Verification** - A 6-digit code is emailed when registering
+- 🔒 **Password Rules** - Minimum 8 characters with 1 capital letter and 1 special character
 - ↕️ **Sort & Filter** - Sort by price, rating, newest; show in-stock only
 - 🔐 **Authentication** - Secure signup and login
 - 🎁 **Rewards System** - 10 points per ₱100 spent
@@ -64,6 +66,7 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=your_anon_key
 3. supabase-admin-policies.sql          # Settings, categories, profile fields
 4. supabase-security-hardening.sql      # Row Level Security for every table
 5. supabase-checkout-security.sql       # Server-side checkout, order status, cancellations
+6. supabase-auth-roles-fix.sql          # Account roles (seller vs customer) + first/last name
 ```
 This creates all tables, triggers, and sample data. Never run `supabase-final-fixes.sql`
 on the live database; it re-opens testing permissions.
@@ -71,6 +74,9 @@ on the live database; it re-opens testing permissions.
 In Supabase → Authentication → URL Configuration, set the Site URL to your Vercel
 address and add `https://<your-site>/reset-password` to the Redirect URLs so the
 "Forgot password?" email works.
+
+Then follow `EMAIL-VERIFICATION-SETUP.md` so registration emails a 6-digit
+verification code instead of a link.
 
 ### 4. Start Development
 ```bash
@@ -251,6 +257,7 @@ WHERE is_approved = false;
 - **Complete Overview**: `COMPLETE-SYSTEM-OVERVIEW.md`
 - **Seller Guide**: `SELLER-SYSTEM-GUIDE.md`
 - **Setup Instructions**: `HOW-TO-RUN.md`
+- **Email Verification**: `EMAIL-VERIFICATION-SETUP.md`
 - **Rate Limit Fix**: `RATE-LIMIT-FIX.md`
 
 ## 🚢 Deployment

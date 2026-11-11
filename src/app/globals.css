@@ -16,6 +16,24 @@ body {
   background: rgb(var(--background-rgb));
 }
 
+/* Edge and IE draw their own "reveal password" eye inside every password box,
+   and Chrome adds a caps-lock/credentials button. Every password field here
+   already has its own "Show password" checkbox, so the browser's extra icon is
+   a duplicate control sitting on top of the rounded input. */
+input[type='password']::-ms-reveal,
+input[type='password']::-ms-clear {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+input[type='password']::-webkit-credentials-auto-fill-button,
+input[type='password']::-webkit-strong-password-auto-fill-button {
+  display: none !important;
+  visibility: hidden;
+  pointer-events: none;
+}
+
 @layer utilities {
   .text-balance {
     text-wrap: balance;

@@ -32,7 +32,7 @@ export default function ShopPage() {
   const [sortBy, setSortBy] = useState('newest');
   const [inStockOnly, setInStockOnly] = useState(false);
   const [showAuthModal, setShowAuthModal] = useState(false);
-  const { user, profile, isSuspended, loading: authLoading, signOut } = useAuth();
+  const { user, profile, role, isSuspended, loading: authLoading, signOut } = useAuth();
   const cartKey = user ? `shop_cart:${user.id}` : null;
   const [cartOwner, setCartOwner] = useState(undefined);
 
@@ -464,17 +464,13 @@ export default function ShopPage() {
   );
   const cartItemCount = cart.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0);
   const accountHref =
-    profile?.user_type === 'admin'
+    role === 'admin'
       ? '/shop/admin'
-      : profile?.user_type === 'seller'
+      : role === 'seller'
       ? '/shop/seller/dashboard'
       : '/shop/buyer';
   const accountLabel =
-    profile?.user_type === 'admin'
-      ? 'Admin Panel'
-      : profile?.user_type === 'seller'
-      ? 'Seller Dashboard'
-      : 'My Account';
+    role === 'admin' ? 'Admin Panel' : role === 'seller' ? 'Seller Dashboard' : 'My Account';
 
   return (
     <div className="min-h-screen bg-gray-50">

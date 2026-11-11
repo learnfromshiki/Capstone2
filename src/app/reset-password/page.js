@@ -3,6 +3,8 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabaseClient';
+import PasswordRequirements from '@/components/PasswordRequirements';
+import { describePasswordProblem, isPasswordValid } from '@/lib/passwordPolicy';
 
 /**
  * Landing page for the "Forgot password?" email. Supabase signs the visitor in
@@ -69,8 +71,9 @@ export default function ResetPasswordPage() {
     event.preventDefault();
     setError('');
 
-    if (password.length < 6) {
-      setError('Your new password must be at least 6 characters.');
+    const passwordProblem = describePasswordProblem(password);
+    if (passwordProblem) {
+      setError(passwordProblem);
       return;
     }
 
@@ -135,10 +138,10 @@ export default function ResetPasswordPage() {
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
                 autoComplete="new-password"
-                minLength={6}
                 required
                 className="w-full min-h-[44px] rounded-full border border-gray-200 bg-gray-50 px-4 text-sm focus:border-transparent focus:ring-2 focus:ring-blue-600"
               />
+              <PasswordRequirements value={password} />
             </div>
             <div>
               <label htmlFor="confirm-password" className="mb-1.5 block text-xs font-semibold text-gray-700">
@@ -150,7 +153,6 @@ export default function ResetPasswordPage() {
                 value={confirm}
                 onChange={(event) => setConfirm(event.target.value)}
                 autoComplete="new-password"
-                minLength={6}
                 required
                 className="w-full min-h-[44px] rounded-full border border-gray-200 bg-gray-50 px-4 text-sm focus:border-transparent focus:ring-2 focus:ring-blue-600"
               />
@@ -171,7 +173,7 @@ export default function ResetPasswordPage() {
             )}
             <button
               type="submit"
-              disabled={saving}
+              disabled={saving || !isPasswordValid(password)}
               className="w-full min-h-[44px] rounded-full bg-blue-600 font-bold text-white hover:bg-blue-700 disabled:opacity-50"
             >
               {saving ? 'Saving...' : 'Save New Password'}

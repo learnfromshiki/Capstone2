@@ -1,9 +1,22 @@
 'use client';
 
 import { createContext, useContext, useState, useEffect } from 'react';
-import { supabase } from '@/lib/supabaseClient';
+import { supabase, clearStoredSession } from '@/lib/supabaseClient';
 import { ensureSellerProfile } from '@/lib/sellerProfile';
-import { ensureProfileRow } from '@/lib/profile';
+import { ensureProfileRow, joinName } from '@/lib/profile';
+import { resolveAccount } from '@/lib/roles';
+
+/** A sign-out that fails because the session is already gone is still a success. */
+const isAlreadySignedOut = (error) => {
+  const message = (error?.message || '').toLowerCase();
+  return (
+    error?.name === 'AuthSessionMissingError' ||
+    message.includes('session missing') ||
+    message.includes('session_id claim') ||
+    message.includes('session not found') ||
+    error?.status === 403
+  );
+};
 
 const SellerAuthContext = createContext({});
 
@@ -76,22 +89,14 @@ export const SellerAuthProvider = ({ children }) => {
 
   const fetchSellerProfile = async (userId) => {
     try {
-      const { data, error } = await supabase
-        .from('shop_sellers')
-        .select('*')
-        .eq('user_id', userId)
-        .maybeSingle();
+      const { data: { user: currentUser } } = await supabase.auth.getUser();
+      const account = await resolveAccount(currentUser?.id === userId ? currentUser : { id: userId });
 
-      if (error && error.code !== 'PGRST116') { // PGRST116 = no rows returned
-        throw error;
-      }
-
-      let sellerRow = data || null;
+      let sellerRow = account.seller;
 
       // Seller signup while email confirmation was pending: the row could not be
       // written then (no session). Finish it now that the user is authenticated.
-      if (!sellerRow) {
-        const { data: { user: currentUser } } = await supabase.auth.getUser();
+      if (!sellerRow && account.role === 'seller') {
         sellerRow = await ensureSellerProfile(currentUser);
       }
 
@@ -108,13 +113,21 @@ export const SellerAuthProvider = ({ children }) => {
 
   const signUp = async (email, password, sellerData) => {
     try {
+      const firstName = (sellerData.firstName || '').trim();
+      const lastName = (sellerData.lastName || '').trim();
+      // The owner's own name goes on the profile; the shop name belongs to the
+      // shop_sellers row, so the two are never confused in the admin lists.
+      const ownerName = joinName(firstName, lastName) || sellerData.businessName;
+
       // Create auth user
       const { data: authData, error: authError } = await supabase.auth.signUp({
-        email,
+        email: (email || '').trim(),
         password,
         options: {
           data: {
-            full_name: sellerData.businessName,
+            first_name: firstName,
+            last_name: lastName,
+            full_name: ownerName,
             account_type: 'seller',
             business_name: sellerData.businessName,
             contact_phone: sellerData.phone || null,
@@ -178,6 +191,13 @@ export const SellerAuthProvider = ({ children }) => {
 
         await ensureProfileRow(data.user);
         sellerRow = await fetchSellerProfile(data.user.id);
+
+        // Registered as a seller but the shop row is still missing: create it
+        // now rather than letting the portal treat the account as a customer.
+        if (!sellerRow && data.user.user_metadata?.account_type === 'seller') {
+          sellerRow = await ensureSellerProfile(data.user);
+          setSeller(sellerRow);
+        }
       }
 
       // The caller needs the seller row to tell a real shop apart from a buyer account
@@ -187,15 +207,28 @@ export const SellerAuthProvider = ({ children }) => {
     }
   };
 
+  /**
+   * Clear the local session first so the dashboard can never keep showing a
+   * signed-in shop when the network call is slow or the token has already
+   * expired on the server.
+   */
   const signOut = async () => {
+    setUser(null);
+    setSeller(null);
+    setLoading(false);
+
     try {
       const { error } = await supabase.auth.signOut();
-      if (error) throw error;
-      setUser(null);
-      setSeller(null);
+      if (error && !isAlreadySignedOut(error)) {
+        const { error: localError } = await supabase.auth.signOut({ scope: 'local' });
+        if (localError) console.error('Error signing out:', localError.message);
+      }
     } catch (error) {
-      console.error('Error signing out:', error);
+      if (!isAlreadySignedOut(error)) console.error('Error signing out:', error);
     }
+
+    // Drop anything left in this browser so a reload cannot restore the session.
+    clearStoredSession();
   };
 
   const updateSellerProfile = async (updates) => {

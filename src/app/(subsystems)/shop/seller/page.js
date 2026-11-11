@@ -3,11 +3,21 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSellerAuth } from '@/contexts/SellerAuthContext';
+import { useAuth } from '@/contexts/AuthContext';
 import Link from 'next/link';
+import { describePasswordProblem, isPasswordValid } from '@/lib/passwordPolicy';
+import PasswordRequirements from '@/components/PasswordRequirements';
+import { ensureSellerProfile } from '@/lib/sellerProfile';
+import { ensureProfileRow } from '@/lib/profile';
+
+const CODE_LENGTH = 6;
+const RESEND_SECONDS = 60;
 
 export default function SellerLoginPage() {
   const [mode, setMode] = useState('login'); // 'login' or 'signup'
   const [formData, setFormData] = useState({
+    firstName: '',
+    lastName: '',
     email: '',
     password: '',
     businessName: '',
@@ -18,20 +28,57 @@ export default function SellerLoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [code, setCode] = useState('');
+  const [resendIn, setResendIn] = useState(0);
 
   const { signIn, signUp, signOut, seller, user } = useSellerAuth();
+  const { verifyEmailCode, resendEmailCode } = useAuth();
   const router = useRouter();
 
-  // Redirect if already logged in
+  // Redirect if already logged in. The verify step signs the new shop owner in,
+  // so it must not be interrupted by this redirect.
   useEffect(() => {
-    if (user && seller) {
+    if (user && seller && mode !== 'verify') {
       router.push('/shop/seller/dashboard');
     }
-  }, [user, seller, router]);
+  }, [user, seller, router, mode]);
+
+  // Countdown before another code can be requested
+  useEffect(() => {
+    if (resendIn <= 0) return undefined;
+    const timer = setTimeout(() => setResendIn((seconds) => seconds - 1), 1000);
+    return () => clearTimeout(timer);
+  }, [resendIn]);
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const handleResend = async () => {
+    if (resendIn > 0 || loading) return;
+
+    setError('');
+    setSuccess('');
+    setLoading(true);
+
+    try {
+      const { error: resendError } = await resendEmailCode(formData.email);
+      if (resendError) throw resendError;
+
+      setResendIn(RESEND_SECONDS);
+      setSuccess('A new code is on its way. It can take a minute to arrive.');
+    } catch (err) {
+      const lowerError = (err.message || '').toLowerCase();
+      setError(
+        lowerError.includes('rate limit')
+          ? 'Please wait a few minutes before asking for another code.'
+          : err.message || 'Could not send a new code.'
+      );
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleSubmit = async (e) => {
@@ -41,47 +88,89 @@ export default function SellerLoginPage() {
     setLoading(true);
 
     try {
+      if (mode === 'verify') {
+        if (code.replace(/\D/g, '').length !== CODE_LENGTH) {
+          setError(`Please enter the ${CODE_LENGTH}-digit code from your email.`);
+          return;
+        }
+
+        const { data, error: verifyError } = await verifyEmailCode(formData.email, code);
+        if (verifyError) throw verifyError;
+
+        if (data?.user) {
+          // The shop row could not be written before the email was verified
+          // (there was no session), so finish the registration now.
+          await ensureProfileRow(data.user);
+          await ensureSellerProfile(data.user);
+          router.push('/shop/seller/dashboard');
+          return;
+        }
+
+        setSuccess('Email verified. You can now sign in.');
+        setMode('login');
+        return;
+      }
+
       if (mode === 'login') {
         const { error, seller: sellerRow } = await signIn(formData.email, formData.password);
         if (error) throw error;
 
-        // A buyer account does not own a shop: send it back to the shop instead of
-        // leaving it bouncing between this form and the dashboard guard.
+        // A customer account does not own a shop: send it back to the shop
+        // instead of leaving it bouncing between this form and the dashboard.
         if (!sellerRow) {
           await signOut();
-          setError('This is a buyer account. Sign in from the shop to keep shopping, or create a seller account here to open a shop.');
+          setError('This is a customer account. Sign in from the shop to keep shopping, or create a seller account here to open a shop.');
           return;
         }
 
+        // An unapproved shop still belongs in the seller dashboard, which shows
+        // the "waiting for approval" screen.
         router.push('/shop/seller/dashboard');
       } else {
+        if (!formData.firstName.trim() || !formData.lastName.trim()) {
+          setError('Please enter your first and last name.');
+          return;
+        }
+
+        const passwordProblem = describePasswordProblem(formData.password);
+        if (passwordProblem) {
+          setError(passwordProblem);
+          return;
+        }
+
         const { data: signUpData, error } = await signUp(formData.email, formData.password, {
+          firstName: formData.firstName,
+          lastName: formData.lastName,
           businessName: formData.businessName,
           phone: formData.phone,
           address: formData.address,
           description: formData.description,
         });
-        
+
         if (error) throw error;
 
+        if (
+          signUpData?.user &&
+          Array.isArray(signUpData.user.identities) &&
+          signUpData.user.identities.length === 0
+        ) {
+          setError('This email is already registered. Please sign in instead.');
+          setMode('login');
+          return;
+        }
+
         // Confirmation turned off means the seller is signed in already: open the
-        // seller portal so the new account is never mistaken for a buyer.
+        // seller portal so the new account is never mistaken for a customer.
         if (signUpData?.session) {
           setMode('login');
           router.push('/shop/seller/dashboard');
           return;
         }
-        
-        setSuccess('Account created! Please check your email to verify your account. You can now sign in.');
-        setMode('login');
-        setFormData({
-          email: formData.email,
-          password: '',
-          businessName: '',
-          phone: '',
-          address: '',
-          description: '',
-        });
+
+        setCode('');
+        setResendIn(RESEND_SECONDS);
+        setMode('verify');
+        setSuccess(`We sent a ${CODE_LENGTH}-digit verification code to ${formData.email.trim()}.`);
       }
     } catch (err) {
       const errorMsg = err.message || '';
@@ -89,6 +178,16 @@ export default function SellerLoginPage() {
       
       if (lowerError.includes('rate limit') || lowerError.includes('email rate limit')) {
         setError('⚠️ Too many attempts. Please wait 5-10 minutes and try again.');
+      } else if (lowerError.includes('token has expired') || lowerError.includes('expired')) {
+        setError('That code has expired. Tap "Send a new code" to get a fresh one.');
+      } else if (lowerError.includes('invalid') && lowerError.includes('token')) {
+        setError('That code is not correct. Please check the email and type the 6 digits again.');
+      } else if (lowerError.includes('email not confirmed')) {
+        setCode('');
+        setResendIn(0);
+        setMode('verify');
+        setSuccess('');
+        setError('This email is not verified yet. Enter the code we emailed you, or tap "Send a new code".');
       } else if (lowerError.includes('invalid') && lowerError.includes('credentials')) {
         setError('Invalid email or password. Please try again.');
       } else if (lowerError.includes('already registered')) {
@@ -142,11 +241,13 @@ export default function SellerLoginPage() {
               </div>
             </div>
             <h2 className="text-3xl font-bold text-center mb-2">
-              {mode === 'login' ? 'Seller Login' : 'Become a Seller'}
+              {mode === 'login' ? 'Seller Login' : mode === 'verify' ? 'Verify Your Email' : 'Become a Seller'}
             </h2>
             <p className="text-blue-100 text-center text-sm">
-              {mode === 'login' 
-                ? 'Access your seller dashboard' 
+              {mode === 'login'
+                ? 'Access your seller dashboard'
+                : mode === 'verify'
+                ? 'Enter the code we emailed you'
                 : 'Start selling your products on Daet Local Shop'}
             </p>
           </div>
@@ -154,22 +255,96 @@ export default function SellerLoginPage() {
           {/* Form */}
           <form onSubmit={handleSubmit} className="p-8 space-y-5">
             {mode === 'signup' && (
+              <>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label htmlFor="sellerFirstName" className="block text-sm font-semibold text-gray-700 mb-2">
+                      First Name *
+                    </label>
+                    <input
+                      id="sellerFirstName"
+                      type="text"
+                      name="firstName"
+                      value={formData.firstName}
+                      onChange={handleInputChange}
+                      autoComplete="given-name"
+                      maxLength={60}
+                      className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      placeholder="Juan"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="sellerLastName" className="block text-sm font-semibold text-gray-700 mb-2">
+                      Last Name *
+                    </label>
+                    <input
+                      id="sellerLastName"
+                      type="text"
+                      name="lastName"
+                      value={formData.lastName}
+                      onChange={handleInputChange}
+                      autoComplete="family-name"
+                      maxLength={60}
+                      className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      placeholder="Dela Cruz"
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    Business Name *
+                  </label>
+                  <input
+                    type="text"
+                    name="businessName"
+                    value={formData.businessName}
+                    onChange={handleInputChange}
+                    maxLength={120}
+                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    placeholder="Your Shop Name"
+                    required={mode === 'signup'}
+                  />
+                </div>
+              </>
+            )}
+
+            {mode === 'verify' && (
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Business Name *
+                <label htmlFor="sellerCode" className="block text-sm font-semibold text-gray-700 mb-2">
+                  6-digit code *
                 </label>
                 <input
+                  id="sellerCode"
                   type="text"
-                  name="businessName"
-                  value={formData.businessName}
-                  onChange={handleInputChange}
-                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="Your Shop Name"
-                  required={mode === 'signup'}
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  pattern="[0-9]*"
+                  maxLength={CODE_LENGTH}
+                  value={code}
+                  onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, CODE_LENGTH))}
+                  className="w-full rounded-xl border-2 border-gray-200 px-4 py-4 text-center text-2xl font-bold tracking-[0.5em] focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+                  placeholder="000000"
+                  required
                 />
+                <p className="mt-2 text-sm text-gray-500">
+                  Sent to <span className="font-semibold text-gray-700">{formData.email.trim()}</span>. Check your spam
+                  folder if it has not arrived.
+                </p>
+                <button
+                  type="button"
+                  onClick={handleResend}
+                  disabled={resendIn > 0 || loading}
+                  className="mt-2 min-h-[44px] text-sm font-semibold text-blue-600 hover:text-blue-700 disabled:text-gray-400"
+                >
+                  {resendIn > 0 ? `Send a new code in ${resendIn}s` : 'Send a new code'}
+                </button>
               </div>
             )}
 
+            {mode !== 'verify' && (
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-2">
                 Email *
@@ -184,22 +359,39 @@ export default function SellerLoginPage() {
                 required
               />
             </div>
+            )}
 
+            {mode !== 'verify' && (
             <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">
+              <label htmlFor="sellerPassword" className="block text-sm font-semibold text-gray-700 mb-2">
                 Password *
               </label>
               <input
-                type="password"
+                id="sellerPassword"
+                type={showPassword ? 'text' : 'password'}
                 name="password"
                 value={formData.password}
                 onChange={handleInputChange}
+                autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
                 className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 placeholder="••••••••"
                 required
-                minLength={6}
               />
+
+              {mode === 'signup' && <PasswordRequirements value={formData.password} />}
+
+              <label htmlFor="sellerShowPassword" className="mt-2 flex min-h-[44px] cursor-pointer items-center">
+                <input
+                  type="checkbox"
+                  id="sellerShowPassword"
+                  checked={showPassword}
+                  onChange={(e) => setShowPassword(e.target.checked)}
+                  className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-2 focus:ring-blue-600"
+                />
+                <span className="ml-2 text-sm font-medium text-gray-700">Show password</span>
+              </label>
             </div>
+            )}
 
             {mode === 'signup' && (
               <>
@@ -274,10 +466,16 @@ export default function SellerLoginPage() {
             {/* Submit Button */}
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading || (mode === 'signup' && !isPasswordValid(formData.password))}
               className="w-full bg-gradient-to-r from-blue-600 to-blue-700 text-white py-4 rounded-xl font-bold text-lg hover:from-blue-700 hover:to-blue-800 transition-all shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {loading ? 'Please wait...' : mode === 'login' ? 'Sign In' : 'Create Seller Account'}
+              {loading
+                ? 'Please wait...'
+                : mode === 'login'
+                ? 'Sign In'
+                : mode === 'verify'
+                ? 'Verify Email'
+                : 'Create Seller Account'}
             </button>
 
             {/* Toggle Mode */}
@@ -289,10 +487,12 @@ export default function SellerLoginPage() {
                   setError('');
                   setSuccess('');
                 }}
-                className="text-sm text-blue-600 hover:text-blue-700 font-medium"
+                className="min-h-[44px] text-sm text-blue-600 hover:text-blue-700 font-medium"
               >
-                {mode === 'login' 
-                  ? "Don't have a seller account? Sign up" 
+                {mode === 'login'
+                  ? "Don't have a seller account? Sign up"
+                  : mode === 'verify'
+                  ? 'Back to Sign in'
                   : 'Already have an account? Sign in'}
               </button>
             </div>

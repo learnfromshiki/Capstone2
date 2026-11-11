@@ -8,6 +8,10 @@ import Link from 'next/link';
 import { cancelMyOrder, formatOrderNumber, PAYMENT_LABELS } from '@/lib/orders';
 import { fetchShopSettings } from '@/lib/shopSettings';
 import PaymentInstructions from '@/components/shop/PaymentInstructions';
+import PasswordRequirements from '@/components/PasswordRequirements';
+import { describePasswordProblem, isPasswordValid } from '@/lib/passwordPolicy';
+import { joinName, splitName } from '@/lib/profile';
+import { ROLE_LABELS } from '@/lib/roles';
 
 const ORDER_STEPS = [
   { key: 'pending', label: 'Placed' },
@@ -60,7 +64,7 @@ function StarPicker({ value, onChange }) {
 }
 
 export default function BuyerDashboard() {
-  const { user, loading: authLoading, signOut } = useAuth();
+  const { user, role, loading: authLoading, signOut } = useAuth();
   const router = useRouter();
 
   const [orders, setOrders] = useState([]);
@@ -72,7 +76,7 @@ export default function BuyerDashboard() {
   const [activeTab, setActiveTab] = useState('home');
   const [savingProfile, setSavingProfile] = useState(false);
   const [savingReview, setSavingReview] = useState(false);
-  const [profileForm, setProfileForm] = useState({ full_name: '', phone: '', address: '' });
+  const [profileForm, setProfileForm] = useState({ first_name: '', last_name: '', phone: '', address: '' });
   const [passwordForm, setPasswordForm] = useState({ current: '', next: '', confirm: '' });
   const [reviewDrafts, setReviewDrafts] = useState({});
   const [suspended, setSuspended] = useState(false);
@@ -158,8 +162,11 @@ export default function BuyerDashboard() {
       // A suspended customer sees a blocked screen instead of the dashboard
       setSuspended(Boolean(profileRes.data?.is_suspended));
       setProfile(profileRes.data || null);
+      // Older accounts only have full_name, so split it for the two boxes.
+      const storedName = splitName(profileRes.data?.full_name);
       setProfileForm({
-        full_name: profileRes.data?.full_name || '',
+        first_name: profileRes.data?.first_name || storedName.firstName,
+        last_name: profileRes.data?.last_name || storedName.lastName,
         phone: profileRes.data?.phone || '',
         address: profileRes.data?.address || '',
       });
@@ -181,9 +188,9 @@ export default function BuyerDashboard() {
   };
 
   const handleLogout = async () => {
-    await signOut();
-    // Full navigation so the shop opens fresh instead of the dashboard lingering
-    window.location.href = '/shop';
+    // signOut clears the session and navigates to the shop itself, so the
+    // dashboard can never linger with stale data.
+    await signOut({ redirectTo: '/shop' });
   };
 
   const toggleWishlist = (productId) => {
@@ -206,15 +213,33 @@ export default function BuyerDashboard() {
     setSavingProfile(true);
 
     try {
-      const { error } = await supabase
+      const fullName = joinName(profileForm.first_name, profileForm.last_name);
+
+      if (!fullName) {
+        alert('Please enter your first and last name.');
+        return;
+      }
+
+      const base = {
+        full_name: fullName,
+        phone: profileForm.phone || null,
+        address: profileForm.address || null,
+        updated_at: new Date().toISOString(),
+      };
+
+      let { error } = await supabase
         .from('profiles')
         .update({
-          full_name: profileForm.full_name,
-          phone: profileForm.phone || null,
-          address: profileForm.address || null,
-          updated_at: new Date().toISOString(),
+          ...base,
+          first_name: profileForm.first_name.trim() || null,
+          last_name: profileForm.last_name.trim() || null,
         })
         .eq('id', user.id);
+
+      // Database without the name columns yet: save the combined name only.
+      if (error && /first_name|last_name/.test(error.message || '')) {
+        ({ error } = await supabase.from('profiles').update(base).eq('id', user.id));
+      }
 
       if (error) {
         if (error.message?.includes('phone') || error.message?.includes('address')) {
@@ -224,7 +249,7 @@ export default function BuyerDashboard() {
         throw error;
       }
 
-      setProfile((prev) => ({ ...prev, ...profileForm }));
+      setProfile((prev) => ({ ...prev, ...profileForm, full_name: fullName }));
       alert('Profile updated!');
     } catch (error) {
       console.error('Error saving profile:', error);
@@ -235,8 +260,9 @@ export default function BuyerDashboard() {
   };
 
   const changePassword = async () => {
-    if (passwordForm.next.length < 6) {
-      alert('New password must be at least 6 characters.');
+    const passwordProblem = describePasswordProblem(passwordForm.next);
+    if (passwordProblem) {
+      alert(passwordProblem);
       return;
     }
 
@@ -421,7 +447,7 @@ export default function BuyerDashboard() {
                 CONNECT-Daet
               </Link>
               <span className="rounded-full bg-white/20 px-2 py-1 text-xs font-semibold text-white sm:px-3">
-                Buyer
+                Customer
               </span>
             </div>
             <div className="flex items-center gap-2 sm:gap-4">
@@ -433,7 +459,7 @@ export default function BuyerDashboard() {
                 </div>
                 <div className="max-w-[12rem] text-right">
                   <p className="truncate text-sm font-semibold">{profile?.full_name || user?.email}</p>
-                  <p className="text-xs text-white/80">Buyer</p>
+                  <p className="text-xs text-white/80">Customer</p>
                 </div>
               </div>
               <button
@@ -960,15 +986,37 @@ export default function BuyerDashboard() {
                 </div>
                 <div className="p-6">
                   <div className="space-y-4">
-                    <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-2">Full Name</label>
-                      <input
-                        type="text"
-                        value={profileForm.full_name}
-                        onChange={(e) => setProfileForm({ ...profileForm, full_name: e.target.value })}
-                        className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        placeholder="Your full name"
-                      />
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <div>
+                        <label htmlFor="profileFirstName" className="block text-sm font-semibold text-gray-700 mb-2">
+                          First Name
+                        </label>
+                        <input
+                          id="profileFirstName"
+                          type="text"
+                          value={profileForm.first_name}
+                          onChange={(e) => setProfileForm({ ...profileForm, first_name: e.target.value })}
+                          autoComplete="given-name"
+                          maxLength={60}
+                          className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          placeholder="Juan"
+                        />
+                      </div>
+                      <div>
+                        <label htmlFor="profileLastName" className="block text-sm font-semibold text-gray-700 mb-2">
+                          Last Name
+                        </label>
+                        <input
+                          id="profileLastName"
+                          type="text"
+                          value={profileForm.last_name}
+                          onChange={(e) => setProfileForm({ ...profileForm, last_name: e.target.value })}
+                          autoComplete="family-name"
+                          maxLength={60}
+                          className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          placeholder="Dela Cruz"
+                        />
+                      </div>
                     </div>
                     <div>
                       <label className="block text-sm font-semibold text-gray-700 mb-2">Email</label>
@@ -1042,13 +1090,17 @@ export default function BuyerDashboard() {
                         placeholder="Current password"
                         className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500"
                       />
-                      <input
-                        type="password"
-                        value={passwordForm.next}
-                        onChange={(e) => setPasswordForm({ ...passwordForm, next: e.target.value })}
-                        placeholder="New password"
-                        className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500"
-                      />
+                      <div>
+                        <input
+                          type="password"
+                          value={passwordForm.next}
+                          onChange={(e) => setPasswordForm({ ...passwordForm, next: e.target.value })}
+                          placeholder="New password"
+                          autoComplete="new-password"
+                          className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500"
+                        />
+                        <PasswordRequirements value={passwordForm.next} />
+                      </div>
                       <input
                         type="password"
                         value={passwordForm.confirm}
@@ -1057,8 +1109,9 @@ export default function BuyerDashboard() {
                         className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500"
                       />
                       <button
+                        disabled={!isPasswordValid(passwordForm.next)}
                         onClick={changePassword}
-                        className="min-h-[44px] px-4 py-2 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors"
+                        className="min-h-[44px] px-4 py-2 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors disabled:cursor-not-allowed disabled:opacity-50"
                       >
                         Update Password
                       </button>
@@ -1069,7 +1122,7 @@ export default function BuyerDashboard() {
                     <h3 className="font-semibold text-gray-900 mb-2">Account Details</h3>
                     <p className="text-sm text-gray-600">Email: {user?.email}</p>
                     <p className="text-sm text-gray-600">
-                    Account type: {profile?.user_type === 'admin' ? 'Admin' : profile?.user_type === 'seller' ? 'Seller' : 'Buyer'}
+                    Account type: {ROLE_LABELS[role] || ROLE_LABELS.customer}
                   </p>
                     {profile?.created_at && (
                       <p className="text-sm text-gray-600">

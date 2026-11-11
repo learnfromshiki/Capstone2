@@ -1,17 +1,27 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabaseClient';
-import { getAccountRole } from '@/lib/roles';
+import { dashboardPathForRole } from '@/lib/roles';
 import { ensureSellerProfile } from '@/lib/sellerProfile';
 import { ensureProfileRow } from '@/lib/profile';
+import { describePasswordProblem, isPasswordValid } from '@/lib/passwordPolicy';
+import PasswordRequirements from '@/components/PasswordRequirements';
+
+const CODE_LENGTH = 6;
+const RESEND_SECONDS = 60;
+
+const inputClass =
+  'w-full min-h-[44px] px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-full focus:ring-2 focus:ring-blue-600 focus:border-transparent transition-all text-sm text-gray-900 placeholder-gray-400';
 
 export default function AuthModal({ isOpen, onClose, mode: initialMode = 'login' }) {
-  const [mode, setMode] = useState(initialMode); // 'login', 'signup' or 'forgot'
+  // 'login' | 'signup' | 'verify' | 'forgot'
+  const [mode, setMode] = useState(initialMode);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [fullName, setFullName] = useState('');
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
   const [accountType, setAccountType] = useState('customer'); // 'customer' or 'seller'
   const [businessName, setBusinessName] = useState('');
   const [contactPhone, setContactPhone] = useState('');
@@ -20,7 +30,13 @@ export default function AuthModal({ isOpen, onClose, mode: initialMode = 'login'
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
-  const { signIn, signUp } = useAuth();
+
+  // Email verification step
+  const [code, setCode] = useState('');
+  const [resendIn, setResendIn] = useState(0);
+  const codeInputRef = useRef(null);
+
+  const { signIn, signUp, verifyEmailCode, resendEmailCode } = useAuth();
 
   // Escape closes the sign-in window
   useEffect(() => {
@@ -32,7 +48,68 @@ export default function AuthModal({ isOpen, onClose, mode: initialMode = 'login'
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, onClose]);
 
+  // Countdown before the code can be sent again
+  useEffect(() => {
+    if (resendIn <= 0) return undefined;
+    const timer = setTimeout(() => setResendIn((seconds) => seconds - 1), 1000);
+    return () => clearTimeout(timer);
+  }, [resendIn]);
+
+  useEffect(() => {
+    if (mode === 'verify') codeInputRef.current?.focus();
+  }, [mode]);
+
   if (!isOpen) return null;
+
+  const switchMode = (next) => {
+    setMode(next);
+    setError('');
+    setNotice('');
+  };
+
+  /** Send the account to the dashboard that matches its role. */
+  const goToDashboard = (role) => {
+    const path = role === 'customer' ? '/shop' : dashboardPathForRole(role);
+    window.location.href = path;
+  };
+
+  /** Finish a registration that now has a session (seller row, profile row). */
+  const completeRegistration = async (user) => {
+    await ensureProfileRow(user);
+
+    if (accountType === 'seller') {
+      await ensureSellerProfile(user);
+      goToDashboard('seller');
+      return;
+    }
+
+    goToDashboard('customer');
+  };
+
+  const validateSignup = () => {
+    if (!firstName.trim()) {
+      setError('Please enter your first name.');
+      return false;
+    }
+
+    if (!lastName.trim()) {
+      setError('Please enter your last name.');
+      return false;
+    }
+
+    if (accountType === 'seller' && !businessName.trim()) {
+      setError('Please enter your shop name.');
+      return false;
+    }
+
+    const passwordProblem = describePasswordProblem(password);
+    if (passwordProblem) {
+      setError(passwordProblem);
+      return false;
+    }
+
+    return true;
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -50,143 +127,94 @@ export default function AuthModal({ isOpen, onClose, mode: initialMode = 'login'
         return;
       }
 
+      if (mode === 'verify') {
+        if (code.replace(/\D/g, '').length !== CODE_LENGTH) {
+          setError(`Please enter the ${CODE_LENGTH}-digit code from your email.`);
+          return;
+        }
+
+        const { data, error: verifyError } = await verifyEmailCode(email, code);
+        if (verifyError) throw verifyError;
+
+        if (data?.user) {
+          await completeRegistration(data.user);
+          return;
+        }
+
+        setNotice('Email verified. You can now sign in.');
+        switchMode('login');
+        return;
+      }
+
       if (mode === 'login') {
-        const { data, error } = await signIn(email.trim(), password);
-        if (error) throw error;
+        const { error: signInError, account } = await signIn(email, password);
+        if (signInError) throw signInError;
 
-        // Admin accounts go to the admin dashboard, never the buyer/seller views
-        if (data?.user && (await getAccountRole(data.user.id)) === 'admin') {
-          window.location.href = '/shop/admin';
-          return;
-        }
+        goToDashboard(account?.role || 'customer');
+        return;
+      }
 
-        // Restore a missing profiles row before anything reads it
-        if (data?.user) {
-          await ensureProfileRow(data.user);
-        }
+      // ----- Registration -----
+      if (!validateSignup()) return;
 
-        // Suspended accounts are blocked before any dashboard opens
-        if (data?.user) {
-          const { data: profile } = await supabase
-            .from('profiles')
-            .select('is_suspended')
-            .eq('id', data.user.id)
-            .maybeSingle();
-
-          if (profile?.is_suspended) {
-            await supabase.auth.signOut();
-            setError('This account has been suspended. Please contact CONNECT-Daet support.');
-            setLoading(false);
-            return;
-          }
-        }
-
-        // An approved shop opens its seller dashboard. A pending application stays
-        // usable for shopping and is reviewed from the seller portal, where the
-        // pending-approval screen waits.
-        if (data?.user) {
-          const sellerData = await ensureSellerProfile(data.user);
-
-          if (sellerData) {
-            if (sellerData.is_active === false) {
-              await supabase.auth.signOut();
-              setError('This seller account has been suspended. Please contact CONNECT-Daet support.');
-              setLoading(false);
-              return;
-            }
-
-            if (sellerData.is_approved) {
-              setLoading(false);
-              window.location.href = '/shop/seller/dashboard';
-              return;
-            }
-          }
-        }
-
-        // Buyers land on the shopping homepage; the buyer dashboard is reachable from there
-        if (data?.user) {
-          setLoading(false);
-          window.location.href = '/shop';
-          return;
-        }
-
-        onClose();
-      } else {
-        // Seller details ride along in the auth metadata so they survive email
-        // confirmation, when there is no session to write a seller row with yet
-        const sellerMetadata = accountType === 'seller'
+      const sellerMetadata =
+        accountType === 'seller'
           ? {
               account_type: 'seller',
-              business_name: businessName,
-              contact_phone: contactPhone || null,
-              address: address || null,
+              business_name: businessName.trim(),
+              contact_phone: contactPhone.trim() || null,
+              address: address.trim() || null,
             }
           : {};
 
-        const { data, error } = await signUp(email, password, fullName, sellerMetadata);
-        if (error) throw error;
+      const { data, error: signUpError } = await signUp(
+        { email, password, firstName, lastName },
+        sellerMetadata
+      );
+      if (signUpError) throw signUpError;
 
-        // If signing up as seller, create seller record. The insert is allowed
-        // before email confirmation, so it must not be skipped without a session.
-        if (accountType === 'seller' && data?.user) {
-          const { error: sellerError } = await supabase
-            .from('shop_sellers')
-            .insert([{
-              user_id: data.user.id,
-              business_name: businessName,
-              contact_email: email,
-              contact_phone: contactPhone || null,
-              address: address || null,
-              is_approved: false, // Requires admin approval
-              is_active: true
-            }]);
-
-          if (sellerError) {
-            console.error('Error creating seller account:', sellerError);
-          }
-
-          // Record the account as a seller in profiles as well. Without this the
-          // same account is listed as a buyer in Customers and routed like one.
-          await ensureProfileRow(data.user);
-          await ensureSellerProfile(data.user);
-
-          if (data.session) {
-            // Already signed in: open the seller portal, where the pending-approval
-            // screen waits until an admin approves the shop.
-            setLoading(false);
-            window.location.href = '/shop/seller/dashboard';
-            return;
-          }
-
-          setNotice('Seller account created! Confirm your email, then sign in — awaiting admin approval.');
-        } else {
-          setNotice(data?.session
-            ? 'Account created! You are now signed in.'
-            : 'Check your email to confirm your account!');
-        }
-
-        setTimeout(() => {
-          setMode('login');
-          setNotice('');
-        }, 4000);
+      // Supabase hides whether an address is taken by returning a user with no
+      // identities instead of an error.
+      if (data?.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) {
+        setError('This email is already registered. Please sign in instead, or use "Forgot password?".');
+        return;
       }
+
+      // Email confirmation switched off: the account is signed in already.
+      if (data?.session && data?.user) {
+        await completeRegistration(data.user);
+        return;
+      }
+
+      // Normal path: a 6-digit code is on its way to the inbox.
+      setCode('');
+      setResendIn(RESEND_SECONDS);
+      switchMode('verify');
+      setNotice(`We sent a ${CODE_LENGTH}-digit verification code to ${email.trim()}.`);
     } catch (err) {
-      // Handle specific error messages
       const errorMsg = err.message || '';
       const lowerError = errorMsg.toLowerCase();
-      
+
       if (lowerError.includes('invalid login credentials')) {
         setError('Incorrect email or password. Please try again, or use "Forgot password?".');
       } else if (lowerError.includes('email not confirmed')) {
-        setError('Please confirm your email first. Open the confirmation link we sent to your inbox, then sign in.');
+        // Take them straight to the code screen instead of leaving them stuck
+        // on a login form they cannot pass.
+        setCode('');
+        setResendIn(0);
+        setMode('verify');
+        setNotice('');
+        setError('This email is not verified yet. Enter the code we emailed you, or tap "Send a new code".');
+      } else if (lowerError.includes('token has expired') || lowerError.includes('expired')) {
+        setError('That code has expired. Tap "Send a new code" to get a fresh one.');
+      } else if (lowerError.includes('invalid') && lowerError.includes('token')) {
+        setError('That code is not correct. Please check the email and type the 6 digits again.');
       } else if (lowerError.includes('rate limit') || lowerError.includes('email rate limit')) {
-        setError('⚠️ Rate Limit Reached: Supabase limits signup emails. Please wait 5-10 minutes and try again, or switch to "Sign In" if you already created an account.');
+        setError('Too many attempts. Please wait 5-10 minutes before trying again.');
       } else if (lowerError.includes('already registered') || lowerError.includes('already exists')) {
         setError('This email is already registered. Please use "Sign In" instead.');
-      } else if (lowerError.includes('invalid') && lowerError.includes('password')) {
-        setError('Password must be at least 6 characters long.');
-      } else if (lowerError.includes('invalid') && lowerError.includes('email')) {
-        setError('Please enter a valid email address.');
+      } else if (lowerError.includes('password') && lowerError.includes('short')) {
+        setError(describePasswordProblem(password) || 'Please choose a longer password.');
       } else {
         setError(errorMsg || 'An error occurred. Please try again.');
       }
@@ -194,6 +222,58 @@ export default function AuthModal({ isOpen, onClose, mode: initialMode = 'login'
       setLoading(false);
     }
   };
+
+  const handleResend = async () => {
+    if (resendIn > 0 || loading) return;
+
+    setError('');
+    setNotice('');
+    setLoading(true);
+
+    try {
+      const { error: resendError } = await resendEmailCode(email);
+      if (resendError) throw resendError;
+
+      setResendIn(RESEND_SECONDS);
+      setNotice('A new code is on its way. It can take a minute to arrive.');
+    } catch (err) {
+      const lowerError = (err.message || '').toLowerCase();
+      setError(
+        lowerError.includes('rate limit')
+          ? 'Please wait a few minutes before asking for another code.'
+          : err.message || 'Could not send a new code.'
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const title =
+    mode === 'login'
+      ? 'Welcome Back'
+      : mode === 'forgot'
+      ? 'Reset Your Password'
+      : mode === 'verify'
+      ? 'Verify Your Email'
+      : 'Create an Account';
+
+  const subtitle =
+    mode === 'login'
+      ? 'Sign in to continue shopping'
+      : mode === 'forgot'
+      ? 'Enter your email and we will send you a reset link'
+      : mode === 'verify'
+      ? 'Enter the code we emailed you'
+      : 'Join our e-commerce platform';
+
+  const submitLabel =
+    mode === 'login'
+      ? 'Log In'
+      : mode === 'forgot'
+      ? 'Send Reset Link'
+      : mode === 'verify'
+      ? 'Verify Email'
+      : 'Sign Up';
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-3 sm:p-4">
@@ -209,23 +289,15 @@ export default function AuthModal({ isOpen, onClose, mode: initialMode = 'login'
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
-          
+
           <div className="w-11 h-11 mx-auto mb-2 bg-gray-100 rounded-xl flex items-center justify-center">
             <svg className="w-6 h-6 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
             </svg>
           </div>
-          
-          <h2 className="text-lg font-bold text-gray-900 mb-1">
-            {mode === 'login' ? 'Welcome Back' : mode === 'forgot' ? 'Reset Your Password' : 'Create an Account'}
-          </h2>
-          <p className="text-gray-600 text-xs">
-            {mode === 'login'
-              ? 'Sign in to continue shopping'
-              : mode === 'forgot'
-              ? 'Enter your email and we will send you a reset link'
-              : 'Join our e-commerce platform'}
-          </p>
+
+          <h2 className="text-lg font-bold text-gray-900 mb-1">{title}</h2>
+          <p className="text-gray-600 text-xs">{subtitle}</p>
         </div>
 
         <form onSubmit={handleSubmit} className="p-5 space-y-3.5">
@@ -233,13 +305,12 @@ export default function AuthModal({ isOpen, onClose, mode: initialMode = 'login'
             <>
               {/* Account Type Selector */}
               <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-2">
-                  Register as
-                </label>
+                <label className="block text-xs font-semibold text-gray-700 mb-2">Register as</label>
                 <div className="grid grid-cols-2 gap-2">
                   <button
                     type="button"
                     onClick={() => setAccountType('customer')}
+                    aria-pressed={accountType === 'customer'}
                     className={`relative p-3 border-2 rounded-xl transition-all ${
                       accountType === 'customer'
                         ? 'border-blue-600 bg-blue-50'
@@ -252,7 +323,7 @@ export default function AuthModal({ isOpen, onClose, mode: initialMode = 'login'
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
                         </svg>
                       </div>
-                      <div className="font-semibold text-sm text-gray-900 mb-0.5">Buyer</div>
+                      <div className="font-semibold text-sm text-gray-900 mb-0.5">Customer</div>
                       <div className="text-xs text-gray-600">Shop products</div>
                     </div>
                     {accountType === 'customer' && (
@@ -267,6 +338,7 @@ export default function AuthModal({ isOpen, onClose, mode: initialMode = 'login'
                   <button
                     type="button"
                     onClick={() => setAccountType('seller')}
+                    aria-pressed={accountType === 'seller'}
                     className={`relative p-3 border-2 rounded-xl transition-all ${
                       accountType === 'seller'
                         ? 'border-blue-600 bg-blue-50'
@@ -293,31 +365,54 @@ export default function AuthModal({ isOpen, onClose, mode: initialMode = 'login'
                 </div>
               </div>
 
-              {/* Full Name */}
-              <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1.5">
-                  Full Name
-                </label>
-                <input
-                  type="text"
-                  value={fullName}
-                  onChange={(e) => setFullName(e.target.value)}
-                  className="w-full min-h-[44px] px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-full focus:ring-2 focus:ring-blue-600 focus:border-transparent transition-all text-sm text-gray-900 placeholder-gray-400"
-                  placeholder="Enter your full name"
-                  required
-                />
+              {/* First and Last name */}
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label htmlFor="firstName" className="block text-xs font-semibold text-gray-700 mb-1.5">
+                    First Name
+                  </label>
+                  <input
+                    id="firstName"
+                    type="text"
+                    value={firstName}
+                    onChange={(e) => setFirstName(e.target.value)}
+                    autoComplete="given-name"
+                    maxLength={60}
+                    className={inputClass}
+                    placeholder="Juan"
+                    required
+                  />
+                </div>
+                <div>
+                  <label htmlFor="lastName" className="block text-xs font-semibold text-gray-700 mb-1.5">
+                    Last Name
+                  </label>
+                  <input
+                    id="lastName"
+                    type="text"
+                    value={lastName}
+                    onChange={(e) => setLastName(e.target.value)}
+                    autoComplete="family-name"
+                    maxLength={60}
+                    className={inputClass}
+                    placeholder="Dela Cruz"
+                    required
+                  />
+                </div>
               </div>
 
               {/* Email */}
               <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1.5">
+                <label htmlFor="signupEmail" className="block text-xs font-semibold text-gray-700 mb-1.5">
                   Email
                 </label>
                 <input
+                  id="signupEmail"
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="w-full min-h-[44px] px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-full focus:ring-2 focus:ring-blue-600 focus:border-transparent transition-all text-sm text-gray-900 placeholder-gray-400"
+                  autoComplete="email"
+                  className={inputClass}
                   placeholder="Enter your email"
                   required
                 />
@@ -326,14 +421,16 @@ export default function AuthModal({ isOpen, onClose, mode: initialMode = 'login'
               {/* Shop Name - shown only for sellers */}
               {accountType === 'seller' && (
                 <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1.5">
+                  <label htmlFor="businessName" className="block text-xs font-semibold text-gray-700 mb-1.5">
                     Shop Name
                   </label>
                   <input
+                    id="businessName"
                     type="text"
                     value={businessName}
                     onChange={(e) => setBusinessName(e.target.value)}
-                    className="w-full min-h-[44px] px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-full focus:ring-2 focus:ring-blue-600 focus:border-transparent transition-all text-sm text-gray-900 placeholder-gray-400"
+                    maxLength={120}
+                    className={inputClass}
                     placeholder="Enter your shop name"
                     required
                   />
@@ -343,72 +440,109 @@ export default function AuthModal({ isOpen, onClose, mode: initialMode = 'login'
           )}
 
           {/* Email field for login and password reset */}
-          {mode !== 'signup' && (
+          {(mode === 'login' || mode === 'forgot') && (
             <div>
-              <label className="block text-xs font-semibold text-gray-700 mb-1.5">
+              <label htmlFor="loginEmail" className="block text-xs font-semibold text-gray-700 mb-1.5">
                 Email
               </label>
               <input
+                id="loginEmail"
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 autoComplete="email"
-                className="w-full min-h-[44px] px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-full focus:ring-2 focus:ring-gray-900 focus:border-transparent transition-all text-sm text-gray-900 placeholder-gray-400"
+                className={inputClass}
                 placeholder="Enter your email"
                 required
               />
             </div>
           )}
 
-          {mode !== 'forgot' && (
-          <>
-          <div>
-            <label className="block text-xs font-semibold text-gray-700 mb-1.5">
-              Password
-            </label>
-            <div className="relative">
+          {/* Verification code */}
+          {mode === 'verify' && (
+            <div>
+              <label htmlFor="verifyCode" className="block text-xs font-semibold text-gray-700 mb-1.5">
+                6-digit code
+              </label>
               <input
-                type={showPassword ? "text" : "password"}
+                id="verifyCode"
+                ref={codeInputRef}
+                type="text"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                pattern="[0-9]*"
+                maxLength={CODE_LENGTH}
+                value={code}
+                onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, CODE_LENGTH))}
+                className="w-full min-h-[52px] rounded-2xl border-2 border-gray-200 bg-gray-50 px-4 text-center text-2xl font-bold tracking-[0.5em] text-gray-900 focus:border-transparent focus:ring-2 focus:ring-blue-600"
+                placeholder="000000"
+                required
+              />
+              <p className="mt-2 text-xs text-gray-500">
+                Sent to <span className="font-semibold text-gray-700">{email.trim()}</span>. Check your spam folder if it
+                has not arrived.
+              </p>
+              <button
+                type="button"
+                onClick={handleResend}
+                disabled={resendIn > 0 || loading}
+                className="mt-2 min-h-[36px] text-xs font-semibold text-blue-600 hover:text-blue-700 disabled:text-gray-400"
+              >
+                {resendIn > 0 ? `Send a new code in ${resendIn}s` : 'Send a new code'}
+              </button>
+            </div>
+          )}
+
+          {/* Password */}
+          {(mode === 'login' || mode === 'signup') && (
+            <div>
+              <label htmlFor="password" className="block text-xs font-semibold text-gray-700 mb-1.5">
+                Password
+              </label>
+              <input
+                id="password"
+                type={showPassword ? 'text' : 'password'}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full min-h-[44px] px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-full focus:ring-2 focus:ring-gray-900 focus:border-transparent transition-all text-sm text-gray-900 placeholder-gray-400"
+                className={inputClass}
                 placeholder="Enter your password"
                 autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
                 required
-                minLength={6}
+                aria-describedby={mode === 'signup' ? 'password-rules' : undefined}
               />
+
+              {mode === 'signup' && (
+                <div id="password-rules">
+                  <PasswordRequirements value={password} />
+                </div>
+              )}
+
+              {mode === 'login' && (
+                <div className="text-right">
+                  <button
+                    type="button"
+                    onClick={() => switchMode('forgot')}
+                    className="min-h-[36px] px-1 text-xs font-medium text-blue-600 hover:text-blue-700"
+                  >
+                    Forgot password?
+                  </button>
+                </div>
+              )}
             </div>
-            {mode === 'login' && (
-              <div className="text-right">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setMode('forgot');
-                    setError('');
-                    setNotice('');
-                  }}
-                  className="min-h-[36px] px-1 text-xs font-medium text-blue-600 hover:text-blue-700"
-                >
-                  Forgot password?
-                </button>
-              </div>
-            )}
-          </div>
+          )}
 
           {/* Show Password Checkbox */}
-          <label htmlFor="showPassword" className="flex min-h-[44px] cursor-pointer items-center">
-            <input
-              type="checkbox"
-              id="showPassword"
-              checked={showPassword}
-              onChange={(e) => setShowPassword(e.target.checked)}
-              className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-600 focus:ring-2"
-            />
-            <span className="ml-2 text-xs font-medium text-gray-700">
-              Show password
-            </span>
-          </label>
-          </>
+          {(mode === 'login' || mode === 'signup') && (
+            <label htmlFor="showPassword" className="flex min-h-[44px] cursor-pointer items-center">
+              <input
+                type="checkbox"
+                id="showPassword"
+                checked={showPassword}
+                onChange={(e) => setShowPassword(e.target.checked)}
+                className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-600 focus:ring-2"
+              />
+              <span className="ml-2 text-xs font-medium text-gray-700">Show password</span>
+            </label>
           )}
 
           {notice && (
@@ -423,37 +557,26 @@ export default function AuthModal({ isOpen, onClose, mode: initialMode = 'login'
           )}
 
           {error && (
-            <div role="alert" className={`p-3 rounded-lg border-2 ${
-              error.toLowerCase().includes('rate limit')
-                ? 'bg-yellow-50 border-yellow-300 text-yellow-900'
-                : error.toLowerCase().includes('already registered')
-                ? 'bg-blue-50 border-blue-300 text-blue-800'
-                : 'bg-red-50 border-red-300 text-red-800'
-            }`}>
+            <div
+              role="alert"
+              className={`p-3 rounded-lg border-2 ${
+                error.toLowerCase().includes('rate limit') || error.toLowerCase().includes('too many')
+                  ? 'bg-yellow-50 border-yellow-300 text-yellow-900'
+                  : error.toLowerCase().includes('already registered')
+                  ? 'bg-blue-50 border-blue-300 text-blue-800'
+                  : 'bg-red-50 border-red-300 text-red-800'
+              }`}
+            >
               <div className="flex items-start gap-2">
-                {error.toLowerCase().includes('rate limit') ? (
-                  <svg className="w-5 h-5 text-yellow-600 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                  </svg>
-                ) : error.toLowerCase().includes('already registered') ? (
-                  <svg className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-                  </svg>
-                ) : (
-                  <svg className="w-4 h-4 text-red-600 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-                  </svg>
-                )}
+                <svg className="w-4 h-4 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                </svg>
                 <div className="flex-1">
                   <p className="text-xs font-medium leading-relaxed">{error}</p>
-                  {(error.toLowerCase().includes('rate limit') || error.toLowerCase().includes('already registered')) && mode === 'signup' && (
+                  {error.toLowerCase().includes('already registered') && mode === 'signup' && (
                     <button
                       type="button"
-                      onClick={() => {
-                        setMode('login');
-                        setError('');
-                        setNotice('');
-                      }}
+                      onClick={() => switchMode('login')}
                       className="mt-2 text-xs font-bold underline hover:no-underline"
                     >
                       → Switch to Sign In instead
@@ -466,27 +589,23 @@ export default function AuthModal({ isOpen, onClose, mode: initialMode = 'login'
 
           <button
             type="submit"
-            disabled={loading}
+            disabled={loading || (mode === 'signup' && !isPasswordValid(password))}
             className="w-full min-h-[44px] bg-blue-600 text-white py-3 rounded-full font-bold hover:bg-blue-700 transition-all shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed text-sm"
           >
-            {loading ? 'Please wait...' : mode === 'login' ? 'Log In' : mode === 'forgot' ? 'Send Reset Link' : 'Sign Up'}
+            {loading ? 'Please wait...' : submitLabel}
           </button>
 
           <div className="text-center pt-1">
             <button
               type="button"
-              onClick={() => {
-                setMode(mode === 'signup' ? 'login' : mode === 'forgot' ? 'login' : 'signup');
-                setError('');
-                setNotice('');
-              }}
+              onClick={() => switchMode(mode === 'signup' ? 'login' : mode === 'login' ? 'signup' : 'login')}
               className="min-h-[44px] px-3 text-xs text-gray-600 hover:text-gray-900 font-medium"
             >
               {mode === 'login'
                 ? "Don't have an account? Sign Up"
-                : mode === 'forgot'
-                ? 'Back to Log In'
-                : 'Already have an account? Log In'}
+                : mode === 'signup'
+                ? 'Already have an account? Log In'
+                : 'Back to Log In'}
             </button>
           </div>
 

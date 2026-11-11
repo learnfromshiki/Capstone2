@@ -8,6 +8,8 @@ import { uploadProductImage } from '@/lib/imageUpload';
 import { getAccountRole } from '@/lib/roles';
 import { formatOrderNumber, getAllowedStatuses, PAYMENT_LABELS, STATUS_LABELS, transitionOrderStatus } from '@/lib/orders';
 import { DEFAULT_SHOP_SETTINGS, fetchShopSettings } from '@/lib/shopSettings';
+import PasswordRequirements from '@/components/PasswordRequirements';
+import { describePasswordProblem, isPasswordValid } from '@/lib/passwordPolicy';
 
 const peso = (value) =>
   `₱${(Number(value) || 0).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -1097,8 +1099,9 @@ export default function ShopAdminPage() {
   };
 
   const changeAdminPassword = async () => {
-    if (passwordForm.next.length < 6) {
-      showToast('New password must be at least 6 characters.', 'error');
+    const passwordProblem = describePasswordProblem(passwordForm.next);
+    if (passwordProblem) {
+      showToast(passwordProblem, 'error');
       return;
     }
 
@@ -2703,8 +2706,10 @@ export default function ShopAdminPage() {
                       value={passwordForm.next}
                       onChange={(e) => setPasswordForm({ ...passwordForm, next: e.target.value })}
                       placeholder="Enter new password"
+                      autoComplete="new-password"
                       className="w-full px-4 py-3 border-2 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
                     />
+                    <PasswordRequirements value={passwordForm.next} />
                   </div>
                   <div>
                     <label className="block text-sm font-semibold mb-2 text-gray-700">Confirm New Password</label>
@@ -2718,7 +2723,8 @@ export default function ShopAdminPage() {
                   </div>
                   <button
                     onClick={changeAdminPassword}
-                    className="px-6 py-2.5 bg-red-600 hover:bg-red-700 text-white font-semibold rounded-lg transition-colors"
+                    disabled={!isPasswordValid(passwordForm.next)}
+                    className="px-6 py-2.5 bg-red-600 hover:bg-red-700 text-white font-semibold rounded-lg transition-colors disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     Change Password
                   </button>
