@@ -4,6 +4,9 @@ import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import { addPoints } from '@/lib/rewards';
 import { useAuth } from '@/contexts/AuthContext';
+import { estimateRewardPoints, formatOrderNumber, isMissingFunction, PAYMENT_LABELS } from '@/lib/orders';
+import { fetchShopSettings } from '@/lib/shopSettings';
+import PaymentInstructions from './PaymentInstructions';
 
 const MAX_QUANTITY = 9999;
 
@@ -36,6 +39,11 @@ export default function CheckoutModal({ cart, total, onClose, onSuccess, onRequi
   const [verifying, setVerifying] = useState(false);
   const [verifiedCart, setVerifiedCart] = useState(null);
   const [awardedPoints, setAwardedPoints] = useState(0);
+  const [placedOrders, setPlacedOrders] = useState([]);
+  const [placedPayment, setPlacedPayment] = useState('');
+  const [shopSettings, setShopSettings] = useState(null);
+  const [saveDetails, setSaveDetails] = useState(false);
+  const [savedProfile, setSavedProfile] = useState({ phone: '', address: '' });
   const [error, setError] = useState('');
   const [formData, setFormData] = useState({
     fullName: '',
@@ -46,7 +54,8 @@ export default function CheckoutModal({ cart, total, onClose, onSuccess, onRequi
     notes: '',
   });
 
-  // Pre-fill the customer's own name and email so they only type phone and address
+  // Pre-fill the customer's name, email, phone and saved delivery address so a
+  // returning buyer only has to confirm them.
   useEffect(() => {
     setFormData((prev) => ({
       ...prev,
@@ -54,6 +63,46 @@ export default function CheckoutModal({ cart, total, onClose, onSuccess, onRequi
       email: prev.email || user?.email || '',
     }));
   }, [user, profile]);
+
+  useEffect(() => {
+    if (!user) return undefined;
+    let cancelled = false;
+
+    (async () => {
+      const { data, error: profileError } = await supabase
+        .from('profiles')
+        .select('full_name, phone, address')
+        .eq('id', user.id)
+        .maybeSingle();
+
+      if (cancelled || profileError || !data) return;
+
+      setSavedProfile({ phone: data.phone || '', address: data.address || '' });
+      setFormData((prev) => ({
+        ...prev,
+        fullName: prev.fullName || data.full_name || '',
+        phone: prev.phone || data.phone || '',
+        address: prev.address || data.address || '',
+      }));
+      // Offer to remember the details only when nothing is saved yet
+      setSaveDetails(!data.phone || !data.address);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user]);
+
+  // GCash / bank details the admin saved in Admin -> Settings
+  useEffect(() => {
+    let cancelled = false;
+    fetchShopSettings().then((settings) => {
+      if (!cancelled) setShopSettings(settings);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Escape closes checkout. After an order is placed it behaves like
   // "Continue Shopping" so the cart is cleared.
@@ -89,8 +138,8 @@ export default function CheckoutModal({ cart, total, onClose, onSuccess, onRequi
       return false;
     }
 
-    if (!formData.address.trim()) {
-      setError('Please enter your delivery address.');
+    if (formData.address.trim().length < 5) {
+      setError('Please enter your complete delivery address (house no., street, barangay, town).');
       return false;
     }
 
@@ -211,6 +260,7 @@ export default function CheckoutModal({ cart, total, onClose, onSuccess, onRequi
       return {
         id: product.id,
         name: product.name,
+        seller_id: product.seller_id || null,
         price,
         stock,
         quantity: item.quantity,
@@ -253,7 +303,51 @@ export default function CheckoutModal({ cart, total, onClose, onSuccess, onRequi
     }
   };
 
+  // Remember phone/address on the profile so the next checkout is pre-filled.
+  // Best-effort: a failure here must never affect the order.
+  const saveDetailsToProfile = async (userId) => {
+    if (!saveDetails) return;
+    const phone = formData.phone.trim();
+    const address = formData.address.trim();
+    if (phone === savedProfile.phone && address === savedProfile.address) return;
+
+    const { error: saveError } = await supabase
+      .from('profiles')
+      .update({ phone, address, updated_at: new Date().toISOString() })
+      .eq('id', userId);
+
+    if (saveError) {
+      console.warn('Order placed, but the delivery details were not saved:', saveError.message);
+    }
+  };
+
+  /**
+   * Preferred checkout: place_order() in the database validates the cart
+   * against live prices and stock, locks the products, creates one order per
+   * shop, reduces stock and awards points in one transaction.
+   * Returns null when that function is not installed yet.
+   */
+  const placeOrderOnServer = async () => {
+    const { data, error: rpcError } = await supabase.rpc('place_order', {
+      p_items: cart.map((item) => ({ product_id: item.id, quantity: Number(item.quantity) })),
+      p_customer_name: formData.fullName.trim(),
+      p_customer_email: formData.email.trim(),
+      p_customer_phone: formData.phone.trim(),
+      p_delivery_address: formData.address.trim(),
+      p_payment_method: formData.paymentMethod,
+      p_notes: formData.notes.trim() || null,
+    });
+
+    if (rpcError) {
+      if (isMissingFunction(rpcError)) return null;
+      throw new Error(rpcError.message || 'Could not place your order. Please try again.');
+    }
+
+    return data;
+  };
+
   const handleSubmitOrder = async () => {
+    if (loading) return;
     setLoading(true);
     setError('');
     let createdOrderId = null;
@@ -271,6 +365,26 @@ export default function CheckoutModal({ cart, total, onClose, onSuccess, onRequi
         throw new Error('Your session has expired. Please sign in again.');
       }
 
+      const serverResult = await placeOrderOnServer();
+
+      if (serverResult) {
+        const orders = Array.isArray(serverResult.orders) ? serverResult.orders : [];
+        await saveDetailsToProfile(sessionUser.id);
+        setPlacedOrders(orders.map((order) => ({ id: order.id, total: Number(order.total) || 0 })));
+        setPlacedPayment(formData.paymentMethod);
+        setVerifiedCart((previous) => ({
+          items: previous?.items || cart,
+          total: Number(serverResult.total) || previous?.total || 0,
+        }));
+        setAwardedPoints(Number(serverResult.points) || 0);
+        setStep(3);
+        return;
+      }
+
+      // ---------------------------------------------------------------------
+      // Legacy browser-side checkout, used only until
+      // supabase-checkout-security.sql has been run in Supabase.
+      // ---------------------------------------------------------------------
       // Re-verify at the last moment: prices or stock may have changed while
       // the customer was typing their details.
       const orderCart = await verifyCart();
@@ -362,6 +476,9 @@ export default function CheckoutModal({ cart, total, onClose, onSuccess, onRequi
         }
       }
 
+      await saveDetailsToProfile(sessionUser.id);
+      setPlacedOrders([{ id: order.id, total: orderCart.total }]);
+      setPlacedPayment(formData.paymentMethod);
       setVerifiedCart(orderCart);
       setAwardedPoints(awarded);
       setStep(3);
@@ -399,10 +516,12 @@ export default function CheckoutModal({ cart, total, onClose, onSuccess, onRequi
 
   const summaryItems = verifiedCart?.items || cart;
   const summaryTotal = verifiedCart?.total ?? (Number(total) || 0);
+  const summaryPoints = estimateRewardPoints(summaryItems);
+  const orderNumbers = placedOrders.map((order) => formatOrderNumber(order.id));
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 z-[60] flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+      <div role="dialog" aria-modal="true" aria-label="Checkout" className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
         {/* Step 1: Contact Information */}
         {step === 1 && (
           <div className="p-6">
@@ -456,6 +575,8 @@ export default function CheckoutModal({ cart, total, onClose, onSuccess, onRequi
                 <input
                   type="text"
                   name="fullName"
+                  autoComplete="name"
+                  maxLength={120}
                   value={formData.fullName}
                   onChange={handleInputChange}
                   className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -470,6 +591,7 @@ export default function CheckoutModal({ cart, total, onClose, onSuccess, onRequi
                 <input
                   type="email"
                   name="email"
+                  autoComplete="email"
                   value={formData.email}
                   onChange={handleInputChange}
                   className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -484,6 +606,10 @@ export default function CheckoutModal({ cart, total, onClose, onSuccess, onRequi
                 <input
                   type="tel"
                   name="phone"
+                  autoComplete="tel"
+                  inputMode="tel"
+                  placeholder="09XX XXX XXXX"
+                  maxLength={30}
                   value={formData.phone}
                   onChange={handleInputChange}
                   className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -497,6 +623,9 @@ export default function CheckoutModal({ cart, total, onClose, onSuccess, onRequi
                 </label>
                 <textarea
                   name="address"
+                  autoComplete="street-address"
+                  placeholder="House no., street, barangay, town/city"
+                  maxLength={500}
                   value={formData.address}
                   onChange={handleInputChange}
                   rows="3"
@@ -516,8 +645,21 @@ export default function CheckoutModal({ cart, total, onClose, onSuccess, onRequi
                   rows="2"
                   className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   placeholder="Special instructions or requests..."
+                  maxLength={1000}
                 />
               </div>
+
+              {user && (
+                <label className="flex items-start gap-3 text-sm text-gray-700 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={saveDetails}
+                    onChange={(event) => setSaveDetails(event.target.checked)}
+                    className="mt-0.5 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  <span>Save this phone number and address to my profile for faster checkout next time</span>
+                </label>
+              )}
             </div>
 
             <button
@@ -606,6 +748,21 @@ export default function CheckoutModal({ cart, total, onClose, onSuccess, onRequi
               </label>
             </div>
 
+            {(formData.paymentMethod === 'gcash' || formData.paymentMethod === 'bank') && (
+              <div className="mb-6">
+                <PaymentInstructions method={formData.paymentMethod} settings={shopSettings} compact />
+              </div>
+            )}
+
+            <div className="mb-6 rounded-xl border border-gray-200 p-4 text-sm text-gray-700">
+              <p className="font-semibold text-gray-900 mb-1">Deliver to</p>
+              <p className="break-words">{formData.fullName} · {formData.phone}</p>
+              <p className="break-words whitespace-pre-line">{formData.address}</p>
+              {summaryPoints > 0 && (
+                <p className="mt-2 text-xs text-yellow-800">You will earn about {summaryPoints} reward points with this order.</p>
+              )}
+            </div>
+
             <div className="flex gap-3">
               <button
                 onClick={() => setStep(1)}
@@ -634,9 +791,31 @@ export default function CheckoutModal({ cart, total, onClose, onSuccess, onRequi
               </svg>
             </div>
             <h2 className="text-2xl font-bold text-gray-800 mb-2">Order Placed Successfully!</h2>
-            <p className="text-gray-600 mb-6">
-              Thank you for supporting local artisans of Daet. We&apos;ll contact you shortly to confirm your order.
+            <p className="text-gray-600 mb-4">
+              Thank you for supporting local artisans of Daet. The shop will contact you shortly to confirm your order.
             </p>
+            {orderNumbers.length > 0 && (
+              <div className="mb-4 rounded-xl bg-gray-50 p-4 text-sm text-gray-700">
+                <p>
+                  {orderNumbers.length === 1 ? 'Order number' : 'Order numbers (one per shop)'}:{' '}
+                  <span className="font-mono font-semibold text-gray-900">{orderNumbers.join(', ')}</span>
+                </p>
+                <p className="mt-1">
+                  Total: <span className="font-semibold">₱{summaryTotal.toFixed(2)}</span> · Payment:{' '}
+                  <span className="font-semibold">{PAYMENT_LABELS[placedPayment] || placedPayment}</span>
+                </p>
+              </div>
+            )}
+            {(placedPayment === 'gcash' || placedPayment === 'bank') && (
+              <div className="mb-4">
+                <PaymentInstructions
+                  method={placedPayment}
+                  settings={shopSettings}
+                  amount={summaryTotal}
+                  orderNumbers={orderNumbers}
+                />
+              </div>
+            )}
             {awardedPoints > 0 && (
               <div className="bg-blue-50 rounded-xl p-4 mb-6">
                 <p className="text-sm text-gray-600">
@@ -653,6 +832,15 @@ export default function CheckoutModal({ cart, total, onClose, onSuccess, onRequi
             >
               Continue Shopping
             </button>
+            <a
+              href="/shop/buyer?tab=orders"
+              onClick={() => {
+                if (onSuccess) onSuccess();
+              }}
+              className="mt-3 inline-flex min-h-[44px] w-full items-center justify-center rounded-full border-2 border-blue-600 font-bold text-blue-600 hover:bg-blue-50"
+            >
+              Track my order
+            </a>
           </div>
         )}
       </div>

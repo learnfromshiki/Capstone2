@@ -6,7 +6,11 @@ import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import { uploadProductImage } from '@/lib/imageUpload';
 import { getAccountRole } from '@/lib/roles';
-import { getAllowedStatuses, STATUS_LABELS, transitionOrderStatus } from '@/lib/orders';
+import { formatOrderNumber, getAllowedStatuses, PAYMENT_LABELS, STATUS_LABELS, transitionOrderStatus } from '@/lib/orders';
+import { DEFAULT_SHOP_SETTINGS, fetchShopSettings } from '@/lib/shopSettings';
+
+const peso = (value) =>
+  `₱${(Number(value) || 0).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 import Link from 'next/link';
 import Toast from '@/components/Toast';
 
@@ -72,6 +76,8 @@ const REPORT_CONFIG = {
 export default function ShopAdminPage() {
   const [products, setProducts] = useState([]);
   const [orders, setOrders] = useState([]);
+  const [orderStatusFilter, setOrderStatusFilter] = useState('all');
+  const [orderSearch, setOrderSearch] = useState('');
   const [categories, setCategories] = useState([]);
   const [sellers, setSellers] = useState([]);
   const [customers, setCustomers] = useState([]);
@@ -96,11 +102,7 @@ export default function ShopAdminPage() {
   const [adminPassword, setAdminPassword] = useState('');
   const [loginError, setLoginError] = useState('');
   const [loginLoading, setLoginLoading] = useState(false);
-  const [websiteSettings, setWebsiteSettings] = useState({
-    siteName: 'Daet Local Shop',
-    contactEmail: 'support@connect-daet.ph',
-    contactPhone: '+63 900 000 0000'
-  });
+  const [websiteSettings, setWebsiteSettings] = useState({ ...DEFAULT_SHOP_SETTINGS });
   const [savingSettings, setSavingSettings] = useState(false);
   const [report, setReport] = useState(null);
   const [reportLoading, setReportLoading] = useState('');
@@ -1054,24 +1056,38 @@ export default function ShopAdminPage() {
   };
 
   const saveWebsiteSettings = async () => {
+    const trimmed = Object.fromEntries(
+      Object.entries(websiteSettings).map(([key, value]) => [key, String(value ?? '').trim()])
+    );
+
+    if (trimmed.contactEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(trimmed.contactEmail)) {
+      showToast('Please enter a valid contact email.', 'error');
+      return;
+    }
+
+    if (trimmed.gcashNumber && trimmed.gcashNumber.replace(/\D/g, '').length < 10) {
+      showToast('Please enter the full 11-digit GCash number (e.g. 0917 123 4567).', 'error');
+      return;
+    }
+
     setSavingSettings(true);
 
     try {
-      const rows = Object.entries(websiteSettings).map(([key, value]) => ({
-        key,
-        value: String(value)
-      }));
+      const rows = Object.entries(trimmed).map(([key, value]) => ({ key, value }));
 
       const { error } = await supabase.from('shop_settings').upsert(rows, { onConflict: 'key' });
 
       if (error) throw error;
 
+      setWebsiteSettings(trimmed);
+      // Refresh the cached copy that checkout and My Orders read
+      fetchShopSettings({ force: true });
       showToast('Website settings saved.', 'success');
     } catch (error) {
       console.error('Error saving website settings:', error);
       showToast(
         error.code === '42P01' || error.message?.includes('shop_settings')
-          ? 'Could not save settings — the database blocked the write. Run supabase-final-fixes.sql in Supabase.'
+          ? 'Could not save settings: the shop_settings table is missing or blocked. Run supabase-security-hardening.sql in Supabase.'
           : 'Failed to save settings: ' + error.message,
         'error'
       );
@@ -1121,6 +1137,14 @@ export default function ShopAdminPage() {
   };
 
   // Login Screen
+  const orderQuery = orderSearch.trim().toLowerCase().replace(/^#/, '');
+  const visibleOrders = orders.filter((order) => {
+    if (orderStatusFilter !== 'all' && order.status !== orderStatusFilter) return false;
+    if (!orderQuery) return true;
+    return [order.id, order.customer_name, order.customer_email, order.customer_phone]
+      .some((value) => String(value || '').toLowerCase().includes(orderQuery));
+  });
+
   if (checkingAuth) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
@@ -1656,7 +1680,7 @@ export default function ShopAdminPage() {
                   <tbody className="divide-y divide-gray-200">
                     {orders.slice(0, 5).map((order) => (
                       <tr key={order.id} className="hover:bg-gray-50">
-                        <td className="px-6 py-4 text-sm font-semibold text-gray-900">#{order.id.slice(0, 8)}</td>
+                        <td className="px-6 py-4 text-sm font-semibold text-gray-900">{formatOrderNumber(order.id)}</td>
                         <td className="px-6 py-4 text-sm text-gray-600">
                           {order.customer_name || 'Customer'}
                         </td>
@@ -1975,19 +1999,54 @@ export default function ShopAdminPage() {
           </div>
         ) : activeTab === 'orders' ? (
           <div>
+            <div className="mb-4 flex flex-col gap-3 sm:flex-row">
+              <input
+                type="search"
+                value={orderSearch}
+                onChange={(e) => setOrderSearch(e.target.value)}
+                placeholder="Search order number, customer, email or phone..."
+                className="min-h-[44px] flex-1 rounded-lg border-2 px-4 focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+              />
+              <select
+                value={orderStatusFilter}
+                onChange={(e) => setOrderStatusFilter(e.target.value)}
+                className="min-h-[44px] rounded-lg border-2 px-4"
+                aria-label="Filter orders by status"
+              >
+                <option value="all">All statuses ({orders.length})</option>
+                {Object.keys(STATUS_LABELS).map((status) => (
+                  <option key={status} value={status}>
+                    {STATUS_LABELS[status]} ({orders.filter((order) => order.status === status).length})
+                  </option>
+                ))}
+              </select>
+            </div>
             <div className="space-y-4">
-              {orders.map((order) => (
+              {visibleOrders.length === 0 && (
+                <div className="rounded-xl border border-gray-100 bg-white p-10 text-center text-gray-500">
+                  {orders.length === 0 ? 'No orders yet.' : 'No orders match this search.'}
+                </div>
+              )}
+              {visibleOrders.map((order) => (
                 <div key={order.id} className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
-                  <div className="flex justify-between items-start mb-4">
-                    <div>
-                      <h3 className="font-bold text-lg">{order.customer_name}</h3>
-                      <p className="text-sm text-gray-600">{order.customer_email}</p>
+                  <div className="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-start mb-4">
+                    <div className="min-w-0">
+                      <p className="font-mono text-sm font-semibold text-blue-600">{formatOrderNumber(order.id)}</p>
+                      <h3 className="font-bold text-lg break-words">{order.customer_name}</h3>
+                      <p className="text-sm text-gray-600 break-all">{order.customer_email}</p>
                       <p className="text-sm text-gray-600">{order.customer_phone}</p>
-                      <p className="text-sm text-gray-600">{order.delivery_address}</p>
+                      <p className="text-sm text-gray-600 break-words whitespace-pre-line">{order.delivery_address}</p>
+                      {order.notes && (
+                        <p className="mt-2 rounded-lg bg-yellow-50 px-3 py-2 text-sm text-yellow-900 break-words">
+                          <span className="font-semibold">Note:</span> {order.notes}
+                        </p>
+                      )}
                     </div>
-                    <div className="text-right">
-                      <div className="text-2xl font-bold text-blue-600">₱{order.total_amount}</div>
-                      <div className="text-sm text-gray-500">{new Date(order.created_at).toLocaleDateString()}</div>
+                    <div className="sm:text-right">
+                      <div className="text-2xl font-bold text-blue-600">{peso(order.total_amount)}</div>
+                      <div className="text-sm text-gray-500">
+                        {new Date(order.created_at).toLocaleString('en-PH', { dateStyle: 'medium', timeStyle: 'short' })}
+                      </div>
                     </div>
                   </div>
 
@@ -1995,7 +2054,7 @@ export default function ShopAdminPage() {
                     <h4 className="font-semibold mb-2">Items:</h4>
                     {order.shop_order_items?.map((item, idx) => (
                       <div key={idx} className="text-sm text-gray-600">
-                        {item.product_name} x{item.quantity} - ₱{item.price * item.quantity}
+                        {item.product_name} x{item.quantity} - {peso(Number(item.price) * Number(item.quantity))}
                       </div>
                     ))}
                   </div>
@@ -2015,7 +2074,7 @@ export default function ShopAdminPage() {
                       ))}
                     </select>
                     <span className="text-sm text-gray-600">
-                      Payment: {(order.payment_method || 'unknown').toUpperCase()}
+                      Payment: {PAYMENT_LABELS[order.payment_method] || order.payment_method || 'Unknown'}
                     </span>
                   </div>
                 </div>
@@ -2215,7 +2274,7 @@ export default function ShopAdminPage() {
                     {orders.map((order) => (
                       <tr key={order.id} className="hover:bg-gray-50">
                         <td className="px-6 py-4 text-sm font-mono text-gray-900">TXN-{order.id.slice(0, 8).toUpperCase()}</td>
-                        <td className="px-6 py-4 text-sm font-semibold text-blue-600">#{order.id.slice(0, 8)}</td>
+                        <td className="px-6 py-4 text-sm font-semibold text-blue-600">{formatOrderNumber(order.id)}</td>
                         <td className="px-6 py-4 text-sm text-gray-600">{order.customer_name || 'Customer'}</td>
                         <td className="px-6 py-4 text-sm font-bold text-gray-900">₱{order.total_amount?.toLocaleString()}</td>
                         <td className="px-6 py-4">
@@ -2538,6 +2597,73 @@ export default function ShopAdminPage() {
                       type="tel"
                       value={websiteSettings.contactPhone}
                       onChange={(e) => setWebsiteSettings({ ...websiteSettings, contactPhone: e.target.value })}
+                      className="w-full px-4 py-3 border-2 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                    />
+                  </div>
+                  <div className="border-t pt-4">
+                    <p className="font-semibold text-gray-900">Payment details shown to buyers</p>
+                    <p className="text-xs text-gray-500 mt-1">
+                      Buyers who choose GCash or bank transfer see these at checkout and in My Orders. Leave blank to send them yourself when you confirm an order.
+                    </p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold mb-2 text-gray-700">GCash Number</label>
+                    <input
+                      type="tel"
+                      value={websiteSettings.gcashNumber || ''}
+                      onChange={(e) => setWebsiteSettings({ ...websiteSettings, gcashNumber: e.target.value })}
+                      placeholder="09XX XXX XXXX"
+                      className="w-full px-4 py-3 border-2 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold mb-2 text-gray-700">GCash Account Name</label>
+                    <input
+                      type="text"
+                      value={websiteSettings.gcashName || ''}
+                      onChange={(e) => setWebsiteSettings({ ...websiteSettings, gcashName: e.target.value })}
+                      placeholder="e.g. JUAN D."
+                      className="w-full px-4 py-3 border-2 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold mb-2 text-gray-700">Bank Name</label>
+                    <input
+                      type="text"
+                      value={websiteSettings.bankName || ''}
+                      onChange={(e) => setWebsiteSettings({ ...websiteSettings, bankName: e.target.value })}
+                      placeholder="e.g. BDO, BPI, Landbank"
+                      className="w-full px-4 py-3 border-2 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold mb-2 text-gray-700">Bank Account Name</label>
+                    <input
+                      type="text"
+                      value={websiteSettings.bankAccountName || ''}
+                      onChange={(e) => setWebsiteSettings({ ...websiteSettings, bankAccountName: e.target.value })}
+                      placeholder=""
+                      className="w-full px-4 py-3 border-2 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold mb-2 text-gray-700">Bank Account Number</label>
+                    <input
+                      type="text"
+                      value={websiteSettings.bankAccountNumber || ''}
+                      onChange={(e) => setWebsiteSettings({ ...websiteSettings, bankAccountNumber: e.target.value })}
+                      placeholder=""
+                      className="w-full px-4 py-3 border-2 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold mb-2 text-gray-700">Payment Note (optional)</label>
+                    <textarea
+                      rows={2}
+                      maxLength={300}
+                      value={websiteSettings.paymentNote || ''}
+                      onChange={(e) => setWebsiteSettings({ ...websiteSettings, paymentNote: e.target.value })}
+                      placeholder="e.g. Send a screenshot of your receipt to our Facebook page with your order number."
                       className="w-full px-4 py-3 border-2 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
                     />
                   </div>

@@ -254,7 +254,7 @@ export function middleware(request) {
 → Run `DATABASE-SETUP-COMPLETE.sql`
 
 **"Admin login not working"**
-→ Check credentials: shiki@gmail.com / shiki1234
+→ Check credentials: shiki@gmail.com / (private: see ADMIN-CREDENTIALS.md)
 
 **"Seller can't add products"**
 → Check `is_approved = true` in database

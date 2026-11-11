@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useSellerAuth } from '@/contexts/SellerAuthContext';
 import { supabase } from '@/lib/supabaseClient';
 import { uploadProductImage } from '@/lib/imageUpload';
-import { getAllowedStatuses, STATUS_LABELS, transitionOrderStatus } from '@/lib/orders';
+import { formatOrderNumber, getAllowedStatuses, PAYMENT_LABELS, STATUS_LABELS, transitionOrderStatus } from '@/lib/orders';
 import Link from 'next/link';
 
 // Totals for this seller's items over the selected range, used by the dashboard chart
@@ -203,7 +203,7 @@ export default function SellerDashboard() {
 
     const { data: orderRows, error: ordersError } = await supabase
       .from('shop_orders')
-      .select('id, customer_name, customer_email, customer_phone, status, payment_method, created_at')
+      .select('id, customer_name, customer_email, customer_phone, delivery_address, notes, status, payment_method, created_at')
       .in('id', orderIds)
       .order('created_at', { ascending: false });
 
@@ -629,11 +629,12 @@ export default function SellerDashboard() {
           .some((value) => String(value).toLowerCase().includes(searchTerm))
       )
     : products;
-  const filteredOrders = searchTerm
+  const orderSearchTerm = searchTerm.replace(/^#/, '');
+  const filteredOrders = orderSearchTerm
     ? orders.filter((order) =>
         [order.customer_name, order.customer_email, order.customer_phone, order.status, order.id]
           .filter(Boolean)
-          .some((value) => String(value).toLowerCase().includes(searchTerm))
+          .some((value) => String(value).toLowerCase().includes(orderSearchTerm))
       )
     : orders;
   const dailySales = buildDailySales(
@@ -1171,7 +1172,7 @@ export default function SellerDashboard() {
                       <tbody className="divide-y divide-gray-200">
                         {filteredOrders.slice(0, 4).map((order) => (
                           <tr key={order.id} className="hover:bg-gray-50">
-                            <td className="px-6 py-4 text-sm font-semibold text-blue-600">#{order.id.slice(0, 8).toUpperCase()}</td>
+                            <td className="px-6 py-4 text-sm font-semibold text-blue-600">{formatOrderNumber(order.id)}</td>
                             <td className="px-6 py-4 text-sm text-gray-900">{order.customer_name}</td>
                             <td className="px-6 py-4 text-sm font-semibold text-gray-900">₱{order.my_total?.toLocaleString()}</td>
                             <td className="px-6 py-4">
@@ -1389,14 +1390,27 @@ export default function SellerDashboard() {
                 <div key={order.id} className="bg-white rounded-xl shadow-sm p-4 sm:p-6 border border-gray-100">
                   <div className="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-start mb-4">
                     <div className="min-w-0">
-                      <h3 className="font-bold text-lg">{order.customer_name}</h3>
+                      <p className="font-mono text-sm font-semibold text-blue-600">{formatOrderNumber(order.id)}</p>
+                      <h3 className="font-bold text-lg break-words">{order.customer_name}</h3>
                       <p className="text-sm text-gray-600 break-words">{order.customer_email}</p>
                       <p className="text-sm text-gray-600">{order.customer_phone}</p>
+                      {order.delivery_address && (
+                        <p className="text-sm text-gray-600 break-words whitespace-pre-line">
+                          <span className="font-semibold text-gray-700">Deliver to:</span> {order.delivery_address}
+                        </p>
+                      )}
+                      {order.notes && (
+                        <p className="mt-2 rounded-lg bg-yellow-50 px-3 py-2 text-sm text-yellow-900 break-words">
+                          <span className="font-semibold">Buyer note:</span> {order.notes}
+                        </p>
+                      )}
                     </div>
                     <div className="text-left sm:text-right">
                       <div className="text-2xl font-bold text-blue-600">₱{order.my_total.toLocaleString()}</div>
                       <p className="text-xs text-gray-500">Your items in this order</p>
-                      <div className="text-sm text-gray-500">{new Date(order.created_at).toLocaleDateString()}</div>
+                      <div className="text-sm text-gray-500">
+                        {new Date(order.created_at).toLocaleString('en-PH', { dateStyle: 'medium', timeStyle: 'short' })}
+                      </div>
                     </div>
                   </div>
 
@@ -1427,7 +1441,7 @@ export default function SellerDashboard() {
                       </select>
                     </label>
                     <span className="text-sm text-gray-600">
-                      Payment: {order.payment_method?.toUpperCase()}
+                      Payment: {PAYMENT_LABELS[order.payment_method] || order.payment_method}
                     </span>
                     {updatingOrderId === order.id && (
                       <span className="text-sm text-blue-600">Updating stock and order…</span>

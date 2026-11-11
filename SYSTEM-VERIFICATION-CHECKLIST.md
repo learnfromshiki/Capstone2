@@ -89,7 +89,7 @@
 ## 🧪 Testing Checklist
 
 ### Admin Testing
-- [ ] Login with shiki@gmail.com / shiki1234
+- [ ] Login with shiki@gmail.com / (private: see ADMIN-CREDENTIALS.md)
 - [ ] View dashboard stats
 - [ ] Navigate through all 9 tabs
 - [ ] Test Quick Actions buttons

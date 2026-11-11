@@ -8,6 +8,7 @@ import ProductCard from '@/components/shop/ProductCard';
 import Cart from '@/components/shop/Cart';
 import ProductDetailsModal from '@/components/shop/ProductDetailsModal';
 import AuthModal from '@/components/AuthModal';
+import ShopFooter from '@/components/shop/ShopFooter';
 
 export default function ShopPage() {
   const [products, setProducts] = useState([]);
@@ -28,6 +29,8 @@ export default function ShopPage() {
     }
   }, []);
   const [searchQuery, setSearchQuery] = useState('');
+  const [sortBy, setSortBy] = useState('newest');
+  const [inStockOnly, setInStockOnly] = useState(false);
   const [showAuthModal, setShowAuthModal] = useState(false);
   const { user, profile, isSuspended, loading: authLoading, signOut } = useAuth();
   const cartKey = user ? `shop_cart:${user.id}` : null;
@@ -292,16 +295,21 @@ export default function ShopPage() {
       return;
     }
 
+    // Check the limit before updating state: an alert inside a state updater
+    // can fire twice.
+    const alreadyInCart = cart.find((item) => item.id === product.id);
+    if (alreadyInCart && alreadyInCart.quantity >= product.stock) {
+      alert(`Cannot add more. Only ${product.stock} in stock.`);
+      setShowCart(true);
+      return;
+    }
+
     setCart((prevCart) => {
       const existingItem = prevCart.find((item) => item.id === product.id);
-      
+
       if (existingItem) {
-        // Check if adding one more would exceed stock
-        if (existingItem.quantity >= product.stock) {
-          alert(`Cannot add more. Only ${product.stock} in stock.`);
-          return prevCart;
-        }
-        
+        if (existingItem.quantity >= product.stock) return prevCart;
+
         return prevCart.map((item) =>
           item.id === product.id
             ? { ...item, quantity: Math.min(item.quantity + quantity, product.stock) }
@@ -406,16 +414,49 @@ export default function ShopPage() {
     }
   };
   
-  const filteredProducts = products.filter(p => {
-    const matchesCategory = filter === 'all' || p.category === filter;
-    const sellerName = sellers[p.seller_id]?.business_name || '';
-    const matchesSearch = searchQuery === '' || 
-      p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      p.description?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      p.artisan_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      sellerName.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesCategory && matchesSearch;
+  // Card-level average and count; the modal lists the reviews themselves.
+  const reviewSummaries = {};
+  Object.keys(reviewsByProduct).forEach((productId) => {
+    const rows = reviewsByProduct[productId] || [];
+    if (rows.length === 0) return;
+    const total = rows.reduce((sum, review) => sum + (Number(review.rating) || 0), 0);
+    reviewSummaries[productId] = { average: total / rows.length, count: rows.length };
   });
+
+  const normalizedQuery = searchQuery.trim().toLowerCase();
+  const filteredProducts = products
+    .filter((p) => {
+      const matchesCategory = filter === 'all' || p.category === filter;
+      const matchesStock = !inStockOnly || (Number(p.stock) || 0) > 0;
+      const sellerName = sellers[p.seller_id]?.business_name || '';
+      const matchesSearch =
+        normalizedQuery === '' ||
+        [p.name, p.description, p.artisan_name, p.category, sellerName]
+          .some((value) => String(value || '').toLowerCase().includes(normalizedQuery));
+      return matchesCategory && matchesStock && matchesSearch;
+    })
+    .sort((a, b) => {
+      // Sold-out items always go last so shoppers see what they can buy first
+      const aOut = (Number(a.stock) || 0) <= 0;
+      const bOut = (Number(b.stock) || 0) <= 0;
+      if (aOut !== bOut) return aOut ? 1 : -1;
+
+      switch (sortBy) {
+        case 'price-asc':
+          return (Number(a.price) || 0) - (Number(b.price) || 0);
+        case 'price-desc':
+          return (Number(b.price) || 0) - (Number(a.price) || 0);
+        case 'rating':
+          return (
+            (reviewSummaries[b.id]?.average || 0) - (reviewSummaries[a.id]?.average || 0) ||
+            (reviewSummaries[b.id]?.count || 0) - (reviewSummaries[a.id]?.count || 0)
+          );
+        case 'name':
+          return String(a.name || '').localeCompare(String(b.name || ''));
+        default:
+          return new Date(b.created_at || 0) - new Date(a.created_at || 0);
+      }
+    });
 
   const cartTotal = cart.reduce(
     (sum, item) => sum + (Number(item.price) || 0) * (Number(item.quantity) || 0),
@@ -434,15 +475,6 @@ export default function ShopPage() {
       : profile?.user_type === 'seller'
       ? 'Seller Dashboard'
       : 'My Account';
-
-  // Card-level average and count; the modal lists the reviews themselves.
-  const reviewSummaries = {};
-  Object.keys(reviewsByProduct).forEach((productId) => {
-    const rows = reviewsByProduct[productId] || [];
-    if (rows.length === 0) return;
-    const total = rows.reduce((sum, review) => sum + (Number(review.rating) || 0), 0);
-    reviewSummaries[productId] = { average: total / rows.length, count: rows.length };
-  });
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -539,7 +571,8 @@ export default function ShopPage() {
           <div className="mb-4">
             <div className="relative max-w-2xl mx-auto">
               <input
-                type="text"
+                type="search"
+                aria-label="Search products"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search for products, sellers, artisans, categories..."
@@ -583,11 +616,36 @@ export default function ShopPage() {
 
       {/* Results Count */}
       {!loading && (
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-sm text-gray-600">
             Showing <span className="font-semibold text-gray-900">{filteredProducts.length}</span> {filteredProducts.length === 1 ? 'product' : 'products'}
-            {filter !== 'all' && ` in ${categories.find(c => c.value === filter)?.label}`}
+            {filter !== 'all' && ` in ${categories.find(c => c.value === filter)?.label || filter}`}
           </p>
+          <div className="flex flex-wrap items-center gap-3">
+            <label className="flex min-h-[44px] cursor-pointer items-center gap-2 text-sm text-gray-700">
+              <input
+                type="checkbox"
+                checked={inStockOnly}
+                onChange={(e) => setInStockOnly(e.target.checked)}
+                className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+              />
+              In stock only
+            </label>
+            <label className="flex items-center gap-2 text-sm text-gray-700">
+              <span className="sr-only sm:not-sr-only">Sort by</span>
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value)}
+                className="min-h-[44px] rounded-lg border-2 border-gray-200 bg-white px-3 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="newest">Newest</option>
+                <option value="price-asc">Price: Low to High</option>
+                <option value="price-desc">Price: High to Low</option>
+                <option value="rating">Top Rated</option>
+                <option value="name">Name: A to Z</option>
+              </select>
+            </label>
+          </div>
         </div>
       )}
 
@@ -616,11 +674,12 @@ export default function ShopPage() {
             <p className="text-gray-500 mb-6">
               {searchQuery ? `We couldn't find any products matching "${searchQuery}"` : 'No products available in this category'}
             </p>
-            {(searchQuery || filter !== 'all') && (
+            {(searchQuery || filter !== 'all' || inStockOnly) && (
               <button
                 onClick={() => {
                   setSearchQuery('');
                   setFilter('all');
+                  setInStockOnly(false);
                 }}
                 className="inline-flex items-center gap-2 bg-blue-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-blue-700 transition-colors"
               >
@@ -647,6 +706,8 @@ export default function ShopPage() {
           </div>
         )}
       </main>
+
+      <ShopFooter />
 
       {/* Cart Sidebar */}
       <Cart

@@ -50,7 +50,7 @@ A comprehensive multi-seller e-commerce platform with customer authentication, a
 
 ### 3️⃣ **Admin** (Platform Manager)
 **Access**: `http://localhost:3000/shop/admin`  
-**Password**: `shiki1234`
+**Password**: `(private: see ADMIN-CREDENTIALS.md)`
 
 **Features**:
 - View dashboard statistics
@@ -368,7 +368,7 @@ USING (available = true);
 ### Admin Journey:
 ```
 1. Visit /shop/admin
-2. Enter password: shiki1234
+2. Enter password: (private: see ADMIN-CREDENTIALS.md)
 3. View dashboard stats
 4. Manage products (all sellers)
 5. View orders

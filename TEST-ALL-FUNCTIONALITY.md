@@ -28,7 +28,7 @@ npm run dev
 1. Navigate to: http://localhost:3000/shop/admin
 2. Enter credentials:
    - **Email**: `shiki@gmail.com`
-   - **Password**: `shiki1234`
+   - **Password**: `(private: see ADMIN-CREDENTIALS.md)`
 3. Click "Sign In"
 
 **Expected Results**:

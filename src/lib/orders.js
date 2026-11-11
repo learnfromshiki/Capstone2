@@ -118,6 +118,12 @@ const undoStockRestore = async (restored) => {
   }
 };
 
+/** True when Supabase reports that an RPC function has not been created yet. */
+export const isMissingFunction = (error) =>
+  error?.code === 'PGRST202' ||
+  error?.code === '42883' ||
+  /could not find the function|function .* does not exist/i.test(error?.message || '');
+
 /**
  * Change an order's status and keep product stock consistent.
  *
@@ -132,6 +138,26 @@ export const transitionOrderStatus = async (orderId, newStatus) => {
     throw new Error('Unknown order status.');
   }
 
+  // Preferred path: one database transaction that checks who may change the
+  // order, validates the transition, restores stock and takes back reward
+  // points on cancellation. See supabase-checkout-security.sql.
+  const { data: rpcResult, error: rpcError } = await supabase.rpc('update_order_status', {
+    p_order_id: orderId,
+    p_status: newStatus,
+  });
+
+  if (!rpcError) {
+    return {
+      status: rpcResult?.status || newStatus,
+      restoredItems: Number(rpcResult?.restored_items) || 0,
+    };
+  }
+
+  if (!isMissingFunction(rpcError)) {
+    throw new Error(rpcError.message || 'Could not update the order.');
+  }
+
+  // Legacy path for databases that have not run supabase-checkout-security.sql.
   const { data: order, error: orderError } = await supabase
     .from('shop_orders')
     .select('id, status, shop_order_items(product_id, product_name, quantity)')
@@ -182,4 +208,53 @@ export const transitionOrderStatus = async (orderId, newStatus) => {
   }
 
   return { status: newStatus, restoredItems: restored.length };
+};
+
+/**
+ * Let a buyer cancel their own order while it is still pending. Needs the
+ * cancel_my_order() function from supabase-checkout-security.sql; buyers have
+ * no direct write access to orders or stock.
+ */
+export const cancelMyOrder = async (orderId) => {
+  const { data, error } = await supabase.rpc('cancel_my_order', { p_order_id: orderId });
+
+  if (error) {
+    if (isMissingFunction(error)) {
+      throw new Error('Online cancellation is not available yet. Please contact the shop to cancel this order.');
+    }
+    throw new Error(error.message || 'Could not cancel the order.');
+  }
+
+  return {
+    status: data?.status || 'cancelled',
+    restoredItems: Number(data?.restored_items) || 0,
+  };
+};
+
+/** Short, readable order number shown to buyers, sellers and admins. */
+export const formatOrderNumber = (orderId) =>
+  orderId ? `#${String(orderId).slice(0, 8).toUpperCase()}` : '';
+
+export const PAYMENT_LABELS = {
+  gcash: 'GCash',
+  cod: 'Cash on Delivery',
+  bank: 'Bank Transfer',
+};
+
+/** 10 reward points for every full ₱100, counted per shop order. */
+export const estimateRewardPoints = (items) => {
+  const totalsBySeller = new Map();
+
+  (items || []).forEach((item) => {
+    const key = item.seller_id || 'platform';
+    const amount = (Number(item.price) || 0) * (Number(item.quantity) || 0);
+    totalsBySeller.set(key, (totalsBySeller.get(key) || 0) + amount);
+  });
+
+  let points = 0;
+  totalsBySeller.forEach((amount) => {
+    points += Math.floor(amount / 100) * 10;
+  });
+
+  return points;
 };

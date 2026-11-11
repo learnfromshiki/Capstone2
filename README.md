@@ -18,7 +18,11 @@ This platform now supports **multiple sellers** who can independently manage the
 - 🏪 **Seller Information** - See which seller offers each product
 - 🎨 **Professional UI** - Modern design with smooth animations
 - 📱 **Mobile Responsive** - Optimized for all devices
-- 🛍️ **Shopping Cart** - Real-time cart with smart checkout (login required)
+- 🛍️ **Shopping Cart** - Real-time cart with secure server-side checkout (login required)
+- 📦 **Order Tracking** - Order numbers, status timeline, and cancelling while still pending
+- 💳 **Payment Instructions** - GCash / bank details from Admin → Settings shown at checkout
+- 🔑 **Forgot Password** - Reset link by email
+- ↕️ **Sort & Filter** - Sort by price, rating, newest; show in-stock only
 - 🔐 **Authentication** - Secure signup and login
 - 🎁 **Rewards System** - 10 points per ₱100 spent
 - 🔍 **Smart Search** - Search by product, seller, artisan, or category
@@ -35,7 +39,8 @@ This platform now supports **multiple sellers** who can independently manage the
 - 👨‍💼 **Admin Dashboard** - Manage all products and orders
 - 📈 **Platform Statistics** - Overview of entire marketplace
 - 👥 **Seller Management** - Approve new sellers
-- 🔒 **Password Protected** - Secure admin access
+- 🔒 **Role-based Access** - Only admin accounts can open the panel
+- 🔎 **Order Search** - Find orders by number, customer, email or phone; filter by status
 
 ## 🚀 Quick Start
 
@@ -53,11 +58,19 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=your_anon_key
 
 ### 3. Setup Database
 ```bash
-# Open Supabase SQL Editor and run:
+# Open Supabase SQL Editor and run, in this order:
 1. supabase-shop-schema-standalone.sql  # Core e-commerce
 2. supabase-sellers-schema.sql          # Seller system
+3. supabase-admin-policies.sql          # Settings, categories, profile fields
+4. supabase-security-hardening.sql      # Row Level Security for every table
+5. supabase-checkout-security.sql       # Server-side checkout, order status, cancellations
 ```
-This creates all tables, triggers, and sample data.
+This creates all tables, triggers, and sample data. Never run `supabase-final-fixes.sql`
+on the live database; it re-opens testing permissions.
+
+In Supabase → Authentication → URL Configuration, set the Site URL to your Vercel
+address and add `https://<your-site>/reset-password` to the Redirect URLs so the
+"Forgot password?" email works.
 
 ### 4. Start Development
 ```bash
@@ -67,7 +80,7 @@ npm run dev
 ### 5. Access the System
 - **Shop**: http://localhost:3000/shop
 - **Seller Portal**: http://localhost:3000/shop/seller
-- **Admin Panel**: http://localhost:3000/shop/admin (password: `shiki1234`)
+- **Admin Panel**: http://localhost:3000/shop/admin (sign in with an account whose `profiles.user_type` is `admin`)
 
 ## 📁 Structure
 
@@ -103,7 +116,8 @@ src/
 | `/shop` | Customer shop | Public (cart requires login) |
 | `/shop/seller` | Seller login/signup | Public |
 | `/shop/seller/dashboard` | Seller dashboard | Sellers only |
-| `/shop/admin` | Admin panel | Password: `shiki1234` |
+| `/shop/admin` | Admin panel | Admin accounts only |
+| `/reset-password` | Choose a new password from the reset email | Public (needs the email link) |
 
 ## 🏪 User Journeys
 
@@ -123,7 +137,7 @@ src/
 6. Track earnings as orders come in
 
 ### Admin Flow:
-1. Login at `/shop/admin` with password
+1. Sign in at `/shop/admin` with an admin account
 2. View platform statistics
 3. Manage all products from any seller
 4. Approve new sellers (via SQL currently)
@@ -205,7 +219,8 @@ Earn 10 points for every ₱100 spent. Points automatically added to user profil
 - **Authentication**: Email verification required
 - **Authorization**: Row Level Security (RLS) policies
 - **Data Isolation**: Sellers see only their own data
-- **Password Protection**: Admin panel secured
+- **Admin Access**: Supabase account with the admin role, checked in the database
+- **Server-side Checkout**: prices, stock and reward points are calculated in the database (`place_order`)
 - **Session Management**: Secure token-based sessions
 
 ## 🛠️ Admin Tasks

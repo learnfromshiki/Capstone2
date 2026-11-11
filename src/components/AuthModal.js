@@ -8,7 +8,7 @@ import { ensureSellerProfile } from '@/lib/sellerProfile';
 import { ensureProfileRow } from '@/lib/profile';
 
 export default function AuthModal({ isOpen, onClose, mode: initialMode = 'login' }) {
-  const [mode, setMode] = useState(initialMode); // 'login' or 'signup'
+  const [mode, setMode] = useState(initialMode); // 'login', 'signup' or 'forgot'
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
@@ -41,8 +41,17 @@ export default function AuthModal({ isOpen, onClose, mode: initialMode = 'login'
     setLoading(true);
 
     try {
+      if (mode === 'forgot') {
+        const { error: resetError } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+          redirectTo: `${window.location.origin}/reset-password`,
+        });
+        if (resetError) throw resetError;
+        setNotice('If an account exists for this email, a password reset link is on its way. Check your inbox and spam folder.');
+        return;
+      }
+
       if (mode === 'login') {
-        const { data, error } = await signIn(email, password);
+        const { data, error } = await signIn(email.trim(), password);
         if (error) throw error;
 
         // Admin accounts go to the admin dashboard, never the buyer/seller views
@@ -166,7 +175,11 @@ export default function AuthModal({ isOpen, onClose, mode: initialMode = 'login'
       const errorMsg = err.message || '';
       const lowerError = errorMsg.toLowerCase();
       
-      if (lowerError.includes('rate limit') || lowerError.includes('email rate limit')) {
+      if (lowerError.includes('invalid login credentials')) {
+        setError('Incorrect email or password. Please try again, or use "Forgot password?".');
+      } else if (lowerError.includes('email not confirmed')) {
+        setError('Please confirm your email first. Open the confirmation link we sent to your inbox, then sign in.');
+      } else if (lowerError.includes('rate limit') || lowerError.includes('email rate limit')) {
         setError('⚠️ Rate Limit Reached: Supabase limits signup emails. Please wait 5-10 minutes and try again, or switch to "Sign In" if you already created an account.');
       } else if (lowerError.includes('already registered') || lowerError.includes('already exists')) {
         setError('This email is already registered. Please use "Sign In" instead.');
@@ -204,11 +217,13 @@ export default function AuthModal({ isOpen, onClose, mode: initialMode = 'login'
           </div>
           
           <h2 className="text-lg font-bold text-gray-900 mb-1">
-            {mode === 'login' ? 'Welcome Back' : 'Create an Account'}
+            {mode === 'login' ? 'Welcome Back' : mode === 'forgot' ? 'Reset Your Password' : 'Create an Account'}
           </h2>
           <p className="text-gray-600 text-xs">
-            {mode === 'login' 
-              ? 'Sign in to continue shopping' 
+            {mode === 'login'
+              ? 'Sign in to continue shopping'
+              : mode === 'forgot'
+              ? 'Enter your email and we will send you a reset link'
               : 'Join our e-commerce platform'}
           </p>
         </div>
@@ -327,8 +342,8 @@ export default function AuthModal({ isOpen, onClose, mode: initialMode = 'login'
             </>
           )}
 
-          {/* Email field for login mode */}
-          {mode === 'login' && (
+          {/* Email field for login and password reset */}
+          {mode !== 'signup' && (
             <div>
               <label className="block text-xs font-semibold text-gray-700 mb-1.5">
                 Email
@@ -337,6 +352,7 @@ export default function AuthModal({ isOpen, onClose, mode: initialMode = 'login'
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
+                autoComplete="email"
                 className="w-full min-h-[44px] px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-full focus:ring-2 focus:ring-gray-900 focus:border-transparent transition-all text-sm text-gray-900 placeholder-gray-400"
                 placeholder="Enter your email"
                 required
@@ -344,6 +360,8 @@ export default function AuthModal({ isOpen, onClose, mode: initialMode = 'login'
             </div>
           )}
 
+          {mode !== 'forgot' && (
+          <>
           <div>
             <label className="block text-xs font-semibold text-gray-700 mb-1.5">
               Password
@@ -355,10 +373,26 @@ export default function AuthModal({ isOpen, onClose, mode: initialMode = 'login'
                 onChange={(e) => setPassword(e.target.value)}
                 className="w-full min-h-[44px] px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-full focus:ring-2 focus:ring-gray-900 focus:border-transparent transition-all text-sm text-gray-900 placeholder-gray-400"
                 placeholder="Enter your password"
+                autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
                 required
                 minLength={6}
               />
             </div>
+            {mode === 'login' && (
+              <div className="text-right">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMode('forgot');
+                    setError('');
+                    setNotice('');
+                  }}
+                  className="min-h-[36px] px-1 text-xs font-medium text-blue-600 hover:text-blue-700"
+                >
+                  Forgot password?
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Show Password Checkbox */}
@@ -374,6 +408,8 @@ export default function AuthModal({ isOpen, onClose, mode: initialMode = 'login'
               Show password
             </span>
           </label>
+          </>
+          )}
 
           {notice && (
             <div role="status" className="p-3 rounded-lg border-2 bg-green-50 border-green-300 text-green-800">
@@ -433,21 +469,23 @@ export default function AuthModal({ isOpen, onClose, mode: initialMode = 'login'
             disabled={loading}
             className="w-full min-h-[44px] bg-blue-600 text-white py-3 rounded-full font-bold hover:bg-blue-700 transition-all shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed text-sm"
           >
-            {loading ? 'Please wait...' : mode === 'login' ? 'Log In' : 'Sign Up'}
+            {loading ? 'Please wait...' : mode === 'login' ? 'Log In' : mode === 'forgot' ? 'Send Reset Link' : 'Sign Up'}
           </button>
 
           <div className="text-center pt-1">
             <button
               type="button"
               onClick={() => {
-                setMode(mode === 'login' ? 'signup' : 'login');
+                setMode(mode === 'signup' ? 'login' : mode === 'forgot' ? 'login' : 'signup');
                 setError('');
                 setNotice('');
               }}
               className="min-h-[44px] px-3 text-xs text-gray-600 hover:text-gray-900 font-medium"
             >
-              {mode === 'login' 
-                ? "Don't have an account? Sign Up" 
+              {mode === 'login'
+                ? "Don't have an account? Sign Up"
+                : mode === 'forgot'
+                ? 'Back to Log In'
                 : 'Already have an account? Log In'}
             </button>
           </div>

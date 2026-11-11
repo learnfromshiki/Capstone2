@@ -208,7 +208,7 @@ All within performance budget ✅
 ## 🔒 Security Verification
 
 ### Authentication ✅
-- ✅ Admin: Email/password (shiki@gmail.com / shiki1234)
+- ✅ Admin: Email/password (shiki@gmail.com / (private: see ADMIN-CREDENTIALS.md))
 - ✅ Seller: Registration → Approval workflow
 - ✅ Buyer: Email/password registration
 - ✅ Sessions persist correctly
@@ -395,7 +395,7 @@ The entire system has been scanned with **ultra precision**. Every file, functio
 
 ### Admin Account
 - **Email**: shiki@gmail.com
-- **Password**: shiki1234
+- **Password**: (private: see ADMIN-CREDENTIALS.md)
 - **Access**: http://localhost:3000/shop/admin
 
 ### Dev Server

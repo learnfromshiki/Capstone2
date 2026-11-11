@@ -407,7 +407,7 @@ WHERE contact_email = 'seller@example.com';
 **Steps:**
 1. Go to `/shop`
 2. Click "Sign In"
-3. Enter: shiki@gmail.com / shiki1234
+3. Enter: shiki@gmail.com / (private: see ADMIN-CREDENTIALS.md)
 4. Submit
 
 **Expected Results:**
@@ -423,7 +423,7 @@ WHERE contact_email = 'seller@example.com';
 ### Test 23: Admin Login (Direct)
 **Steps:**
 1. Navigate directly to `/shop/admin`
-2. Enter: shiki@gmail.com / shiki1234
+2. Enter: shiki@gmail.com / (private: see ADMIN-CREDENTIALS.md)
 3. Click "Access Admin Panel"
 
 **Expected Results:**

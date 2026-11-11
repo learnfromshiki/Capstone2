@@ -8,7 +8,7 @@ npm run dev
 
 Then visit:
 - **Customer Shop**: http://localhost:3000/shop
-- **Admin Panel**: http://localhost:3000/shop/admin (password: `shiki1234`)
+- **Admin Panel**: http://localhost:3000/shop/admin (password: `(private: see ADMIN-CREDENTIALS.md)`)
 
 ## Features Implemented
 
@@ -20,7 +20,7 @@ Then visit:
 - **Rewards**: Earn 10 points per ₱100 spent
 
 ### ✅ Admin Panel
-- **Password Protected**: Password is `shiki1234`
+- **Password Protected**: Password is `(private: see ADMIN-CREDENTIALS.md)`
 - **Product Management**: Add, edit, delete products
 - **Image Support**: Add product images via URL
 - **Dashboard**: View stats (total products, orders, revenue)
@@ -43,7 +43,7 @@ Supabase free tier has email rate limits. If you see "email rate limit exceeded"
 ## Admin Access
 
 Visit: http://localhost:3000/shop/admin
-- **Password**: `shiki1234` (demo credentials are defined in `src/lib/roles.js`)
+- **Password**: `(private: see ADMIN-CREDENTIALS.md)` (demo credentials are defined in `src/lib/roles.js`)
 - Add products with name, price, stock, category, description, artisan name, and image URL
 - Products appear instantly in the customer shop
 

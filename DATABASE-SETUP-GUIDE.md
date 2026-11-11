@@ -108,7 +108,7 @@ Or run the `supabase-storage-setup.sql` file in SQL Editor.
 
 1. Login as Admin: http://localhost:3000/shop/admin
    - Email: shiki@gmail.com
-   - Password: shiki1234
+   - Password: (private: see ADMIN-CREDENTIALS.md)
 2. Go to **Sellers** tab
 3. Find "My Test Shop"
 4. Click **Approve**

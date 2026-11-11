@@ -5,6 +5,9 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabaseClient';
 import Link from 'next/link';
+import { cancelMyOrder, formatOrderNumber, PAYMENT_LABELS } from '@/lib/orders';
+import { fetchShopSettings } from '@/lib/shopSettings';
+import PaymentInstructions from '@/components/shop/PaymentInstructions';
 
 const ORDER_STEPS = [
   { key: 'pending', label: 'Placed' },
@@ -73,6 +76,32 @@ export default function BuyerDashboard() {
   const [passwordForm, setPasswordForm] = useState({ current: '', next: '', confirm: '' });
   const [reviewDrafts, setReviewDrafts] = useState({});
   const [suspended, setSuspended] = useState(false);
+  const [cancellingOrderId, setCancellingOrderId] = useState(null);
+  const [shopSettings, setShopSettings] = useState(null);
+
+  // Open a specific tab from a link, e.g. "Track my order" after checkout
+  // goes to /shop/buyer?tab=orders.
+  useEffect(() => {
+    try {
+      const tab = new URLSearchParams(window.location.search).get('tab');
+      if (['home', 'orders', 'wishlist', 'reviews', 'profile', 'settings'].includes(tab)) {
+        setActiveTab(tab);
+      }
+    } catch (error) {
+      console.error('Could not read the requested tab:', error);
+    }
+  }, []);
+
+  // Contact and payment details from Admin -> Settings
+  useEffect(() => {
+    let cancelled = false;
+    fetchShopSettings().then((settings) => {
+      if (!cancelled) setShopSettings(settings);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     // Wait for the session to resolve before redirecting, otherwise a fresh
@@ -286,6 +315,29 @@ export default function BuyerDashboard() {
       alert('Failed to save review: ' + error.message);
     } finally {
       setSavingReview(false);
+    }
+  };
+
+  const handleCancelOrder = async (order) => {
+    if (cancellingOrderId) return;
+    const confirmed = window.confirm(
+      `Cancel order ${formatOrderNumber(order.id)}? The items go back on sale and any reward points from this order are removed.`
+    );
+    if (!confirmed) return;
+
+    setCancellingOrderId(order.id);
+    try {
+      await cancelMyOrder(order.id);
+      setOrders((prev) => prev.map((row) => (row.id === order.id ? { ...row, status: 'cancelled' } : row)));
+      // Points may have changed, so refresh the profile card too
+      const { data } = await supabase.from('profiles').select('*').eq('id', user.id).maybeSingle();
+      if (data) setProfile(data);
+      alert(`Order ${formatOrderNumber(order.id)} was cancelled.`);
+    } catch (error) {
+      console.error('Error cancelling order:', error);
+      alert(error.message || 'Could not cancel the order. Please contact the shop.');
+    } finally {
+      setCancellingOrderId(null);
     }
   };
 
@@ -536,8 +588,8 @@ export default function BuyerDashboard() {
                 {/* Big Deals Banner */}
                 <div className="bg-gradient-to-r from-blue-500 to-blue-600 rounded-2xl p-6 sm:p-8 text-white relative overflow-hidden">
                   <div className="relative z-10">
-                    <h2 className="text-2xl sm:text-3xl font-bold mb-2">Big Deals</h2>
-                    <p className="text-xl mb-4">Up to 50% OFF</p>
+                    <h2 className="text-2xl sm:text-3xl font-bold mb-2">Shop Local Daet</h2>
+                    <p className="text-lg mb-4">Handicrafts, food and pasalubong made by Daet artisans.</p>
                     <Link
                       href="/shop"
                       className="inline-block px-6 py-3 bg-white text-blue-600 font-bold rounded-lg hover:bg-gray-100 transition-colors"
@@ -686,8 +738,14 @@ export default function BuyerDashboard() {
                         <div key={order.id} className="border border-gray-200 rounded-lg p-6 hover:border-blue-300 transition-colors">
                           <div className="flex flex-col gap-2 sm:flex-row sm:justify-between sm:items-start mb-4">
                             <div>
-                              <p className="text-sm text-gray-600">Order ID: <span className="font-mono font-semibold text-blue-600">#{order.id.slice(0, 8)}</span></p>
-                              <p className="text-sm text-gray-600">Placed on {new Date(order.created_at).toLocaleDateString()}</p>
+                              <p className="text-sm text-gray-600">Order <span className="font-mono font-semibold text-blue-600">{formatOrderNumber(order.id)}</span></p>
+                              <p className="text-sm text-gray-600">
+                                Placed on{' '}
+                                {new Date(order.created_at).toLocaleString('en-PH', {
+                                  dateStyle: 'medium',
+                                  timeStyle: 'short',
+                                })}
+                              </p>
                             </div>
                             <span className={`self-start px-3 py-1 text-xs font-semibold rounded-full ${getStatusColor(order.status)}`}>
                               {order.status.charAt(0).toUpperCase() + order.status.slice(1)}
@@ -706,15 +764,45 @@ export default function BuyerDashboard() {
                             ))}
                           </div>
 
-                          <div className="border-t mt-4 pt-4 flex justify-between items-center">
+                          {order.delivery_address && (
+                            <div className="border-t mt-4 pt-4 text-sm text-gray-600">
+                              <p className="font-semibold text-gray-900 mb-1">Deliver to</p>
+                              <p className="break-words">{order.customer_name}{order.customer_phone ? ` · ${order.customer_phone}` : ''}</p>
+                              <p className="break-words whitespace-pre-line">{order.delivery_address}</p>
+                            </div>
+                          )}
+
+                          <div className="border-t mt-4 pt-4 flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-center">
                             <div>
                               <p className="text-sm text-gray-600">Total Amount</p>
                               <p className="text-2xl font-bold text-blue-600">₱{Number(order.total_amount).toFixed(2)}</p>
                             </div>
-                            <div className="text-sm text-gray-600">
-                              <p>Payment: <span className="font-semibold">{order.payment_method?.toUpperCase()}</span></p>
+                            <div className="flex flex-col gap-2 text-sm text-gray-600 sm:items-end">
+                              <p>Payment: <span className="font-semibold">{PAYMENT_LABELS[order.payment_method] || order.payment_method}</span></p>
+                              {order.status === 'pending' && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleCancelOrder(order)}
+                                  disabled={cancellingOrderId === order.id}
+                                  className="min-h-[44px] rounded-lg border-2 border-red-200 px-4 font-semibold text-red-600 hover:bg-red-50 disabled:opacity-50"
+                                >
+                                  {cancellingOrderId === order.id ? 'Cancelling...' : 'Cancel order'}
+                                </button>
+                              )}
                             </div>
                           </div>
+
+                          {order.status === 'pending' && ['gcash', 'bank'].includes(order.payment_method) && (
+                            <div className="mt-4">
+                              <PaymentInstructions
+                                method={order.payment_method}
+                                settings={shopSettings}
+                                amount={Number(order.total_amount)}
+                                orderNumbers={[formatOrderNumber(order.id)]}
+                                compact
+                              />
+                            </div>
+                          )}
                         </div>
                       ))}
                     </div>
