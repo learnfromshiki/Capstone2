@@ -32,6 +32,23 @@ export const openConversation = async (sellerId, productId = null) => {
 };
 
 /**
+ * A shop opens the thread with one of its own customers. Only works for a
+ * customer who has ordered from that shop.
+ */
+export const messageCustomer = async (buyerId, productId = null) => {
+  const { data, error } = await supabase.rpc('message_customer', {
+    p_buyer_id: buyerId,
+    p_product_id: productId,
+  });
+
+  if (error) {
+    throw new Error(isMissingChat(error) ? CHAT_NOT_READY : error.message || 'Could not open the chat.');
+  }
+
+  return data;
+};
+
+/**
  * Every thread for the signed-in person, newest first.
  * @param {'buyer'|'seller'} role
  * @param {string} [sellerId] - required for the seller side

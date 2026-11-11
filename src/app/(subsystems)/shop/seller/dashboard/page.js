@@ -11,6 +11,7 @@ import { describePasswordProblem, isPasswordValid } from '@/lib/passwordPolicy';
 import { fetchProfileRow, joinName, splitName } from '@/lib/profile';
 import { describeSelection, readOptions } from '@/lib/productOptions';
 import ChatPanel from '@/components/shop/ChatPanel';
+import { messageCustomer } from '@/lib/messages';
 import { useDialog } from '@/components/ui/Dialog';
 import Avatar from '@/components/ui/Avatar';
 import AvatarUpload from '@/components/ui/AvatarUpload';
@@ -88,6 +89,18 @@ export default function SellerDashboard() {
   const [ownerName, setOwnerName] = useState({ first_name: '', last_name: '' });
   const [savingOwnerName, setSavingOwnerName] = useState(false);
   const [avatarUrl, setAvatarUrl] = useState('');
+  const [openConversationId, setOpenConversationId] = useState(null);
+
+  /** Start (or continue) the chat with the customer behind an order. */
+  const handleMessageCustomer = async (order) => {
+    try {
+      const conversationId = await messageCustomer(order.user_id, order.my_items?.[0]?.product_id || null);
+      setOpenConversationId(conversationId);
+      setActiveTab('messages');
+    } catch (error) {
+      showAlert(error.message || 'Could not open the chat.');
+    }
+  };
   const [passwordForm, setPasswordForm] = useState({ current: '', next: '', confirm: '' });
   const [showPassword, setShowPassword] = useState(false);
   const [changingPassword, setChangingPassword] = useState(false);
@@ -226,7 +239,7 @@ export default function SellerDashboard() {
 
     const { data: orderRows, error: ordersError } = await supabase
       .from('shop_orders')
-      .select('id, customer_name, customer_email, customer_phone, delivery_address, notes, status, payment_method, shipping_fee, created_at')
+      .select('id, user_id, customer_name, customer_email, customer_phone, delivery_address, notes, status, payment_method, shipping_fee, created_at')
       .in('id', orderIds)
       .order('created_at', { ascending: false });
 
@@ -1726,6 +1739,15 @@ export default function SellerDashboard() {
                     <span className="text-sm text-gray-600">
                       Payment: {PAYMENT_LABELS[order.payment_method] || order.payment_method}
                     </span>
+                    {order.user_id && (
+                      <button
+                        type="button"
+                        onClick={() => handleMessageCustomer(order)}
+                        className="min-h-[44px] rounded-lg border border-blue-200 px-4 text-sm font-semibold text-blue-600 transition-colors hover:bg-blue-50"
+                      >
+                        💬 Message customer
+                      </button>
+                    )}
                     {updatingOrderId === order.id && (
                       <span className="text-sm text-blue-600">Updating stock and order…</span>
                     )}
@@ -1744,7 +1766,14 @@ export default function SellerDashboard() {
           </div>
         )}
 
-        {activeTab === 'messages' && <ChatPanel role="seller" sellerId={seller.id} />}
+        {activeTab === 'messages' && (
+          <ChatPanel
+            role="seller"
+            sellerId={seller.id}
+            activeConversationId={openConversationId}
+            onOpened={() => setOpenConversationId(null)}
+          />
+        )}
 
         {activeTab === 'earnings' && (
           <div>

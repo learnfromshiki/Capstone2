@@ -544,6 +544,74 @@ $$;
 revoke all on function public.get_or_create_conversation(uuid, uuid) from public, anon;
 grant execute on function public.get_or_create_conversation(uuid, uuid) to authenticated;
 
+-- A shop opens a chat with one of its own customers. The shop must actually
+-- have an order from that customer, so this cannot be used to message
+-- strangers.
+create or replace function public.message_customer(
+  p_buyer_id uuid,
+  p_product_id uuid default null
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_seller uuid := public.current_seller_id();
+  v_id uuid;
+  v_name text;
+  v_avatar text;
+begin
+  if v_seller is null then
+    raise exception 'Only a shop can message a customer.' using errcode = '42501';
+  end if;
+
+  if not exists (
+    select 1 from shop_orders o
+    where o.user_id = p_buyer_id
+      and (o.seller_id = v_seller or public.seller_owns_order(o.id))
+  ) then
+    raise exception 'You can only message customers who have ordered from your shop.'
+      using errcode = '42501';
+  end if;
+
+  select coalesce(nullif(trim(p.full_name), ''), split_part(coalesce(p.email, ''), '@', 1)),
+         p.avatar_url
+  into v_name, v_avatar
+  from profiles p
+  where p.id = p_buyer_id;
+
+  select id into v_id
+  from shop_conversations
+  where buyer_id = p_buyer_id and seller_id = v_seller;
+
+  if found then
+    update shop_conversations
+    set product_id = coalesce(p_product_id, product_id),
+        buyer_name = coalesce(v_name, buyer_name),
+        buyer_avatar_url = coalesce(v_avatar, buyer_avatar_url)
+    where id = v_id;
+    return v_id;
+  end if;
+
+  insert into shop_conversations (buyer_id, seller_id, product_id, buyer_name, buyer_avatar_url)
+  values (p_buyer_id, v_seller, p_product_id, coalesce(v_name, 'Customer'), v_avatar)
+  returning id into v_id;
+
+  return v_id;
+end;
+$$;
+
+revoke all on function public.message_customer(uuid, uuid) from public, anon;
+grant execute on function public.message_customer(uuid, uuid) to authenticated;
+
+-- A shop may also start the thread, so the insert policy allows its own side.
+drop policy if exists "conversations_insert_participant" on shop_conversations;
+create policy "conversations_insert_participant"
+  on shop_conversations for insert
+  to authenticated
+  with check (buyer_id = auth.uid() or seller_id = public.current_seller_id());
+
 -- Keep the thread list ordered by the newest message.
 create or replace function public.touch_conversation()
 returns trigger
