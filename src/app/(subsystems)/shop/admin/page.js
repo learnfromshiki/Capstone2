@@ -1,7 +1,9 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { supabaseAdmin as supabase } from '@/lib/supabaseAdminClient';
+// Shares the storefront client: sessions are per tab, so signing in as an admin
+// from the shop carries into this page instead of asking for the password again.
+import { supabase } from '@/lib/supabaseClient';
 import { uploadProductImage } from '@/lib/imageUpload';
 import { getAccountRole } from '@/lib/roles';
 import { getAllowedStatuses, STATUS_LABELS, transitionOrderStatus } from '@/lib/orders';
