@@ -9,6 +9,9 @@ import Cart from '@/components/shop/Cart';
 import ProductDetailsModal from '@/components/shop/ProductDetailsModal';
 import AuthModal from '@/components/AuthModal';
 import { useDialog } from '@/components/ui/Dialog';
+import NotificationCenter from '@/components/ui/NotificationCenter';
+import { uploadPhotos } from '@/lib/attachments';
+import { WISHLIST_EVENT, readWishlist, toggleWishlist as toggleSavedProduct } from '@/lib/wishlist';
 import ShopProfileModal from '@/components/shop/ShopProfileModal';
 import ProductOptionsModal from '@/components/shop/ProductOptionsModal';
 import { cartLineId, describeSelection, hasOptions } from '@/lib/productOptions';
@@ -25,6 +28,9 @@ export default function ShopPage() {
   const [showCart, setShowCart] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [selectedSellerId, setSelectedSellerId] = useState(null);
+  // Products this shopper has saved; the Wishlist tab of their dashboard
+  // reads the same list.
+  const [wishlist, setWishlist] = useState([]);
   // The product whose options sheet is open, and why it was opened
   const [optionsFor, setOptionsFor] = useState(null);
   const [reviewsByProduct, setReviewsByProduct] = useState({});
@@ -227,7 +233,14 @@ export default function ShopPage() {
 
       // The author columns arrive with supabase-product-options.sql; fall back
       // so an older database still shows its reviews.
-      let { data, error } = await read(`${columns}, reviewer_name, reviewer_avatar_url`);
+      let { data, error } = await read(`${columns}, reviewer_name, reviewer_avatar_url, photos`);
+
+      // Photos arrive with supabase-notifications-payments.sql and the author
+      // columns with supabase-product-options.sql; step back one at a time so
+      // an older database still shows its reviews.
+      if (error && /photos|column/i.test(error.message || '')) {
+        ({ data, error } = await read(`${columns}, reviewer_name, reviewer_avatar_url`));
+      }
 
       if (error && /reviewer_name|reviewer_avatar_url|column/i.test(error.message || '')) {
         ({ data, error } = await read(columns));
@@ -302,7 +315,7 @@ export default function ShopPage() {
     };
   }, [user, authLoading]);
 
-  const submitProductReview = async (product, { rating, comment }) => {
+  const submitProductReview = async (product, { rating, comment, photos = [] }) => {
     if (!user) {
       setShowAuthModal(true);
       throw new Error('Please sign in to review this product.');
@@ -324,6 +337,9 @@ export default function ShopPage() {
 
     // The author's name and picture are copied onto the review: profiles can
     // only be read by their owner, so other shoppers could never look them up.
+    // Photos go up first: a failed upload should not leave a half-written review.
+    const photoUrls = photos.length > 0 ? await uploadPhotos(photos, 'review') : [];
+
     const review = {
       product_id: product.id,
       user_id: user.id,
@@ -331,13 +347,20 @@ export default function ShopPage() {
       comment: text || null,
     };
 
-    let { error } = await supabase.from('shop_reviews').insert({
-      ...review,
+    const author = {
       reviewer_name: profile?.full_name || (user.email || '').split('@')[0] || 'Customer',
       reviewer_avatar_url: profile?.avatar_url || null,
-    });
+    };
 
-    // Database without the author columns yet: save the review itself.
+    let { error } = await supabase
+      .from('shop_reviews')
+      .insert({ ...review, ...author, photos: photoUrls });
+
+    // Database without the photo column, then without the author columns.
+    if (error && /photos/.test(error.message || '')) {
+      ({ error } = await supabase.from('shop_reviews').insert({ ...review, ...author }));
+    }
+
     if (error && /reviewer_name|reviewer_avatar_url/.test(error.message || '')) {
       ({ error } = await supabase.from('shop_reviews').insert(review));
     }
@@ -374,6 +397,39 @@ export default function ShopPage() {
     } catch (error) {
       showAlert(error.message || 'Could not open the chat.');
     }
+  };
+
+  // The saved list belongs to the signed-in shopper and follows them to the
+  // Wishlist tab of their dashboard, in this tab or another one.
+  useEffect(() => {
+    if (!user?.id) {
+      setWishlist([]);
+      return undefined;
+    }
+
+    const sync = () => setWishlist(readWishlist(user.id));
+    sync();
+
+    window.addEventListener(WISHLIST_EVENT, sync);
+    window.addEventListener('storage', sync);
+    return () => {
+      window.removeEventListener(WISHLIST_EVENT, sync);
+      window.removeEventListener('storage', sync);
+    };
+  }, [user?.id]);
+
+  const handleToggleWishlist = (product) => {
+    if (!user) {
+      setShowAuthModal(true);
+      return;
+    }
+
+    const { ids, saved } = toggleSavedProduct(user.id, product.id);
+    setWishlist(ids);
+    showToast(
+      saved ? `${product.name} saved to your wishlist.` : `${product.name} removed from your wishlist.`,
+      saved ? 'success' : 'info'
+    );
   };
 
   /** Shared gate: a shopper must be signed in, active, and the item in stock. */
@@ -642,6 +698,14 @@ export default function ShopPage() {
               
               {user ? (
                 <div className="flex items-center gap-2 sm:gap-3">
+                  {/* Replies from shops and order updates, for a shopper who
+                      never leaves the storefront. */}
+                  {role !== 'admin' && role !== 'seller' && (
+                    <NotificationCenter
+                      audience="customer"
+                      emptyMessage="Nothing new yet. Order updates and replies from shops appear here."
+                    />
+                  )}
                   <Link
                     href={accountHref}
                     aria-label={accountLabel}
@@ -706,8 +770,10 @@ export default function ShopPage() {
           {/* Search Bar */}
           <div className="mb-4">
             <div className="relative max-w-2xl mx-auto">
+              {/* "text", not "search": a search input draws its own clear X in
+                  Chrome, which doubled up with our styled clear button below. */}
               <input
-                type="search"
+                type="text"
                 aria-label="Search products"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
@@ -841,6 +907,8 @@ export default function ShopPage() {
                 sellerInfo={sellers[product.seller_id]}
                 onViewShop={() => setSelectedSellerId(product.seller_id)}
                 reviewSummary={reviewSummaries[product.id]}
+                onToggleWishlist={handleToggleWishlist}
+                isWishlisted={wishlist.includes(product.id)}
               />
             ))}
           </div>
@@ -875,6 +943,8 @@ export default function ShopPage() {
         onClose={() => setSelectedProduct(null)}
         onAddToCart={addToCart}
         onBuyNow={buyNow}
+        onToggleWishlist={handleToggleWishlist}
+        isWishlisted={Boolean(selectedProduct && wishlist.includes(selectedProduct.id))}
       />
 
       {/* Choose options (Buy Now / products with variants) */}

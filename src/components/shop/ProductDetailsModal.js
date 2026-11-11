@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import StarRating from './StarRating';
 import Avatar from '@/components/ui/Avatar';
 
@@ -34,6 +34,8 @@ export default function ProductDetailsModal({
   onClose,
   onAddToCart,
   onBuyNow,
+  onToggleWishlist,
+  isWishlisted = false,
 }) {
   const [quantity, setQuantity] = useState(1);
   const [draftRating, setDraftRating] = useState(5);
@@ -41,6 +43,9 @@ export default function ProductDetailsModal({
   const [savingReview, setSavingReview] = useState(false);
   const [reviewFeedback, setReviewFeedback] = useState(null);
   const [activeImage, setActiveImage] = useState(0);
+  // Photos the shopper is attaching to their own review (up to five)
+  const [reviewPhotos, setReviewPhotos] = useState([]);
+  const reviewFileRef = useRef(null);
 
   // Every product opens with a clean review draft and its first photo.
   useEffect(() => {
@@ -49,6 +54,10 @@ export default function ProductDetailsModal({
     setReviewFeedback(null);
     setQuantity(1);
     setActiveImage(0);
+    setReviewPhotos((current) => {
+      current.forEach((photo) => URL.revokeObjectURL(photo.preview));
+      return [];
+    });
   }, [product?.id]);
 
   // Escape closes the product window
@@ -85,9 +94,15 @@ export default function ProductDetailsModal({
     setReviewFeedback(null);
 
     try {
-      await onSubmitReview(product, { rating: draftRating, comment: draftComment });
+      await onSubmitReview(product, {
+        rating: draftRating,
+        comment: draftComment,
+        photos: reviewPhotos.map((photo) => photo.file),
+      });
       setDraftRating(5);
       setDraftComment('');
+      reviewPhotos.forEach((photo) => URL.revokeObjectURL(photo.preview));
+      setReviewPhotos([]);
       setReviewFeedback({ type: 'success', message: 'Thank you for your review!' });
     } catch (error) {
       setReviewFeedback({
@@ -97,6 +112,29 @@ export default function ProductDetailsModal({
     } finally {
       setSavingReview(false);
     }
+  };
+
+  const addReviewPhotos = (event) => {
+    const chosen = Array.from(event.target.files || []);
+    event.target.value = '';
+    if (chosen.length === 0) return;
+
+    const images = chosen.filter((file) => file.type.startsWith('image/'));
+    if (images.length !== chosen.length) {
+      setReviewFeedback({ type: 'error', message: 'Only photos can be added to a review.' });
+    }
+
+    setReviewPhotos((current) =>
+      [...current, ...images.map((file) => ({ file, preview: URL.createObjectURL(file) }))].slice(0, 5)
+    );
+  };
+
+  const removeReviewPhoto = (index) => {
+    setReviewPhotos((current) => {
+      const photo = current[index];
+      if (photo) URL.revokeObjectURL(photo.preview);
+      return current.filter((_, position) => position !== index);
+    });
   };
 
   const changeQuantity = (next) => {
@@ -281,6 +319,29 @@ export default function ProductDetailsModal({
                 </div>
               </div>
 
+              {onToggleWishlist && (
+                <button
+                  type="button"
+                  onClick={() => onToggleWishlist(product)}
+                  aria-pressed={isWishlisted}
+                  className={`mb-2 flex w-full items-center justify-center gap-2 rounded-lg border-2 py-3 text-sm font-bold transition-colors ${
+                    isWishlisted
+                      ? 'border-red-500 bg-red-50 text-red-600'
+                      : 'border-gray-200 text-gray-700 hover:border-red-300 hover:text-red-600'
+                  }`}
+                >
+                  <svg
+                    className="h-5 w-5"
+                    fill={isWishlisted ? 'currentColor' : 'none'}
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+                  </svg>
+                  {isWishlisted ? 'Saved to Wishlist' : 'Add to Wishlist'}
+                </button>
+              )}
+
               <div className="flex gap-2">
                 <button
                   onClick={handleAdd}
@@ -366,6 +427,22 @@ export default function ProductDetailsModal({
                     {review.comment && (
                       <p className="whitespace-pre-line text-sm leading-relaxed text-gray-700">{review.comment}</p>
                     )}
+
+                    {Array.isArray(review.photos) && review.photos.length > 0 && (
+                      <ul className="mt-2 flex flex-wrap gap-2">
+                        {review.photos.map((url) => (
+                          <li key={url}>
+                            <a href={url} target="_blank" rel="noopener noreferrer">
+                              <img
+                                src={url}
+                                alt="Customer photo"
+                                className="h-16 w-16 rounded-lg border border-gray-200 object-cover transition-transform hover:scale-105"
+                              />
+                            </a>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
                   </div>
                 </li>
               ))}
@@ -406,6 +483,54 @@ export default function ProductDetailsModal({
                 placeholder="Tell other buyers what you liked (optional)"
                 className="w-full rounded-lg border border-gray-200 p-3 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               />
+              {/* Photos of the product as it arrived */}
+              <div className="mt-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  {reviewPhotos.map((photo, index) => (
+                    <div key={photo.preview} className="relative">
+                      <img src={photo.preview} alt="" className="h-16 w-16 rounded-lg object-cover" />
+                      <button
+                        type="button"
+                        onClick={() => removeReviewPhoto(index)}
+                        aria-label={`Remove photo ${index + 1}`}
+                        className="absolute -right-1.5 -top-1.5 flex h-6 w-6 items-center justify-center rounded-full bg-gray-800 text-white shadow hover:bg-black"
+                      >
+                        <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                    </div>
+                  ))}
+
+                  {reviewPhotos.length < 5 && (
+                    <>
+                      <input
+                        ref={reviewFileRef}
+                        type="file"
+                        accept="image/*"
+                        multiple
+                        onChange={addReviewPhotos}
+                        className="hidden"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => reviewFileRef.current?.click()}
+                        className="flex h-16 w-16 flex-col items-center justify-center gap-0.5 rounded-lg border-2 border-dashed border-gray-300 text-gray-500 transition-colors hover:border-blue-500 hover:text-blue-600"
+                      >
+                        <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                        </svg>
+                        <span className="text-[10px] font-semibold">Photo</span>
+                      </button>
+                    </>
+                  )}
+                </div>
+                <p className="mt-1.5 text-xs text-gray-500">
+                  Add up to 5 photos so other shoppers can see how it arrived.
+                </p>
+              </div>
+
               <div className="flex flex-wrap items-center justify-between gap-3 mt-3">
                 <p
                   className={`text-xs ${reviewFeedback?.type === 'error' ? 'text-red-600' : 'text-gray-500'}`}

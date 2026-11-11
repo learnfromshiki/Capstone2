@@ -8,8 +8,7 @@ import Link from 'next/link';
 import { cancelMyOrder, confirmOrderReceived, formatOrderNumber, PAYMENT_LABELS } from '@/lib/orders';
 import { fetchShopSettings } from '@/lib/shopSettings';
 import PaymentInstructions from '@/components/shop/PaymentInstructions';
-import PasswordRequirements from '@/components/PasswordRequirements';
-import { describePasswordProblem, isPasswordValid } from '@/lib/passwordPolicy';
+import ChangePasswordCard from '@/components/ChangePasswordCard';
 import { joinName, splitName } from '@/lib/profile';
 import { ROLE_LABELS } from '@/lib/roles';
 import { useDialog } from '@/components/ui/Dialog';
@@ -17,6 +16,9 @@ import { cartLineId, describeSelection } from '@/lib/productOptions';
 import ChatPanel from '@/components/shop/ChatPanel';
 import Avatar from '@/components/ui/Avatar';
 import AvatarUpload from '@/components/ui/AvatarUpload';
+import NotificationCenter from '@/components/ui/NotificationCenter';
+import { uploadPhotos } from '@/lib/attachments';
+import { WISHLIST_EVENT, readWishlist, toggleWishlist as toggleSavedProduct } from '@/lib/wishlist';
 
 const ORDER_STEPS = [
   { key: 'pending', label: 'Placed' },
@@ -25,8 +27,6 @@ const ORDER_STEPS = [
   { key: 'shipped', label: 'Shipped' },
   { key: 'delivered', label: 'Delivered' },
 ];
-
-const wishlistKey = (userId) => `wishlist:${userId}`;
 
 function OrderTracking({ status }) {
   if (status === 'cancelled') {
@@ -69,7 +69,7 @@ function StarPicker({ value, onChange }) {
 }
 
 export default function BuyerDashboard() {
-  const { user, role, loading: authLoading, signOut, sendPasswordResetEmail } = useAuth();
+  const { user, role, loading: authLoading, signOut } = useAuth();
   const { showAlert, showConfirm, showToast } = useDialog();
   const router = useRouter();
 
@@ -83,13 +83,10 @@ export default function BuyerDashboard() {
   const [savingProfile, setSavingProfile] = useState(false);
   const [savingReview, setSavingReview] = useState(false);
   const [profileForm, setProfileForm] = useState({ first_name: '', last_name: '', phone: '', address: '' });
-  const [passwordForm, setPasswordForm] = useState({ current: '', next: '', confirm: '' });
   const [reviewDrafts, setReviewDrafts] = useState({});
   const [suspended, setSuspended] = useState(false);
   const [cancellingOrderId, setCancellingOrderId] = useState(null);
-  const [sendingReset, setSendingReset] = useState(false);
   const [confirmingOrderId, setConfirmingOrderId] = useState(null);
-  const [showPassword, setShowPassword] = useState(false);
   const [cart, setCart] = useState([]);
   const [shopNames, setShopNames] = useState({});
   const [orderedProducts, setOrderedProducts] = useState({});
@@ -231,12 +228,7 @@ export default function BuyerDashboard() {
       setProducts(productsRes.data || []);
       setReviews(reviewsRes.data || []);
 
-      try {
-        const stored = localStorage.getItem(wishlistKey(user.id));
-        setWishlist(stored ? JSON.parse(stored) : []);
-      } catch (error) {
-        console.error('Error reading wishlist:', error);
-      }
+      setWishlist(readWishlist(user.id));
     } catch (error) {
       console.error('Error fetching data:', error);
     } finally {
@@ -359,20 +351,25 @@ export default function BuyerDashboard() {
     await signOut({ redirectTo: '/shop' });
   };
 
+  // Hearting a product over on the storefront, or in another tab, shows up
+  // here without a refresh.
+  useEffect(() => {
+    if (!user?.id) return undefined;
+
+    const sync = () => setWishlist(readWishlist(user.id));
+
+    window.addEventListener(WISHLIST_EVENT, sync);
+    window.addEventListener('storage', sync);
+    return () => {
+      window.removeEventListener(WISHLIST_EVENT, sync);
+      window.removeEventListener('storage', sync);
+    };
+  }, [user?.id]);
+
   const toggleWishlist = (productId) => {
-    setWishlist((prev) => {
-      const next = prev.includes(productId)
-        ? prev.filter((id) => id !== productId)
-        : [...prev, productId];
-
-      try {
-        localStorage.setItem(wishlistKey(user.id), JSON.stringify(next));
-      } catch (error) {
-        console.error('Error saving wishlist:', error);
-      }
-
-      return next;
-    });
+    if (!user?.id) return;
+    const { ids } = toggleSavedProduct(user.id, productId);
+    setWishlist(ids);
   };
 
   const saveProfile = async () => {
@@ -425,66 +422,37 @@ export default function BuyerDashboard() {
     }
   };
 
-  /**
-   * For someone who cannot remember their current password: email them a reset
-   * code and link instead of leaving the Change Password form unusable.
-   */
-  const emailPasswordReset = async () => {
-    const address = profile?.email || user?.email;
-    if (!address) {
-      showAlert('No email address is saved on this account.');
-      return;
-    }
+  /** Attach photos to the review being written for one delivered item. */
+  const addReviewPhotos = (productId, fileList) => {
+    const chosen = Array.from(fileList || []).filter((file) => file.type.startsWith('image/'));
+    if (chosen.length === 0) return;
 
-    setSendingReset(true);
-    try {
-      const { error } = await sendPasswordResetEmail(address);
-      if (error) throw error;
-      showAlert({ tone: 'success', title: 'Check your email', message: `We sent a password reset code and link to ${address}. Check your inbox and spam folder.` });
-    } catch (error) {
-      console.error('Error sending the reset email:', error);
-      showAlert(error.message || 'Could not send the reset email. Please try again in a few minutes.');
-    } finally {
-      setSendingReset(false);
-    }
+    setReviewDrafts((prev) => {
+      const draft = prev[productId] || { rating: 5, comment: '', photos: [] };
+      const photos = [
+        ...(draft.photos || []),
+        ...chosen.map((file) => ({ file, preview: URL.createObjectURL(file) })),
+      ].slice(0, 5);
+
+      return { ...prev, [productId]: { ...draft, photos } };
+    });
   };
 
-  const changePassword = async () => {
-    const passwordProblem = describePasswordProblem(passwordForm.next);
-    if (passwordProblem) {
-      showAlert(passwordProblem);
-      return;
-    }
+  const removeReviewPhoto = (productId, index) => {
+    setReviewDrafts((prev) => {
+      const draft = prev[productId] || { rating: 5, comment: '', photos: [] };
+      const photo = (draft.photos || [])[index];
+      if (photo) URL.revokeObjectURL(photo.preview);
 
-    if (passwordForm.next !== passwordForm.confirm) {
-      showAlert('New passwords do not match.');
-      return;
-    }
-
-    try {
-      const { error: verifyError } = await supabase.auth.signInWithPassword({
-        email: user.email,
-        password: passwordForm.current,
-      });
-
-      if (verifyError) {
-        showAlert('Current password is incorrect.');
-        return;
-      }
-
-      const { error } = await supabase.auth.updateUser({ password: passwordForm.next });
-      if (error) throw error;
-
-      setPasswordForm({ current: '', next: '', confirm: '' });
-      showToast('Password updated!', 'success');
-    } catch (error) {
-      console.error('Error changing password:', error);
-      showAlert('Failed to change password: ' + error.message);
-    }
+      return {
+        ...prev,
+        [productId]: { ...draft, photos: (draft.photos || []).filter((_, position) => position !== index) },
+      };
+    });
   };
 
   const submitReview = async (item) => {
-    const draft = reviewDrafts[item.product_id] || { rating: 5, comment: '' };
+    const draft = reviewDrafts[item.product_id] || { rating: 5, comment: '', photos: [] };
     const rating = Number(draft.rating);
     const comment = (draft.comment || '').trim();
 
@@ -508,6 +476,10 @@ export default function BuyerDashboard() {
     setSavingReview(true);
 
     try {
+      // Photos go up first: a failed upload should not leave a half-written review.
+      const chosen = (draft.photos || []).map((photo) => photo.file);
+      const photoUrls = chosen.length > 0 ? await uploadPhotos(chosen, 'review') : [];
+
       const review = {
         product_id: item.product_id,
         user_id: user.id,
@@ -517,11 +489,19 @@ export default function BuyerDashboard() {
 
       // Copy the author's name and picture onto the review, so other shoppers
       // can see who wrote it without being able to read profiles.
-      let { error } = await supabase.from('shop_reviews').insert({
-        ...review,
+      const author = {
         reviewer_name: profile?.full_name || (user.email || '').split('@')[0] || 'Customer',
         reviewer_avatar_url: profile?.avatar_url || null,
-      });
+      };
+
+      let { error } = await supabase
+        .from('shop_reviews')
+        .insert({ ...review, ...author, photos: photoUrls });
+
+      // Database without the photo column, then without the author columns.
+      if (error && /photos/.test(error.message || '')) {
+        ({ error } = await supabase.from('shop_reviews').insert({ ...review, ...author }));
+      }
 
       if (error && /reviewer_name|reviewer_avatar_url/.test(error.message || '')) {
         ({ error } = await supabase.from('shop_reviews').insert(review));
@@ -536,7 +516,8 @@ export default function BuyerDashboard() {
         .order('created_at', { ascending: false });
 
       setReviews(data || []);
-      setReviewDrafts((prev) => ({ ...prev, [item.product_id]: { rating: 5, comment: '' } }));
+      (draft.photos || []).forEach((photo) => URL.revokeObjectURL(photo.preview));
+      setReviewDrafts((prev) => ({ ...prev, [item.product_id]: { rating: 5, comment: '', photos: [] } }));
       showToast('Thank you for your review!', 'success');
     } catch (error) {
       console.error('Error saving review:', error);
@@ -684,6 +665,18 @@ export default function BuyerDashboard() {
               </span>
             </div>
             <div className="flex items-center gap-2 sm:gap-4">
+              {/* Messages from shops and every step of an order land here */}
+              <div className="rounded-full bg-white/10 text-white [&_button]:text-white [&_button:hover]:bg-white/20 [&_button:hover]:text-white">
+                <NotificationCenter
+                  audience="customer"
+                  emptyMessage="Nothing new yet. Order updates and replies from shops appear here."
+                  onNavigate={(link) => {
+                    const tab = new URL(link, window.location.origin).searchParams.get('tab');
+                    if (link.startsWith('/shop/buyer') && tab) setActiveTab(tab);
+                    else window.location.href = link;
+                  }}
+                />
+              </div>
               <div className="hidden items-center gap-2 sm:flex">
                 <Avatar src={profile?.avatar_url} name={profile?.full_name} email={user?.email} size="sm" />
                 <div className="max-w-[12rem] text-right">
@@ -1079,6 +1072,16 @@ export default function BuyerDashboard() {
                             </div>
                             <div className="flex flex-col gap-2 text-sm text-gray-600 sm:items-end">
                               <p>Payment: <span className="font-semibold">{PAYMENT_LABELS[order.payment_method] || order.payment_method}</span></p>
+                              {order.payment_proof_url && (
+                                <a
+                                  href={order.payment_proof_url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-xs font-semibold text-green-700 hover:underline"
+                                >
+                                  Receipt attached ✓
+                                </a>
+                              )}
                               {order.status === 'pending' && (
                                 <button
                                   type="button"
@@ -1361,7 +1364,7 @@ export default function BuyerDashboard() {
                     ) : (
                       <div className="space-y-4">
                         {reviewableItems.map((item) => {
-                          const draft = reviewDrafts[item.product_id] || { rating: 5, comment: '' };
+                          const draft = reviewDrafts[item.product_id] || { rating: 5, comment: '', photos: [] };
                           const productInfo = orderedProducts[item.product_id];
                           const shopName = productInfo?.seller_id ? shopNames[productInfo.seller_id] : null;
 
@@ -1420,6 +1423,45 @@ export default function BuyerDashboard() {
                                 placeholder="How was the product?"
                                 className="w-full mt-2 px-3 py-2 border-2 border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
                               />
+                              {/* Photos of the product as it arrived */}
+                              <div className="mt-2 flex flex-wrap items-center gap-2">
+                                {(draft.photos || []).map((photo, index) => (
+                                  <div key={photo.preview} className="relative">
+                                    <img src={photo.preview} alt="" className="h-16 w-16 rounded-lg object-cover" />
+                                    <button
+                                      type="button"
+                                      onClick={() => removeReviewPhoto(item.product_id, index)}
+                                      aria-label={`Remove photo ${index + 1}`}
+                                      className="absolute -right-1.5 -top-1.5 flex h-6 w-6 items-center justify-center rounded-full bg-gray-800 text-white shadow hover:bg-black"
+                                    >
+                                      <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M6 18L18 6M6 6l12 12" />
+                                      </svg>
+                                    </button>
+                                  </div>
+                                ))}
+
+                                {(draft.photos || []).length < 5 && (
+                                  <label className="flex h-16 w-16 cursor-pointer flex-col items-center justify-center gap-0.5 rounded-lg border-2 border-dashed border-gray-300 text-gray-500 transition-colors hover:border-blue-500 hover:text-blue-600">
+                                    <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                                    </svg>
+                                    <span className="text-[10px] font-semibold">Photo</span>
+                                    <input
+                                      type="file"
+                                      accept="image/*"
+                                      multiple
+                                      onChange={(event) => {
+                                        addReviewPhotos(item.product_id, event.target.files);
+                                        event.target.value = '';
+                                      }}
+                                      className="hidden"
+                                    />
+                                  </label>
+                                )}
+                              </div>
+
                               <div className="mt-2 flex items-center justify-between gap-3">
                                 <button
                                   onClick={() => submitReview(item)}
@@ -1494,6 +1536,22 @@ export default function BuyerDashboard() {
                                 </span>
 
                                 <p className="mt-1 text-sm text-gray-700">{review.comment || 'No comment'}</p>
+
+                                {Array.isArray(review.photos) && review.photos.length > 0 && (
+                                  <ul className="mt-2 flex flex-wrap gap-2">
+                                    {review.photos.map((url) => (
+                                      <li key={url}>
+                                        <a href={url} target="_blank" rel="noopener noreferrer">
+                                          <img
+                                            src={url}
+                                            alt="Your photo"
+                                            className="h-14 w-14 rounded-lg border border-gray-200 object-cover transition-transform hover:scale-105"
+                                          />
+                                        </a>
+                                      </li>
+                                    ))}
+                                  </ul>
+                                )}
 
                                 {review.product_id && (
                                   <Link
@@ -1628,68 +1686,10 @@ export default function BuyerDashboard() {
                 </div>
                 <div className="p-6 space-y-6">
                   <div className="p-4 border border-gray-200 rounded-lg">
-                    <h3 className="font-semibold text-gray-900 mb-3">Change Password</h3>
-                    <div className="space-y-3">
-                      <input
-                        type={showPassword ? 'text' : 'password'}
-                        value={passwordForm.current}
-                        onChange={(e) => setPasswordForm({ ...passwordForm, current: e.target.value })}
-                        placeholder="Current password"
-                        autoComplete="current-password"
-                        className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500"
-                      />
-                      <div>
-                        <input
-                          type={showPassword ? 'text' : 'password'}
-                          value={passwordForm.next}
-                          onChange={(e) => setPasswordForm({ ...passwordForm, next: e.target.value })}
-                          placeholder="New password"
-                          autoComplete="new-password"
-                          className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500"
-                        />
-                        <PasswordRequirements value={passwordForm.next} />
-                      </div>
-                      <input
-                        type={showPassword ? 'text' : 'password'}
-                        value={passwordForm.confirm}
-                        onChange={(e) => setPasswordForm({ ...passwordForm, confirm: e.target.value })}
-                        placeholder="Confirm new password"
-                        autoComplete="new-password"
-                        className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500"
-                      />
-
-                      <label htmlFor="buyerShowPassword" className="flex min-h-[44px] cursor-pointer items-center">
-                        <input
-                          type="checkbox"
-                          id="buyerShowPassword"
-                          checked={showPassword}
-                          onChange={(e) => setShowPassword(e.target.checked)}
-                          className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-2 focus:ring-blue-600"
-                        />
-                        <span className="ml-2 text-sm font-medium text-gray-700">Show password</span>
-                      </label>
-                      <button
-                        disabled={!isPasswordValid(passwordForm.next)}
-                        onClick={changePassword}
-                        className="min-h-[44px] px-4 py-2 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors disabled:cursor-not-allowed disabled:opacity-50"
-                      >
-                        Update Password
-                      </button>
-
-                      <div className="border-t pt-3">
-                        <p className="text-sm text-gray-600">
-                          Forgot your current password? We can email you a reset code instead.
-                        </p>
-                        <button
-                          type="button"
-                          onClick={emailPasswordReset}
-                          disabled={sendingReset}
-                          className="mt-2 min-h-[44px] rounded-lg border-2 border-blue-200 px-4 font-semibold text-blue-600 transition-colors hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                          {sendingReset ? 'Sending...' : 'Email me a reset code'}
-                        </button>
-                      </div>
-                    </div>
+                    <ChangePasswordCard
+                      email={user?.email}
+                      description="Use your current password, or email yourself a code if you have forgotten it."
+                    />
                   </div>
 
                   <div className="p-4 border border-gray-200 rounded-lg">

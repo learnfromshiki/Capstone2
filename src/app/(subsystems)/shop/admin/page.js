@@ -16,7 +16,8 @@ const peso = (value) =>
 import Link from 'next/link';
 import { useDialog } from '@/components/ui/Dialog';
 import AvatarUpload from '@/components/ui/AvatarUpload';
-import NotificationBell from '@/components/ui/NotificationBell';
+import NotificationCenter from '@/components/ui/NotificationCenter';
+import PaymentProof from '@/components/shop/PaymentProof';
 import { describeSelection } from '@/lib/productOptions';
 import { describeArea, listShippingRates } from '@/lib/shipping';
 
@@ -1690,9 +1691,14 @@ export default function ShopAdminPage() {
             <p className="hidden text-sm text-gray-600 sm:block">Here&apos;s what&apos;s happening with your e-commerce platform today.</p>
           </div>
           <div className="flex flex-shrink-0 items-center gap-2 lg:gap-4">
-            <NotificationBell
-              emptyMessage="Nothing needs attention. The marketplace is running smoothly."
+            <NotificationCenter
+              audience="admin"
+              emptyMessage="Nothing new. The marketplace is running smoothly."
               items={adminNotifications}
+              onNavigate={(link) => {
+                const tab = new URL(link, window.location.origin).searchParams.get('tab');
+                if (tab) setActiveTab(tab);
+              }}
             />
             <div className="flex items-center gap-2">
               <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-100">
@@ -2378,6 +2384,14 @@ export default function ShopAdminPage() {
                       Payment: {PAYMENT_LABELS[order.payment_method] || order.payment_method || 'Unknown'}
                     </span>
                   </div>
+
+                  {/* What the customer sent, for a GCash or bank order */}
+                  <PaymentProof
+                    className="mt-3"
+                    url={order.payment_proof_url}
+                    reference={order.payment_reference}
+                    paidAt={order.payment_proof_at}
+                  />
                 </div>
               ))}
             </div>

@@ -72,13 +72,28 @@ export const listConversations = async (role, sellerId) => {
   return data || [];
 };
 
+const BASE_MESSAGE_COLUMNS = 'id, conversation_id, sender_id, sender_role, body, created_at, read_at';
+
+/** True when the attachment columns have not been added to the database yet. */
+const isMissingAttachment = (error) =>
+  /attachment_url|attachment_type/i.test(error?.message || '');
+
 export const listMessages = async (conversationId) => {
-  const { data, error } = await supabase
-    .from('shop_messages')
-    .select('id, conversation_id, sender_id, sender_role, body, created_at, read_at')
-    .eq('conversation_id', conversationId)
-    .order('created_at', { ascending: true })
-    .limit(500);
+  const read = (columns) =>
+    supabase
+      .from('shop_messages')
+      .select(columns)
+      .eq('conversation_id', conversationId)
+      .order('created_at', { ascending: true })
+      .limit(500);
+
+  // Photos and videos arrive with supabase-notifications-payments.sql; an
+  // older database still shows the text of every message.
+  let { data, error } = await read(`${BASE_MESSAGE_COLUMNS}, attachment_url, attachment_type`);
+
+  if (error && isMissingAttachment(error)) {
+    ({ data, error } = await read(BASE_MESSAGE_COLUMNS));
+  }
 
   if (error) {
     if (isMissingChat(error)) return [];
@@ -88,20 +103,44 @@ export const listMessages = async (conversationId) => {
   return data || [];
 };
 
-export const sendMessage = async (conversationId, senderRole, body) => {
+/**
+ * Send a message. `attachment` is the { url, type } returned by
+ * uploadAttachment(), and a message may be a photo or video on its own.
+ */
+export const sendMessage = async (conversationId, senderRole, body, attachment = null) => {
   const text = (body || '').trim();
-  if (!text) return null;
+  if (!text && !attachment?.url) return null;
   if (text.length > 2000) throw new Error('Please keep your message under 2,000 characters.');
 
   const { data: authData } = await supabase.auth.getUser();
   const senderId = authData?.user?.id;
   if (!senderId) throw new Error('Please sign in again to send a message.');
 
-  const { data, error } = await supabase
-    .from('shop_messages')
-    .insert({ conversation_id: conversationId, sender_id: senderId, sender_role: senderRole, body: text })
-    .select()
-    .maybeSingle();
+  const row = {
+    conversation_id: conversationId,
+    sender_id: senderId,
+    sender_role: senderRole,
+    body: text || null,
+  };
+
+  const send = (payload) => supabase.from('shop_messages').insert(payload).select().maybeSingle();
+
+  let { data, error } = await send(
+    attachment?.url
+      ? { ...row, attachment_url: attachment.url, attachment_type: attachment.type || 'image' }
+      : { ...row, body: text }
+  );
+
+  // Database without the attachment columns: keep the text, say why the file
+  // could not go with it rather than losing the message.
+  if (error && isMissingAttachment(error)) {
+    if (!text) {
+      throw new Error(
+        'Attachments are not set up yet. Ask the admin to run supabase-notifications-payments.sql in Supabase.'
+      );
+    }
+    ({ data, error } = await send({ ...row, body: text }));
+  }
 
   if (error) {
     throw new Error(isMissingChat(error) ? CHAT_NOT_READY : error.message || 'Could not send your message.');

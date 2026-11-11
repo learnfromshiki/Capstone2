@@ -11,6 +11,8 @@ import { describeSelection } from '@/lib/productOptions';
 import AddressFields from './AddressFields';
 import { formatAddress, parseAddress } from '@/lib/philippineAddresses';
 import { fetchShippingFee } from '@/lib/shipping';
+import ShopPaymentPanel from './ShopPaymentPanel';
+import { acceptsMethod, attachPaymentProof, fetchSellerPayments } from '@/lib/sellerPayments';
 
 const MAX_QUANTITY = 9999;
 
@@ -66,6 +68,10 @@ export default function CheckoutModal({
     landmark: '',
   });
   const [shippingFee, setShippingFee] = useState(0);
+  // The GCash / bank details of every shop in the basket, and the receipt the
+  // customer attaches for each of them: { [sellerId]: { url, reference } }
+  const [sellerPayments, setSellerPayments] = useState({});
+  const [receipts, setReceipts] = useState({});
   const topRef = useRef(null);
 
   /**
@@ -166,6 +172,24 @@ export default function CheckoutModal({
       cancelled = true;
     };
   }, []);
+
+  // ...and the details each shop in this basket saved for itself.
+  const sellerIdKey = Array.from(new Set(cart.map((item) => item.seller_id).filter(Boolean)))
+    .sort()
+    .join(',');
+
+  useEffect(() => {
+    let cancelled = false;
+    const ids = sellerIdKey ? sellerIdKey.split(',') : [];
+
+    fetchSellerPayments(ids).then((map) => {
+      if (!cancelled) setSellerPayments(map);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [sellerIdKey]);
 
   // Escape closes checkout. After an order is placed it behaves like
   // "Continue Shopping" so the cart is cleared.
@@ -470,6 +494,17 @@ export default function CheckoutModal({
       if (serverResult) {
         const orders = Array.isArray(serverResult.orders) ? serverResult.orders : [];
         await saveDetailsToProfile(sessionUser.id);
+
+        // Put each receipt on the order for the shop it was paid to. The order
+        // itself is already placed, so a failure here is worth a warning in the
+        // console, never losing the order.
+        for (const order of orders) {
+          const receipt = receipts[order.seller_id || 'platform'];
+          if (receipt?.url) {
+            await attachPaymentProof(order.id, receipt.url, receipt.reference || null);
+          }
+        }
+
         setPlacedOrders(orders.map((order) => ({ id: order.id, total: Number(order.total) || 0 })));
         setPlacedPayment(formData.paymentMethod);
         setVerifiedCart((previous) => ({
@@ -618,6 +653,64 @@ export default function CheckoutModal({
   const summaryTotal = verifiedCart?.total ?? (Number(total) || 0);
   const summaryPoints = estimateRewardPoints(summaryItems);
   const orderNumbers = placedOrders.map((order) => formatOrderNumber(order.id));
+
+  // One group per shop: what is owed to it, and how it wants to be paid. Each
+  // shop delivers separately, so the delivery fee belongs to each group.
+  const paymentGroups = Object.values(
+    summaryItems.reduce((groups, item) => {
+      const key = item.seller_id || 'platform';
+      const line = (Number(item.price) || 0) * (Number(item.quantity) || 0);
+      const details = sellerPayments[item.seller_id] || null;
+
+      if (!groups[key]) {
+        groups[key] = {
+          key,
+          sellerId: item.seller_id || null,
+          name: details?.business_name || item.sellerName || 'CONNECT-Daet',
+          payment: details,
+          amount: 0,
+        };
+      }
+
+      groups[key].amount += line;
+      return groups;
+    }, {})
+  ).map((group) => ({ ...group, amount: group.amount + shippingFee }));
+
+  /**
+   * A shop that has not saved its GCash number cannot be paid by GCash, so
+   * that choice is hidden while anything from that shop is in the basket.
+   * Cash on delivery always works.
+   */
+  const methodIsAvailable = (method) => {
+    if (method === 'cod') return true;
+    // Nothing saved anywhere yet: fall back to the platform-wide details the
+    // admin keeps in Admin -> Settings, exactly as before.
+    if (Object.keys(sellerPayments).length === 0) return true;
+    return paymentGroups.every((group) => !group.payment || acceptsMethod(group.payment, method));
+  };
+
+  const needsReceipt = formData.paymentMethod === 'gcash' || formData.paymentMethod === 'bank';
+  const shopsWithDetails = paymentGroups.filter((group) => group.payment);
+  const receiptsComplete =
+    !needsReceipt || shopsWithDetails.every((group) => Boolean(receipts[group.key]?.url));
+
+  // GCash is the default, but a basket from a shop that only takes cash has to
+  // fall back rather than leave an impossible choice selected.
+  const gcashAvailable = methodIsAvailable('gcash');
+  const bankAvailable = methodIsAvailable('bank');
+
+  useEffect(() => {
+    setFormData((previous) => {
+      if (previous.paymentMethod === 'gcash' && !gcashAvailable) {
+        return { ...previous, paymentMethod: bankAvailable ? 'bank' : 'cod' };
+      }
+      if (previous.paymentMethod === 'bank' && !bankAvailable) {
+        return { ...previous, paymentMethod: gcashAvailable ? 'gcash' : 'cod' };
+      }
+      return previous;
+    });
+  }, [gcashAvailable, bankAvailable]);
 
   const shell = (children) =>
     isPage ? (
@@ -849,19 +942,22 @@ export default function CheckoutModal({
               )}
             </div>
 
-            {/* Payment Options */}
+            {/* Payment Options. A method no shop in this basket accepts is
+                simply not offered. */}
             <div className="space-y-3 mb-6">
-              <label className="flex items-center p-4 border-2 rounded-xl cursor-pointer hover:bg-blue-50 transition-colors">
-                <input
-                  type="radio"
-                  name="paymentMethod"
-                  value="gcash"
-                  checked={formData.paymentMethod === 'gcash'}
-                  onChange={handleInputChange}
-                  className="w-5 h-5 text-blue-600"
-                />
-                <span className="ml-3 font-medium">GCash</span>
-              </label>
+              {gcashAvailable && (
+                <label className="flex items-center p-4 border-2 rounded-xl cursor-pointer hover:bg-blue-50 transition-colors">
+                  <input
+                    type="radio"
+                    name="paymentMethod"
+                    value="gcash"
+                    checked={formData.paymentMethod === 'gcash'}
+                    onChange={handleInputChange}
+                    className="w-5 h-5 text-blue-600"
+                  />
+                  <span className="ml-3 font-medium">GCash</span>
+                </label>
+              )}
 
               <label className="flex items-center p-4 border-2 rounded-xl cursor-pointer hover:bg-blue-50 transition-colors">
                 <input
@@ -875,20 +971,48 @@ export default function CheckoutModal({
                 <span className="ml-3 font-medium">Cash on Delivery</span>
               </label>
 
-              <label className="flex items-center p-4 border-2 rounded-xl cursor-pointer hover:bg-blue-50 transition-colors">
-                <input
-                  type="radio"
-                  name="paymentMethod"
-                  value="bank"
-                  checked={formData.paymentMethod === 'bank'}
-                  onChange={handleInputChange}
-                  className="w-5 h-5 text-blue-600"
-                />
-                <span className="ml-3 font-medium">Bank Transfer</span>
-              </label>
+              {bankAvailable && (
+                <label className="flex items-center p-4 border-2 rounded-xl cursor-pointer hover:bg-blue-50 transition-colors">
+                  <input
+                    type="radio"
+                    name="paymentMethod"
+                    value="bank"
+                    checked={formData.paymentMethod === 'bank'}
+                    onChange={handleInputChange}
+                    className="w-5 h-5 text-blue-600"
+                  />
+                  <span className="ml-3 font-medium">Bank Transfer</span>
+                </label>
+              )}
+
+              {!gcashAvailable && !bankAvailable && (
+                <p className="text-xs text-gray-500">
+                  The shops in your basket have not set up online payments, so this order is cash on delivery.
+                </p>
+              )}
             </div>
 
-            {(formData.paymentMethod === 'gcash' || formData.paymentMethod === 'bank') && (
+            {needsReceipt && shopsWithDetails.length > 0 && (
+              <div className="mb-6">
+                <h3 className="mb-1 font-bold text-gray-900">
+                  Pay {shopsWithDetails.length === 1 ? 'the shop' : 'each shop'} and attach your receipt
+                </h3>
+                <p className="mb-3 text-sm text-gray-600">
+                  Send the amount shown, then upload a photo of the confirmation. The shop checks it before
+                  preparing your order.
+                </p>
+                <ShopPaymentPanel
+                  method={formData.paymentMethod}
+                  groups={shopsWithDetails}
+                  receipts={receipts}
+                  onChange={(key, value) => setReceipts((current) => ({ ...current, [key]: value }))}
+                />
+              </div>
+            )}
+
+            {/* No shop details saved yet: the platform-wide account the admin
+                keeps in Admin -> Settings. */}
+            {needsReceipt && shopsWithDetails.length === 0 && (
               <div className="mb-6">
                 <PaymentInstructions method={formData.paymentMethod} settings={shopSettings} compact />
               </div>
@@ -913,7 +1037,8 @@ export default function CheckoutModal({
               </button>
               <button
                 onClick={handleSubmitOrder}
-                disabled={loading}
+                disabled={loading || !receiptsComplete}
+                title={receiptsComplete ? undefined : 'Attach your payment receipt first'}
                 className="flex-1 bg-blue-600 text-white py-4 rounded-full font-bold hover:bg-blue-700 disabled:bg-gray-400 transition-colors"
               >
                 {loading ? 'Processing...' : 'Place Order'}

@@ -6,17 +6,17 @@ import { useSellerAuth } from '@/contexts/SellerAuthContext';
 import { supabase } from '@/lib/supabaseClient';
 import { uploadProductImage } from '@/lib/imageUpload';
 import { formatOrderNumber, getAllowedStatuses, PAYMENT_LABELS, STATUS_LABELS, transitionOrderStatus } from '@/lib/orders';
-import PasswordRequirements from '@/components/PasswordRequirements';
-import { describePasswordProblem, isPasswordValid } from '@/lib/passwordPolicy';
+import ChangePasswordCard from '@/components/ChangePasswordCard';
+import SellerPaymentSettings from '@/components/shop/SellerPaymentSettings';
+import PaymentProof from '@/components/shop/PaymentProof';
 import { fetchProfileRow, joinName, splitName } from '@/lib/profile';
 import { describeSelection, readOptions } from '@/lib/productOptions';
 import ChatPanel from '@/components/shop/ChatPanel';
 import { countUnread, messageCustomer } from '@/lib/messages';
-import NotificationBell from '@/components/ui/NotificationBell';
+import NotificationCenter from '@/components/ui/NotificationCenter';
 import { useDialog } from '@/components/ui/Dialog';
 import Avatar from '@/components/ui/Avatar';
 import AvatarUpload from '@/components/ui/AvatarUpload';
-import Link from 'next/link';
 
 // Totals for this seller's items over the selected range, used by the dashboard chart
 const buildDailySales = (orders, daysCount = 7) => {
@@ -62,7 +62,7 @@ const SELLER_TABS = [
 let loggingOut = false;
 
 export default function SellerDashboard() {
-  const { user, seller, loading: authLoading, signOut, updateSellerProfile } = useSellerAuth();
+  const { user, seller, loading: authLoading, signOut, updateSellerProfile, refreshSellerProfile } = useSellerAuth();
   const { showAlert, showConfirm, showToast } = useDialog();
   const router = useRouter();
 
@@ -103,10 +103,6 @@ export default function SellerDashboard() {
       showAlert(error.message || 'Could not open the chat.');
     }
   };
-  const [passwordForm, setPasswordForm] = useState({ current: '', next: '', confirm: '' });
-  const [showPassword, setShowPassword] = useState(false);
-  const [changingPassword, setChangingPassword] = useState(false);
-  const [sendingReset, setSendingReset] = useState(false);
   const [savingCategory, setSavingCategory] = useState(false);
   const [editingProductId, setEditingProductId] = useState(null);
   const [savingProduct, setSavingProduct] = useState(false);
@@ -239,11 +235,25 @@ export default function SellerDashboard() {
       return { orders: [], products: myProducts || [] };
     }
 
-    const { data: orderRows, error: ordersError } = await supabase
-      .from('shop_orders')
-      .select('id, user_id, customer_name, customer_email, customer_phone, delivery_address, notes, status, payment_method, shipping_fee, created_at')
-      .in('id', orderIds)
-      .order('created_at', { ascending: false });
+    const ORDER_COLUMNS =
+      'id, user_id, customer_name, customer_email, customer_phone, delivery_address, notes, status, payment_method, shipping_fee, created_at';
+
+    const readOrders = (columns) =>
+      supabase
+        .from('shop_orders')
+        .select(columns)
+        .in('id', orderIds)
+        .order('created_at', { ascending: false });
+
+    // The payment receipt arrives with supabase-notifications-payments.sql;
+    // fall back so an older database still lists its orders.
+    let { data: orderRows, error: ordersError } = await readOrders(
+      `${ORDER_COLUMNS}, payment_proof_url, payment_reference, payment_proof_at`
+    );
+
+    if (ordersError && /payment_proof|payment_reference|column/i.test(ordersError.message || '')) {
+      ({ data: orderRows, error: ordersError } = await readOrders(ORDER_COLUMNS));
+    }
 
     if (ordersError) throw ordersError;
 
@@ -770,70 +780,6 @@ export default function SellerDashboard() {
     }
   };
 
-  const handleChangePassword = async () => {
-    const passwordProblem = describePasswordProblem(passwordForm.next);
-    if (passwordProblem) {
-      setSettingsFeedback({ type: 'error', text: passwordProblem });
-      return;
-    }
-
-    if (passwordForm.next !== passwordForm.confirm) {
-      setSettingsFeedback({ type: 'error', text: 'The two new passwords do not match.' });
-      return;
-    }
-
-    setChangingPassword(true);
-    setSettingsFeedback({ type: '', text: '' });
-
-    try {
-      // Check the current password before changing it, so a logged-in tab left
-      // open by someone else cannot take over the shop.
-      const { error: verifyError } = await supabase.auth.signInWithPassword({
-        email: user.email,
-        password: passwordForm.current,
-      });
-
-      if (verifyError) {
-        setSettingsFeedback({ type: 'error', text: 'Your current password is incorrect.' });
-        return;
-      }
-
-      const { error } = await supabase.auth.updateUser({ password: passwordForm.next });
-      if (error) throw error;
-
-      setPasswordForm({ current: '', next: '', confirm: '' });
-      setSettingsFeedback({ type: 'success', text: 'Password updated.' });
-      setTimeout(() => setSettingsFeedback({ type: '', text: '' }), 4000);
-    } catch (error) {
-      console.error('Error changing password:', error);
-      setSettingsFeedback({ type: 'error', text: 'Could not change the password: ' + error.message });
-    } finally {
-      setChangingPassword(false);
-    }
-  };
-
-  const handleEmailPasswordReset = async () => {
-    setSendingReset(true);
-    setSettingsFeedback({ type: '', text: '' });
-
-    try {
-      const { error } = await supabase.auth.resetPasswordForEmail(user.email, {
-        redirectTo: `${window.location.origin}/reset-password`,
-      });
-      if (error) throw error;
-
-      setSettingsFeedback({
-        type: 'success',
-        text: `We sent a password reset code and link to ${user.email}.`,
-      });
-    } catch (error) {
-      console.error('Error sending the reset email:', error);
-      setSettingsFeedback({ type: 'error', text: error.message || 'Could not send the reset email.' });
-    } finally {
-      setSendingReset(false);
-    }
-  };
-
   // The bell counts unread messages alongside the stock and order warnings.
   useEffect(() => {
     if (!seller?.id) return undefined;
@@ -1264,9 +1210,14 @@ export default function SellerDashboard() {
             </div>
           </div>
           <div className="flex items-center justify-between gap-4 sm:justify-end">
-            <NotificationBell
-              emptyMessage="Nothing needs your attention. Your shop is all caught up."
+            <NotificationCenter
+              audience="seller"
+              emptyMessage="Nothing new. Your shop is all caught up."
               items={sellerNotifications}
+              onNavigate={(link) => {
+                const tab = new URL(link, window.location.origin).searchParams.get('tab');
+                if (tab) setActiveTab(tab);
+              }}
             />
             <div className="flex items-center gap-2">
               <Avatar src={avatarUrl} name={joinName(ownerName.first_name, ownerName.last_name)} email={user?.email} size="md" />
@@ -1830,6 +1781,20 @@ export default function SellerDashboard() {
                       </span>
                     )}
                   </div>
+
+                  {/* What the customer sent, for a GCash or bank order */}
+                  <div className="mt-3">
+                    <PaymentProof
+                      url={order.payment_proof_url}
+                      reference={order.payment_reference}
+                      paidAt={order.payment_proof_at}
+                    />
+                    {!order.payment_proof_url && order.payment_method !== 'cod' && (
+                      <p className="text-xs text-yellow-700">
+                        No payment receipt was attached to this order yet.
+                      </p>
+                    )}
+                  </div>
                 </div>
                 );
               })}
@@ -1980,6 +1945,14 @@ export default function SellerDashboard() {
                 )}
               </div>
             </div>
+
+            {/* How customers pay this shop */}
+            <div className="mt-6">
+              <SellerPaymentSettings
+                seller={seller}
+                onSaved={() => refreshSellerProfile()}
+              />
+            </div>
           </div>
         )}
 
@@ -2129,70 +2102,10 @@ export default function SellerDashboard() {
                 </div>
 
                 <div className="pt-6 border-t">
-                  <h4 className="font-semibold text-gray-900 mb-1">Change Password</h4>
-                  <p className="text-sm text-gray-600 mb-4">
-                    Keep your shop safe. You will need your current password.
-                  </p>
-
-                  <div className="max-w-md space-y-3">
-                    <input
-                      type={showPassword ? 'text' : 'password'}
-                      value={passwordForm.current}
-                      onChange={(e) => setPasswordForm({ ...passwordForm, current: e.target.value })}
-                      placeholder="Current password"
-                      autoComplete="current-password"
-                      className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500"
-                    />
-
-                    <div>
-                      <input
-                        type={showPassword ? 'text' : 'password'}
-                        value={passwordForm.next}
-                        onChange={(e) => setPasswordForm({ ...passwordForm, next: e.target.value })}
-                        placeholder="New password"
-                        autoComplete="new-password"
-                        className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500"
-                      />
-                      <PasswordRequirements value={passwordForm.next} />
-                    </div>
-
-                    <input
-                      type={showPassword ? 'text' : 'password'}
-                      value={passwordForm.confirm}
-                      onChange={(e) => setPasswordForm({ ...passwordForm, confirm: e.target.value })}
-                      placeholder="Confirm new password"
-                      autoComplete="new-password"
-                      className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500"
-                    />
-
-                    <label htmlFor="sellerShowPassword" className="flex min-h-[44px] cursor-pointer items-center">
-                      <input
-                        type="checkbox"
-                        id="sellerShowPassword"
-                        checked={showPassword}
-                        onChange={(e) => setShowPassword(e.target.checked)}
-                        className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-2 focus:ring-blue-600"
-                      />
-                      <span className="ml-2 text-sm font-medium text-gray-700">Show password</span>
-                    </label>
-
-                    <div className="flex flex-wrap gap-3">
-                      <button
-                        onClick={handleChangePassword}
-                        disabled={changingPassword || !isPasswordValid(passwordForm.next)}
-                        className="min-h-[44px] rounded-lg bg-blue-600 px-6 font-semibold text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
-                      >
-                        {changingPassword ? 'Updating...' : 'Update Password'}
-                      </button>
-                      <button
-                        onClick={handleEmailPasswordReset}
-                        disabled={sendingReset}
-                        className="min-h-[44px] rounded-lg border-2 border-blue-200 px-5 font-semibold text-blue-600 transition-colors hover:bg-blue-50 disabled:opacity-50"
-                      >
-                        {sendingReset ? 'Sending...' : 'Forgot password? Email me a code'}
-                      </button>
-                    </div>
-                  </div>
+                  <ChangePasswordCard
+                    email={user?.email}
+                    description="Keep your shop safe. Use your current password, or email yourself a code if you have forgotten it."
+                  />
                 </div>
 
                 <div className="flex flex-wrap items-center gap-3 bg-gray-50 p-4 rounded-lg">
