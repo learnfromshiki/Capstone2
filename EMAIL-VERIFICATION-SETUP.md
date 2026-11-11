@@ -58,7 +58,10 @@ template uses `{{ .ConfirmationURL }}`, which sends a link instead.
 > and registration then shows **"Error sending confirmation email"**.
 
 5. Go to **Authentication → Sign In / Providers → Email** and make sure
-   **Confirm email** is **ON**. If it is off, Supabase creates accounts without
+   **Confirm email** is **ON**. The same panel has **Email OTP Length** — the
+   number of digits in the code, anywhere from 6 to 10. The registration screen
+   accepts any length in that range, so you can leave it alone; set it to 6 if
+   you want shorter codes to type. If it is off, Supabase creates accounts without
    verifying anything, and the site will simply sign people straight in.
 
 ---
@@ -84,6 +87,13 @@ arrives, is almost always one of these two settings.
 1. **Authentication → URL Configuration**.
 2. **Site URL**: your live address, e.g. `https://capstone2-tawny-iota.vercel.app`
    (no trailing slash).
+
+   > Check this one carefully. Vercel gives every deployment its own preview
+   > address (something like `capstone2-5b2emwhzt-learnfromshiki.vercel.app`).
+   > If one of those ended up in Site URL, every confirmation and reset link
+   > sends people to that frozen old build instead of your live site. Open a
+   > confirmation email and look at the `redirect_to=` part of the link to see
+   > which address Supabase is actually using.
 3. **Redirect URLs**: add both lines, one per row:
 
 ```
@@ -208,6 +218,8 @@ password.
 | Reset email arrives but the link says invalid/expired | The address is not in **Redirect URLs** (Step 2b a), or the link was already used. Use the 6-digit code instead. |
 | Reset email never arrives | Free projects are limited to a few emails per hour, and password resets share that limit with sign-ups. Wait, or do Step 3 (Brevo). |
 | The reset email has no code in it | The Reset Password template still has no `{{ .Token }}`. Redo Step 2b b. |
+| The code in the email is longer than 6 digits | Normal: **Email OTP Length** in Supabase can be 6 to 10. The site accepts any of them. |
+| The code appears twice, or a raw link is printed under it | The template has `{{ .Token }}` or `{{ .ConfirmationURL }}` left over somewhere below the main text. Harmless, but paste the template from Step 1 again to tidy it. |
 
 ---
 

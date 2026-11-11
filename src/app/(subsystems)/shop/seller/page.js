@@ -10,7 +10,10 @@ import PasswordRequirements from '@/components/PasswordRequirements';
 import { ensureSellerProfile } from '@/lib/sellerProfile';
 import { ensureProfileRow } from '@/lib/profile';
 
-const CODE_LENGTH = 6;
+// Supabase decides how long the emailed code is (6 to 10 digits), so accept
+// the whole range rather than assuming one length.
+const CODE_MIN_LENGTH = 6;
+const CODE_MAX_LENGTH = 10;
 const RESEND_SECONDS = 60;
 
 export default function SellerLoginPage() {
@@ -89,8 +92,8 @@ export default function SellerLoginPage() {
 
     try {
       if (mode === 'verify') {
-        if (code.replace(/\D/g, '').length !== CODE_LENGTH) {
-          setError(`Please enter the ${CODE_LENGTH}-digit code from your email.`);
+        if (code.replace(/\D/g, '').length < CODE_MIN_LENGTH) {
+          setError('Please enter the full code from your email.');
           return;
         }
 
@@ -170,7 +173,7 @@ export default function SellerLoginPage() {
         setCode('');
         setResendIn(RESEND_SECONDS);
         setMode('verify');
-        setSuccess(`We sent a ${CODE_LENGTH}-digit verification code to ${formData.email.trim()}.`);
+        setSuccess(`We sent a verification code to ${formData.email.trim()}.`);
       }
     } catch (err) {
       const errorMsg = err.message || '';
@@ -314,7 +317,7 @@ export default function SellerLoginPage() {
             {mode === 'verify' && (
               <div>
                 <label htmlFor="sellerCode" className="block text-sm font-semibold text-gray-700 mb-2">
-                  6-digit code *
+                  Verification code *
                 </label>
                 <input
                   id="sellerCode"
@@ -322,11 +325,11 @@ export default function SellerLoginPage() {
                   inputMode="numeric"
                   autoComplete="one-time-code"
                   pattern="[0-9]*"
-                  maxLength={CODE_LENGTH}
+                  maxLength={CODE_MAX_LENGTH}
                   value={code}
-                  onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, CODE_LENGTH))}
-                  className="w-full rounded-xl border-2 border-gray-200 px-4 py-4 text-center text-2xl font-bold tracking-[0.5em] focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
-                  placeholder="000000"
+                  onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, CODE_MAX_LENGTH))}
+                  className="w-full rounded-xl border-2 border-gray-200 px-4 py-4 text-center text-2xl font-bold tracking-[0.3em] focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+                  placeholder="Enter the code"
                   required
                 />
                 <p className="mt-2 text-sm text-gray-500">

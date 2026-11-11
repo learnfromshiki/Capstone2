@@ -9,7 +9,11 @@ import { ensureProfileRow } from '@/lib/profile';
 import { describePasswordProblem, isPasswordValid } from '@/lib/passwordPolicy';
 import PasswordRequirements from '@/components/PasswordRequirements';
 
-const CODE_LENGTH = 6;
+// Supabase decides how long the emailed code is (Authentication -> Sign In ->
+// Email -> Email OTP Length, 6 to 10 digits). Accept the whole range so the
+// form keeps working whatever the project is set to.
+const CODE_MIN_LENGTH = 6;
+const CODE_MAX_LENGTH = 10;
 const RESEND_SECONDS = 60;
 
 const inputClass =
@@ -145,14 +149,14 @@ export default function AuthModal({ isOpen, onClose, mode: initialMode = 'login'
         setResendIn(RESEND_SECONDS);
         switchMode('reset');
         setNotice(
-          `If an account exists for ${email.trim()}, we sent a ${CODE_LENGTH}-digit code. Enter it below with your new password.`
+          `If an account exists for ${email.trim()}, we sent a reset code. Enter it below with your new password.`
         );
         return;
       }
 
       if (mode === 'reset') {
-        if (code.replace(/\D/g, '').length !== CODE_LENGTH) {
-          setError(`Please enter the ${CODE_LENGTH}-digit code from your email.`);
+        if (code.replace(/\D/g, '').length < CODE_MIN_LENGTH) {
+          setError('Please enter the full code from your email.');
           return;
         }
 
@@ -179,8 +183,8 @@ export default function AuthModal({ isOpen, onClose, mode: initialMode = 'login'
       }
 
       if (mode === 'verify') {
-        if (code.replace(/\D/g, '').length !== CODE_LENGTH) {
-          setError(`Please enter the ${CODE_LENGTH}-digit code from your email.`);
+        if (code.replace(/\D/g, '').length < CODE_MIN_LENGTH) {
+          setError('Please enter the full code from your email.');
           return;
         }
 
@@ -241,7 +245,7 @@ export default function AuthModal({ isOpen, onClose, mode: initialMode = 'login'
       setCode('');
       setResendIn(RESEND_SECONDS);
       switchMode('verify');
-      setNotice(`We sent a ${CODE_LENGTH}-digit verification code to ${email.trim()}.`);
+      setNotice(`We sent a verification code to ${email.trim()}.`);
     } catch (err) {
       const errorMsg = err.message || '';
       const lowerError = errorMsg.toLowerCase();
@@ -533,7 +537,7 @@ export default function AuthModal({ isOpen, onClose, mode: initialMode = 'login'
           {(mode === 'verify' || mode === 'reset') && (
             <div>
               <label htmlFor="verifyCode" className="block text-xs font-semibold text-gray-700 mb-1.5">
-                {mode === 'reset' ? '6-digit reset code' : '6-digit code'}
+                {mode === 'reset' ? 'Reset code' : 'Verification code'}
               </label>
               <input
                 id="verifyCode"
@@ -542,11 +546,11 @@ export default function AuthModal({ isOpen, onClose, mode: initialMode = 'login'
                 inputMode="numeric"
                 autoComplete="one-time-code"
                 pattern="[0-9]*"
-                maxLength={CODE_LENGTH}
+                maxLength={CODE_MAX_LENGTH}
                 value={code}
-                onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, CODE_LENGTH))}
-                className="w-full min-h-[52px] rounded-2xl border-2 border-gray-200 bg-gray-50 px-4 text-center text-2xl font-bold tracking-[0.5em] text-gray-900 focus:border-transparent focus:ring-2 focus:ring-blue-600"
-                placeholder="000000"
+                onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, CODE_MAX_LENGTH))}
+                className="w-full min-h-[52px] rounded-2xl border-2 border-gray-200 bg-gray-50 px-4 text-center text-2xl font-bold tracking-[0.3em] text-gray-900 focus:border-transparent focus:ring-2 focus:ring-blue-600"
+                placeholder="Enter the code"
                 required
               />
               <p className="mt-2 text-xs text-gray-500">
