@@ -43,7 +43,10 @@ export const AuthProvider = ({ children }) => {
         const sessionProfile = await fetchProfile(sessionUser.id);
         if (active) setProfile(sessionProfile);
       }
-
+    }).catch((error) => {
+      console.error('Could not read the saved session:', error?.message || error);
+    }).finally(() => {
+      // Always finish loading, or the shop would wait for the session forever
       if (active) setLoading(false);
     });
 

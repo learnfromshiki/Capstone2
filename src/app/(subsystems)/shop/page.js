@@ -657,6 +657,7 @@ export default function ShopPage() {
         onUpdateQuantity={updateQuantity}
         onRemoveItem={removeFromCart}
         onClearCart={clearCart}
+        onOrderPlaced={fetchProducts}
         onRequireAuth={() => {
           setShowCart(false);
           setShowAuthModal(true);

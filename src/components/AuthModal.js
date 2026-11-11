@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabaseClient';
 import { getAccountRole } from '@/lib/roles';
@@ -21,6 +21,16 @@ export default function AuthModal({ isOpen, onClose, mode: initialMode = 'login'
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const { signIn, signUp } = useAuth();
+
+  // Escape closes the sign-in window
+  useEffect(() => {
+    if (!isOpen) return undefined;
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
 
   if (!isOpen) return null;
 
@@ -344,7 +354,7 @@ export default function AuthModal({ isOpen, onClose, mode: initialMode = 'login'
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className="w-full min-h-[44px] px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-full focus:ring-2 focus:ring-gray-900 focus:border-transparent transition-all text-sm text-gray-900 placeholder-gray-400"
-                placeholder="••••••••"
+                placeholder="Enter your password"
                 required
                 minLength={6}
               />
@@ -448,7 +458,7 @@ export default function AuthModal({ isOpen, onClose, mode: initialMode = 'login'
               onClick={onClose}
               className="min-h-[44px] px-3 text-xs text-gray-500 hover:text-gray-700"
             >
-              Continue as guest
+              Keep browsing (sign in later to shop)
             </button>
           </div>
         </form>

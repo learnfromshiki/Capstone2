@@ -15,7 +15,7 @@ export default function Home() {
             <div className="flex items-center gap-4">
               <Link 
                 href="/shop"
-                className="text-gray-700 hover:text-blue-600 font-medium transition-colors"
+                className="inline-flex min-h-[44px] items-center text-gray-700 hover:text-blue-600 font-medium transition-colors"
               >
                 Shop
               </Link>
@@ -224,7 +224,7 @@ export default function Home() {
             <div>
               <h3 className="text-white font-bold text-lg mb-4">Quick Links</h3>
               <div className="space-y-2">
-                <Link href="/shop" className="block hover:text-white transition-colors">Shop</Link>
+                <Link href="/shop" className="flex min-h-[44px] items-center hover:text-white transition-colors">Shop</Link>
               </div>
             </div>
             <div>

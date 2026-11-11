@@ -3,8 +3,18 @@
 import { useEffect, useRef, useState } from 'react';
 import CheckoutModal from './CheckoutModal';
 
-export default function Cart({ cart, isOpen, onClose, onUpdateQuantity, onRemoveItem, total, onClearCart, checkoutRequest = 0, onRequireAuth }) {
+export default function Cart({ cart, isOpen, onClose, onUpdateQuantity, onRemoveItem, total, onClearCart, onOrderPlaced, checkoutRequest = 0, onRequireAuth }) {
   const [showCheckout, setShowCheckout] = useState(false);
+
+  // Escape closes the cart (the checkout window handles its own Escape)
+  useEffect(() => {
+    if (!isOpen || showCheckout) return undefined;
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, showCheckout, onClose]);
 
   // "Buy Now" on a product card asks the open cart to jump straight to checkout
   const handledCheckoutRequest = useRef(0);
@@ -24,6 +34,8 @@ export default function Cart({ cart, isOpen, onClose, onUpdateQuantity, onRemove
   const handleCheckoutSuccess = () => {
     setShowCheckout(false);
     if (onClearCart) onClearCart();
+    // Let the shop reload product stock so the page shows the new quantities
+    if (onOrderPlaced) onOrderPlaced();
     onClose();
   };
 

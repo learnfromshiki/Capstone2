@@ -43,7 +43,18 @@ export default function ProductDetailsModal({
     setDraftRating(5);
     setDraftComment('');
     setReviewFeedback(null);
+    setQuantity(1);
   }, [product?.id]);
+
+  // Escape closes the product window
+  useEffect(() => {
+    if (!product) return undefined;
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [product, onClose]);
 
   if (!product) return null;
 

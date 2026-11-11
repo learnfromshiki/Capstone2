@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import { addPoints } from '@/lib/rewards';
 import { useAuth } from '@/contexts/AuthContext';
@@ -30,7 +30,7 @@ const restoreReservedStock = async ({ productId, quantity }) => {
 };
 
 export default function CheckoutModal({ cart, total, onClose, onSuccess, onRequireAuth }) {
-  const { user, isSuspended } = useAuth();
+  const { user, profile, isSuspended } = useAuth();
   const [step, setStep] = useState(1); // 1: Contact Info, 2: Payment, 3: Success
   const [loading, setLoading] = useState(false);
   const [verifying, setVerifying] = useState(false);
@@ -45,6 +45,27 @@ export default function CheckoutModal({ cart, total, onClose, onSuccess, onRequi
     paymentMethod: 'gcash',
     notes: '',
   });
+
+  // Pre-fill the customer's own name and email so they only type phone and address
+  useEffect(() => {
+    setFormData((prev) => ({
+      ...prev,
+      fullName: prev.fullName || profile?.full_name || '',
+      email: prev.email || user?.email || '',
+    }));
+  }, [user, profile]);
+
+  // Escape closes checkout. After an order is placed it behaves like
+  // "Continue Shopping" so the cart is cleared.
+  useEffect(() => {
+    const handleKeyDown = (event) => {
+      if (event.key !== 'Escape' || loading) return;
+      if (step === 3 && onSuccess) onSuccess();
+      onClose();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [step, loading, onClose, onSuccess]);
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
