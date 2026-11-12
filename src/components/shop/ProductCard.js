@@ -23,10 +23,10 @@ export default function ProductCard({
   };
 
   return (
-    <div className="group bg-white rounded-xl border border-gray-200 overflow-hidden hover:shadow-2xl hover:border-blue-300 transition-all duration-300 transform hover:-translate-y-1">
+    <div className="group flex h-full flex-col overflow-hidden rounded-xl border border-gray-200 bg-white transition-all duration-300 hover:-translate-y-1 hover:border-blue-300 hover:shadow-2xl">
       {/* Product Image */}
       <div
-        className="relative aspect-[4/3] max-h-44 bg-gradient-to-br from-gray-100 to-gray-200 overflow-hidden cursor-pointer"
+        className="relative aspect-[4/3] max-h-44 flex-shrink-0 cursor-pointer overflow-hidden bg-gradient-to-br from-gray-100 to-gray-200"
         onClick={() => onViewDetails && onViewDetails(product)}
         role="button"
         tabIndex={0}
@@ -79,7 +79,7 @@ export default function ProductCard({
       </div>
 
       {/* Product Info */}
-      <div className="p-4">
+      <div className="flex flex-1 flex-col p-4">
         <button
           type="button"
           onClick={() => onViewDetails && onViewDetails(product)}
@@ -143,11 +143,15 @@ export default function ProductCard({
           </div>
         )}
 
-        <p className="mb-3 line-clamp-2 text-sm text-gray-600">
+        <p className="line-clamp-2 text-sm text-gray-600">
           {product.description || 'Authentic Daet product handcrafted with care'}
         </p>
 
-        {/* Price and Stock Row */}
+        {/* Price, stock and the buttons: one block pinned to the bottom of the
+            card by mt-auto. Without it the buttons floated at whatever height
+            the text above them happened to end, and no two cards in a row
+            lined up. */}
+        <div className="mt-auto pt-3">
         <div className="mb-3 flex items-end justify-between border-b border-gray-100 pb-3">
           <div>
             <p className="text-xs text-gray-500 mb-1">Price</p>
@@ -188,14 +192,15 @@ export default function ProductCard({
         ) : (
           <button
             disabled
-            className="w-full py-3.5 rounded-lg font-bold bg-gray-200 text-gray-400 cursor-not-allowed flex items-center justify-center gap-2"
+            className="flex min-h-[44px] w-full cursor-not-allowed items-center justify-center gap-2 rounded-lg bg-gray-200 text-sm font-bold text-gray-400"
           >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="h-4 w-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
             Out of Stock
           </button>
         )}
+        </div>
       </div>
     </div>
   );
