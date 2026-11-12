@@ -18,6 +18,17 @@ import { useDialog } from '@/components/ui/Dialog';
 import Avatar from '@/components/ui/Avatar';
 import AvatarUpload from '@/components/ui/AvatarUpload';
 
+// Orders grouped the way a shop works through them: what has just come in,
+// what is being packed, what is already on the way, and what is finished.
+const ORDER_STAGES = [
+  { key: 'all', label: 'All orders', statuses: null },
+  { key: 'new', label: 'New', statuses: ['pending'] },
+  { key: 'preparing', label: 'Preparing', statuses: ['confirmed', 'processing'] },
+  { key: 'shipped', label: 'Being shipped', statuses: ['shipped'] },
+  { key: 'delivered', label: 'Delivered', statuses: ['delivered'] },
+  { key: 'cancelled', label: 'Cancelled', statuses: ['cancelled'] },
+];
+
 // Totals for this seller's items over the selected range, used by the dashboard chart
 const buildDailySales = (orders, daysCount = 7) => {
   const days = [];
@@ -107,6 +118,8 @@ export default function SellerDashboard() {
   const [editingProductId, setEditingProductId] = useState(null);
   const [savingProduct, setSavingProduct] = useState(false);
   const [activeTab, setActiveTab] = useState('dashboard');
+  // Which stage of the Orders tab is showing
+  const [orderStage, setOrderStage] = useState('all');
   const [uploadingImage, setUploadingImage] = useState(false);
   const [imagePreview, setImagePreview] = useState('');
   const [uploadingLogo, setUploadingLogo] = useState(false);
@@ -147,7 +160,11 @@ export default function SellerDashboard() {
         // shop rather than on the seller login form.
         if (!loggingOut) router.push('/shop');
       } else if (!seller.is_approved) {
+        // There is no dashboard until an admin approves the shop, so this
+        // route does not render one: the seller portal shows where the
+        // application stands instead.
         setLoading(false);
+        if (!loggingOut) router.push('/shop/seller');
       } else {
         fetchCategories();
         fetchData();
@@ -924,13 +941,26 @@ export default function SellerDashboard() {
   ].filter(Boolean);
 
   const orderSearchTerm = searchTerm.replace(/^#/, '');
-  const filteredOrders = orderSearchTerm
+  const searchedOrders = orderSearchTerm
     ? orders.filter((order) =>
         [order.customer_name, order.customer_email, order.customer_phone, order.status, order.id]
           .filter(Boolean)
           .some((value) => String(value).toLowerCase().includes(orderSearchTerm))
       )
     : orders;
+
+  // How many orders sit in each stage, for the chips above the list
+  const stageCounts = ORDER_STAGES.reduce((counts, stage) => {
+    counts[stage.key] = stage.statuses
+      ? searchedOrders.filter((order) => stage.statuses.includes(order.status)).length
+      : searchedOrders.length;
+    return counts;
+  }, {});
+
+  const activeStage = ORDER_STAGES.find((stage) => stage.key === orderStage) || ORDER_STAGES[0];
+  const filteredOrders = activeStage.statuses
+    ? searchedOrders.filter((order) => activeStage.statuses.includes(order.status))
+    : searchedOrders;
   const dailySales = buildDailySales(
     orders.filter((order) => order.status !== 'cancelled'),
     Number(salesRange)
@@ -1684,10 +1714,40 @@ export default function SellerDashboard() {
                 </button>
               )}
             </div>
+            {/* Stage chips: new, preparing, being shipped, delivered */}
+            <div className="mb-6 flex gap-2 overflow-x-auto pb-1">
+              {ORDER_STAGES.map((stage) => (
+                <button
+                  key={stage.key}
+                  type="button"
+                  onClick={() => setOrderStage(stage.key)}
+                  aria-pressed={orderStage === stage.key}
+                  className={`flex min-h-[44px] flex-shrink-0 items-center gap-2 rounded-lg px-4 text-sm font-semibold transition-colors ${
+                    orderStage === stage.key
+                      ? 'bg-blue-600 text-white shadow-sm'
+                      : 'bg-white text-gray-700 border border-gray-200 hover:bg-gray-50'
+                  }`}
+                >
+                  {stage.label}
+                  <span
+                    className={`rounded-full px-2 py-0.5 text-xs font-bold ${
+                      orderStage === stage.key ? 'bg-white/20 text-white' : 'bg-gray-100 text-gray-600'
+                    }`}
+                  >
+                    {stageCounts[stage.key] || 0}
+                  </span>
+                </button>
+              ))}
+            </div>
+
             <div className="space-y-4">
               {filteredOrders.length === 0 && (
                 <div className="rounded-xl border border-gray-100 bg-white p-10 text-center text-gray-500">
-                  {searchTerm ? 'No orders match your search.' : 'No orders yet.'}
+                  {searchTerm
+                    ? 'No orders match your search.'
+                    : orderStage === 'all'
+                    ? 'No orders yet.'
+                    : `Nothing in "${activeStage.label}" right now.`}
                 </div>
               )}
               {filteredOrders.map((order) => {

@@ -18,7 +18,15 @@ import Avatar from '@/components/ui/Avatar';
 import AvatarUpload from '@/components/ui/AvatarUpload';
 import NotificationCenter from '@/components/ui/NotificationCenter';
 import { uploadPhotos } from '@/lib/attachments';
-import { WISHLIST_EVENT, readWishlist, toggleWishlist as toggleSavedProduct } from '@/lib/wishlist';
+import { storeSelection } from '@/lib/checkoutSelection';
+
+// What each row of the points history was earned for
+const REWARD_SOURCES = {
+  shop_purchase: 'Purchase from a shop',
+  shop_order: 'Purchase from a shop',
+  event_attendance: 'Event attendance',
+  signup_bonus: 'Welcome bonus',
+};
 
 const ORDER_STEPS = [
   { key: 'pending', label: 'Placed' },
@@ -77,13 +85,16 @@ export default function BuyerDashboard() {
   const [profile, setProfile] = useState(null);
   const [products, setProducts] = useState([]);
   const [reviews, setReviews] = useState([]);
-  const [wishlist, setWishlist] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState('home');
+  const [activeTab, setActiveTab] = useState('orders');
   const [savingProfile, setSavingProfile] = useState(false);
   const [savingReview, setSavingReview] = useState(false);
-  const [profileForm, setProfileForm] = useState({ first_name: '', last_name: '', phone: '', address: '' });
+  const [profileForm, setProfileForm] = useState({ first_name: '', last_name: '', phone: '', address: '', gender: '' });
   const [reviewDrafts, setReviewDrafts] = useState({});
+  // Every time this shopper earned points, for the Rewards tab
+  const [pointsHistory, setPointsHistory] = useState([]);
+  // Which cart lines the customer wants to pay for now
+  const [selectedLines, setSelectedLines] = useState([]);
   const [suspended, setSuspended] = useState(false);
   const [cancellingOrderId, setCancellingOrderId] = useState(null);
   const [confirmingOrderId, setConfirmingOrderId] = useState(null);
@@ -118,7 +129,7 @@ export default function BuyerDashboard() {
   useEffect(() => {
     try {
       const tab = new URLSearchParams(window.location.search).get('tab');
-      if (['home', 'orders', 'cart', 'messages', 'wishlist', 'reviews', 'profile', 'settings'].includes(tab)) {
+      if (['orders', 'cart', 'messages', 'reviews', 'rewards', 'settings'].includes(tab)) {
         setActiveTab(tab);
       }
     } catch (error) {
@@ -154,7 +165,7 @@ export default function BuyerDashboard() {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [profileRes, ordersRes, productsRes, reviewsRes] = await Promise.all([
+      const [profileRes, ordersRes, productsRes, reviewsRes, rewardsRes] = await Promise.all([
         supabase.from('profiles').select('*').eq('id', user.id).maybeSingle(),
         supabase
           .from('shop_orders')
@@ -180,6 +191,13 @@ export default function BuyerDashboard() {
           .select('*')
           .eq('user_id', user.id)
           .order('created_at', { ascending: false }),
+        // The points history behind the Rewards tab
+        supabase
+          .from('reward_history')
+          .select('id, subsystem_source, points_earned, created_at')
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false })
+          .limit(100),
       ]);
 
       if (profileRes.error && profileRes.error.code !== 'PGRST116') {
@@ -199,6 +217,7 @@ export default function BuyerDashboard() {
         last_name: profileRes.data?.last_name || storedName.lastName,
         phone: profileRes.data?.phone || '',
         address: profileRes.data?.address || '',
+        gender: profileRes.data?.gender || '',
       });
       setOrders(ordersRes.data || []);
 
@@ -228,7 +247,14 @@ export default function BuyerDashboard() {
       setProducts(productsRes.data || []);
       setReviews(reviewsRes.data || []);
 
-      setWishlist(readWishlist(user.id));
+      // Points history is nice to have, never a reason to fail the dashboard.
+      if (rewardsRes.error) {
+        console.warn('Points history unavailable:', rewardsRes.error.message);
+        setPointsHistory([]);
+      } else {
+        setPointsHistory(rewardsRes.data || []);
+      }
+
     } catch (error) {
       console.error('Error fetching data:', error);
     } finally {
@@ -277,11 +303,29 @@ export default function BuyerDashboard() {
     setCart(readCart());
   }, [readCart]);
 
-  const cartTotal = cart.reduce(
+  const cartCount = cart.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0);
+
+  // A new line is ticked by default; a removed one stops counting.
+  useEffect(() => {
+    setSelectedLines((current) => {
+      const present = cart.map((item) => item.lineId);
+      const kept = current.filter((lineId) => present.includes(lineId));
+      const added = present.filter((lineId) => !current.includes(lineId));
+      return [...kept, ...added];
+    });
+  }, [cart]);
+
+  const toggleCartLine = (lineId) =>
+    setSelectedLines((current) =>
+      current.includes(lineId) ? current.filter((id) => id !== lineId) : [...current, lineId]
+    );
+
+  const selectedCartItems = cart.filter((item) => selectedLines.includes(item.lineId));
+  const allLinesSelected = cart.length > 0 && selectedCartItems.length === cart.length;
+  const selectedCartTotal = selectedCartItems.reduce(
     (sum, item) => sum + (Number(item.price) || 0) * (Number(item.quantity) || 0),
     0
   );
-  const cartCount = cart.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0);
 
   const changeCartQuantity = (lineId, quantity) => {
     const item = cart.find((entry) => entry.lineId === lineId);
@@ -351,27 +395,6 @@ export default function BuyerDashboard() {
     await signOut({ redirectTo: '/shop' });
   };
 
-  // Hearting a product over on the storefront, or in another tab, shows up
-  // here without a refresh.
-  useEffect(() => {
-    if (!user?.id) return undefined;
-
-    const sync = () => setWishlist(readWishlist(user.id));
-
-    window.addEventListener(WISHLIST_EVENT, sync);
-    window.addEventListener('storage', sync);
-    return () => {
-      window.removeEventListener(WISHLIST_EVENT, sync);
-      window.removeEventListener('storage', sync);
-    };
-  }, [user?.id]);
-
-  const toggleWishlist = (productId) => {
-    if (!user?.id) return;
-    const { ids } = toggleSavedProduct(user.id, productId);
-    setWishlist(ids);
-  };
-
   const saveProfile = async () => {
     setSavingProfile(true);
 
@@ -390,16 +413,23 @@ export default function BuyerDashboard() {
         updated_at: new Date().toISOString(),
       };
 
+      const named = {
+        ...base,
+        first_name: profileForm.first_name.trim() || null,
+        last_name: profileForm.last_name.trim() || null,
+      };
+
       let { error } = await supabase
         .from('profiles')
-        .update({
-          ...base,
-          first_name: profileForm.first_name.trim() || null,
-          last_name: profileForm.last_name.trim() || null,
-        })
+        .update({ ...named, gender: profileForm.gender || null })
         .eq('id', user.id);
 
-      // Database without the name columns yet: save the combined name only.
+      // Database without the gender column yet, then without the name columns:
+      // save as much as it can hold rather than losing the whole edit.
+      if (error && /gender/.test(error.message || '')) {
+        ({ error } = await supabase.from('profiles').update(named).eq('id', user.id));
+      }
+
       if (error && /first_name|last_name/.test(error.message || '')) {
         ({ error } = await supabase.from('profiles').update(base).eq('id', user.id));
       }
@@ -612,7 +642,6 @@ export default function BuyerDashboard() {
 
   const stats = getOrderStats();
   const points = (profile?.points ?? profile?.reward_points) || 0;
-  const wishlistProducts = products.filter((product) => wishlist.includes(product.id));
   const reviewedProductIds = new Set(reviews.map((review) => review.product_id));
 
   // Delivered items this buyer can still review (one entry per product)
@@ -714,20 +743,6 @@ export default function BuyerDashboard() {
             <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
               <nav className="flex overflow-x-auto lg:flex-col">
                 <button
-                  onClick={() => setActiveTab('home')}
-                  className={`flex min-h-[44px] items-center gap-2 px-4 py-3 text-left text-sm font-medium transition-colors whitespace-nowrap lg:gap-3 lg:px-6 lg:py-4 ${
-                    activeTab === 'home'
-                      ? 'bg-blue-50 text-blue-600 border-b-4 border-blue-600 lg:border-b-0 lg:border-l-4'
-                      : 'text-gray-700 hover:bg-gray-50'
-                  }`}
-                >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
-                  </svg>
-                  Home
-                </button>
-
-                <button
                   onClick={() => setActiveTab('orders')}
                   className={`flex min-h-[44px] items-center gap-2 px-4 py-3 text-left text-sm font-medium transition-colors whitespace-nowrap lg:gap-3 lg:px-6 lg:py-4 ${
                     activeTab === 'orders'
@@ -766,39 +781,6 @@ export default function BuyerDashboard() {
                 </button>
 
                 <button
-                  onClick={() => setActiveTab('messages')}
-                  className={`flex min-h-[44px] items-center gap-2 px-4 py-3 text-left text-sm font-medium transition-colors whitespace-nowrap lg:gap-3 lg:px-6 lg:py-4 ${
-                    activeTab === 'messages'
-                      ? 'bg-blue-50 text-blue-600 border-b-4 border-blue-600 lg:border-b-0 lg:border-l-4'
-                      : 'text-gray-700 hover:bg-gray-50'
-                  }`}
-                >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-                  </svg>
-                  Messages
-                </button>
-
-                <button
-                  onClick={() => setActiveTab('wishlist')}
-                  className={`flex min-h-[44px] items-center gap-2 px-4 py-3 text-left text-sm font-medium transition-colors whitespace-nowrap lg:gap-3 lg:px-6 lg:py-4 ${
-                    activeTab === 'wishlist'
-                      ? 'bg-blue-50 text-blue-600 border-b-4 border-blue-600 lg:border-b-0 lg:border-l-4'
-                      : 'text-gray-700 hover:bg-gray-50'
-                  }`}
-                >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
-                  </svg>
-                  Wishlist
-                  {wishlistProducts.length > 0 && (
-                    <span className="ml-auto px-2 py-1 bg-pink-100 text-pink-600 text-xs font-bold rounded-full">
-                      {wishlistProducts.length}
-                    </span>
-                  )}
-                </button>
-
-                <button
                   onClick={() => setActiveTab('reviews')}
                   className={`flex min-h-[44px] items-center gap-2 px-4 py-3 text-left text-sm font-medium transition-colors whitespace-nowrap lg:gap-3 lg:px-6 lg:py-4 ${
                     activeTab === 'reviews'
@@ -813,17 +795,22 @@ export default function BuyerDashboard() {
                 </button>
 
                 <button
-                  onClick={() => setActiveTab('profile')}
+                  onClick={() => setActiveTab('rewards')}
                   className={`flex min-h-[44px] items-center gap-2 px-4 py-3 text-left text-sm font-medium transition-colors whitespace-nowrap lg:gap-3 lg:px-6 lg:py-4 ${
-                    activeTab === 'profile'
+                    activeTab === 'rewards'
                       ? 'bg-blue-50 text-blue-600 border-b-4 border-blue-600 lg:border-b-0 lg:border-l-4'
                       : 'text-gray-700 hover:bg-gray-50'
                   }`}
                 >
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v13m0-13V6a2 2 0 112 2h-2zm0 0V5.5A2.5 2.5 0 109.5 8H12zM5 12h14M5 12a2 2 0 110-4h14a2 2 0 110 4M5 12v7a2 2 0 002 2h10a2 2 0 002-2v-7" />
                   </svg>
-                  My Profile
+                  Rewards
+                  {points > 0 && (
+                    <span className="ml-auto px-2 py-1 bg-yellow-100 text-yellow-700 text-xs font-bold rounded-full">
+                      {points}
+                    </span>
+                  )}
                 </button>
 
                 <button
@@ -856,35 +843,12 @@ export default function BuyerDashboard() {
 
           {/* Main Content */}
           <div className="lg:col-span-3">
-            {activeTab === 'home' && (
+            {activeTab === 'orders' && (
               <div className="space-y-6">
-                {/* Big Deals Banner */}
-                <div className="bg-gradient-to-r from-blue-500 to-blue-600 rounded-2xl p-6 sm:p-8 text-white relative overflow-hidden">
-                  <div className="relative z-10">
-                    <h2 className="text-2xl sm:text-3xl font-bold mb-2">Shop Local Daet</h2>
-                    <p className="text-lg mb-4">Handicrafts, food and pasalubong made by Daet artisans.</p>
-                    <Link
-                      href="/shop"
-                      className="inline-block px-6 py-3 bg-white text-blue-600 font-bold rounded-lg hover:bg-gray-100 transition-colors"
-                    >
-                      Shop Now →
-                    </Link>
-                  </div>
-                  <div className="absolute right-0 top-0 opacity-20">
-                    <svg className="w-64 h-64" fill="currentColor" viewBox="0 0 20 20">
-                      <path d="M3 1a1 1 0 000 2h1.22l.305 1.222a.997.997 0 00.01.042l1.358 5.43-.893.892C3.74 11.846 4.632 14 6.414 14H15a1 1 0 000-2H6.414l1-1H14a1 1 0 00.894-.553l3-6A1 1 0 0017 3H6.28l-.31-1.243A1 1 0 005 1H3zM16 16.5a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0zM6.5 18a1.5 1.5 0 100-3 1.5 1.5 0 000 3z" />
-                    </svg>
-                  </div>
-                </div>
-
+                {/* At a glance: where every order stands */}
                 {/* Order Status */}
                 <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-                  <div className="flex justify-between items-center mb-4">
-                    <h3 className="text-lg font-bold text-gray-900">My Order Status</h3>
-                    <button onClick={() => setActiveTab('orders')} className="text-blue-600 text-sm font-medium hover:text-blue-700">
-                      View All Orders →
-                    </button>
-                  </div>
+                  <h3 className="text-lg font-bold text-gray-900 mb-4">My Order Status</h3>
                   <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
                     <div className="text-center">
                       <div className="w-16 h-16 mx-auto mb-2 bg-yellow-100 rounded-full flex items-center justify-center">
@@ -928,66 +892,6 @@ export default function BuyerDashboard() {
                     </div>
                   </div>
                 </div>
-
-                {/* Recommended Products */}
-                <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-                  <div className="flex justify-between items-center mb-4">
-                    <h3 className="text-lg font-bold text-gray-900">Recommended For You</h3>
-                    <Link href="/shop" className="text-blue-600 text-sm font-medium hover:text-blue-700">
-                      See More →
-                    </Link>
-                  </div>
-
-                  {products.length === 0 ? (
-                    <div className="text-center py-8 text-gray-500">
-                      <p className="mb-4">No products available right now.</p>
-                      <Link href="/shop" className="inline-block px-6 py-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition-colors">
-                        Browse Products
-                      </Link>
-                    </div>
-                  ) : (
-                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                      {products.slice(0, 12).map((product) => (
-                        <div key={product.id} className="border border-gray-100 rounded-xl overflow-hidden bg-white">
-                          <Link href={`/shop?product=${product.id}`} className="block h-32 bg-gray-100 overflow-hidden">
-                            {product.image_url ? (
-                              <img src={product.image_url} alt={product.name} className="w-full h-full object-cover" />
-                            ) : (
-                              <div className="w-full h-full flex items-center justify-center text-gray-400 text-xs">No image</div>
-                            )}
-                          </Link>
-                          <div className="p-3">
-                            <p className="font-semibold text-sm text-gray-900 line-clamp-2 min-h-[2.5rem]">{product.name}</p>
-                            <p className="text-blue-600 font-bold mt-1">₱{Number(product.price).toFixed(2)}</p>
-                            <div className="flex gap-2 mt-3">
-                              <Link
-                                href={`/shop?product=${product.id}`}
-                                className="flex-1 text-center text-xs bg-blue-600 text-white rounded-lg py-2 font-semibold hover:bg-blue-700 transition-colors"
-                              >
-                                View
-                              </Link>
-                              <button
-                                onClick={() => toggleWishlist(product.id)}
-                                aria-label="Toggle wishlist"
-                                className={`flex h-11 w-11 items-center justify-center rounded-lg text-lg leading-none transition-colors ${
-                                  wishlist.includes(product.id)
-                                    ? 'bg-pink-100 text-pink-600'
-                                    : 'bg-gray-100 text-gray-400 hover:text-pink-500'
-                                }`}
-                              >
-                                ♥
-                              </button>
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {activeTab === 'orders' && (
               <div className="bg-white rounded-xl shadow-sm border border-gray-100">
                 <div className="p-6 border-b">
                   <h2 className="text-2xl font-bold text-gray-900">My Orders</h2>
@@ -1131,6 +1035,23 @@ export default function BuyerDashboard() {
                   )}
                 </div>
               </div>
+              </div>
+            )}
+
+            {activeTab === 'messages' && (
+              <div className="space-y-4">
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('orders')}
+                  className="inline-flex min-h-[44px] items-center gap-2 text-sm font-semibold text-blue-600 hover:text-blue-700"
+                >
+                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                  </svg>
+                  Back to my orders
+                </button>
+                <ChatPanel role="buyer" shopNameById={shopNames} />
+              </div>
             )}
 
             {activeTab === 'cart' && (
@@ -1169,9 +1090,39 @@ export default function BuyerDashboard() {
                     </div>
                   ) : (
                     <>
+                      <label className="mb-4 flex min-h-[44px] cursor-pointer items-center gap-3 rounded-xl bg-gray-50 px-4">
+                        <input
+                          type="checkbox"
+                          checked={allLinesSelected}
+                          onChange={(event) =>
+                            setSelectedLines(event.target.checked ? cart.map((item) => item.lineId) : [])
+                          }
+                          className="h-5 w-5 rounded border-gray-300 text-blue-600 focus:ring-2 focus:ring-blue-600"
+                        />
+                        <span className="text-sm font-semibold text-gray-700">
+                          Select all · {selectedCartItems.length} of {cart.length} selected
+                        </span>
+                      </label>
+
                       <div className="space-y-4">
                         {cart.map((item) => (
-                          <div key={item.lineId} className="flex flex-col gap-3 rounded-xl border border-gray-100 p-4 sm:flex-row sm:items-center">
+                          <div
+                            key={item.lineId}
+                            className={`flex flex-col gap-3 rounded-xl border p-4 sm:flex-row sm:items-center ${
+                              selectedLines.includes(item.lineId)
+                                ? 'border-blue-300'
+                                : 'border-gray-100 opacity-70'
+                            }`}
+                          >
+                            {/* Tick the lines you want to pay for now */}
+                            <input
+                              type="checkbox"
+                              checked={selectedLines.includes(item.lineId)}
+                              onChange={() => toggleCartLine(item.lineId)}
+                              aria-label={`Check out ${item.name}`}
+                              className="h-5 w-5 flex-shrink-0 rounded border-gray-300 text-blue-600 focus:ring-2 focus:ring-blue-600"
+                            />
+
                             <div className="h-20 w-20 flex-shrink-0 overflow-hidden rounded-lg bg-gray-100">
                               {item.image_url ? (
                                 <img src={item.image_url} alt={item.name} className="h-full w-full object-cover" />
@@ -1239,24 +1190,34 @@ export default function BuyerDashboard() {
 
                       <div className="mt-6 border-t pt-4">
                         <div className="flex items-center justify-between">
-                          <span className="text-lg font-semibold text-gray-900">Total</span>
-                          <span className="text-2xl font-bold text-blue-600">₱{cartTotal.toFixed(2)}</span>
+                          <span className="text-lg font-semibold text-gray-900">
+                            Total ({selectedCartItems.length} selected)
+                          </span>
+                          <span className="text-2xl font-bold text-blue-600">₱{selectedCartTotal.toFixed(2)}</span>
                         </div>
 
                         <div className="mt-4 flex flex-col gap-3 sm:flex-row">
-                          <Link
-                            href="/shop/checkout"
-                            className="flex min-h-[48px] flex-1 items-center justify-center rounded-full bg-blue-600 font-bold text-white transition-colors hover:bg-blue-700"
+                          <button
+                            type="button"
+                            onClick={() => {
+                              // Only the ticked lines travel to checkout
+                              storeSelection(user.id, selectedLines);
+                              router.push('/shop/checkout');
+                            }}
+                            disabled={selectedCartItems.length === 0}
+                            className="flex min-h-[48px] flex-1 items-center justify-center rounded-full bg-blue-600 font-bold text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-300"
                           >
-                            Proceed to Checkout →
-                          </Link>
+                            {selectedCartItems.length === 0
+                              ? 'Select an item to check out'
+                              : `Check Out ${selectedCartItems.length} ${selectedCartItems.length === 1 ? 'Item' : 'Items'} →`}
+                          </button>
                           <button
                             type="button"
                             onClick={() => {
                               showConfirm({
                                 tone: 'warning',
                                 title: 'Empty your cart?',
-                                message: 'Every item will be removed. Your saved wishlist is not affected.',
+                                message: 'Every item will be removed from your cart.',
                                 confirmLabel: 'Clear cart',
                                 cancelLabel: 'Keep items',
                               }).then((ok) => {
@@ -1270,80 +1231,6 @@ export default function BuyerDashboard() {
                         </div>
                       </div>
                     </>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {activeTab === 'messages' && <ChatPanel role="buyer" shopNameById={shopNames} />}
-
-            {activeTab === 'wishlist' && (
-              <div className="bg-white rounded-xl shadow-sm border border-gray-100">
-                <div className="flex flex-col gap-3 border-b p-6 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
-                    <h2 className="text-2xl font-bold text-gray-900">Wishlist</h2>
-                    <p className="text-sm text-gray-600 mt-1">Saved favorites on this device.</p>
-                  </div>
-                  <Link
-                    href="/shop"
-                    className="inline-flex min-h-[44px] items-center justify-center rounded-lg bg-blue-600 px-5 text-sm font-semibold text-white transition-colors hover:bg-blue-700"
-                  >
-                    Continue Shopping →
-                  </Link>
-                </div>
-                <div className="p-6">
-                  {wishlistProducts.length === 0 ? (
-                    <div className="text-center py-12">
-                      <svg className="w-16 h-16 text-gray-300 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
-                      </svg>
-                      <h3 className="text-lg font-semibold text-gray-900 mb-2">Your Wishlist is Empty</h3>
-                      <p className="text-gray-600 mb-4">Tap the ♥ on a product in Home to save it here.</p>
-                      <div className="flex flex-wrap items-center justify-center gap-3">
-                        <Link
-                          href="/shop"
-                          className="inline-flex min-h-[44px] items-center rounded-lg bg-blue-600 px-6 font-medium text-white transition-colors hover:bg-blue-700"
-                        >
-                          Browse the Shop
-                        </Link>
-                        <button
-                          onClick={() => setActiveTab('home')}
-                          className="inline-flex min-h-[44px] items-center rounded-lg bg-gray-100 px-6 font-medium text-gray-700 transition-colors hover:bg-gray-200"
-                        >
-                          Recommended for me
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {wishlistProducts.map((product) => (
-                        <div key={product.id} className="flex gap-4 border border-gray-100 rounded-xl p-4">
-                          <div className="w-20 h-20 bg-gray-100 rounded-lg overflow-hidden flex-shrink-0">
-                            {product.image_url && (
-                              <img src={product.image_url} alt={product.name} className="w-full h-full object-cover" />
-                            )}
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="font-semibold text-gray-900 line-clamp-2">{product.name}</p>
-                            <p className="text-blue-600 font-bold">₱{Number(product.price).toFixed(2)}</p>
-                            <div className="flex flex-wrap gap-2 mt-2">
-                              <Link
-                                href={`/shop?product=${product.id}`}
-                                className="inline-flex min-h-[44px] items-center rounded-lg bg-blue-600 px-4 text-xs font-semibold text-white hover:bg-blue-700"
-                              >
-                                View Product
-                              </Link>
-                              <button
-                                onClick={() => toggleWishlist(product.id)}
-                                className="min-h-[44px] rounded-lg bg-gray-100 px-4 text-xs font-semibold text-gray-700 hover:bg-gray-200"
-                              >
-                                Remove
-                              </button>
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
                   )}
                 </div>
               </div>
@@ -1572,13 +1459,72 @@ export default function BuyerDashboard() {
               </div>
             )}
 
-            {activeTab === 'profile' && (
+            {activeTab === 'rewards' && (
+              <div className="space-y-6">
+                <div className="rounded-2xl bg-gradient-to-r from-yellow-400 to-yellow-500 p-6 text-white sm:p-8">
+                  <p className="text-sm font-semibold uppercase tracking-wide text-yellow-50">Your reward points</p>
+                  <p className="mt-1 text-5xl font-bold">{points}</p>
+                  <p className="mt-2 text-sm text-yellow-50">
+                    You earn 10 points for every ₱100 of goods. Points are returned if an order is cancelled.
+                  </p>
+                </div>
+
+                <div className="rounded-xl border border-gray-100 bg-white shadow-sm">
+                  <div className="border-b p-6">
+                    <h3 className="text-lg font-bold text-gray-900">Points History</h3>
+                    <p className="mt-1 text-sm text-gray-600">Every time you earned points, newest first.</p>
+                  </div>
+                  <div className="p-6">
+                    {pointsHistory.length === 0 ? (
+                      <div className="py-10 text-center">
+                        <p className="text-gray-600">No points yet.</p>
+                        <Link
+                          href="/shop"
+                          className="mt-4 inline-flex min-h-[44px] items-center rounded-lg bg-blue-600 px-6 font-semibold text-white transition-colors hover:bg-blue-700"
+                        >
+                          Start Shopping
+                        </Link>
+                      </div>
+                    ) : (
+                      <ul className="divide-y">
+                        {pointsHistory.map((entry) => (
+                          <li key={entry.id} className="flex items-center justify-between gap-4 py-3">
+                            <div className="min-w-0">
+                              <p className="font-semibold text-gray-900">{REWARD_SOURCES[entry.subsystem_source] || 'Points earned'}</p>
+                              <p className="text-xs text-gray-500">
+                                {new Date(entry.created_at).toLocaleString('en-PH', {
+                                  dateStyle: 'medium',
+                                  timeStyle: 'short',
+                                })}
+                              </p>
+                            </div>
+                            <span className="flex-shrink-0 rounded-full bg-yellow-100 px-3 py-1 text-sm font-bold text-yellow-700">
+                              +{entry.points_earned}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {activeTab === 'settings' && (
               <div className="bg-white rounded-xl shadow-sm border border-gray-100">
                 <div className="p-6 border-b">
-                  <h2 className="text-2xl font-bold text-gray-900">My Profile</h2>
-                  <p className="text-sm text-gray-600 mt-1">Update your personal information and delivery address.</p>
+                  <h2 className="text-2xl font-bold text-gray-900">Settings</h2>
+                  <p className="text-sm text-gray-600 mt-1">
+                    Your details, your password and your account, all in one place.
+                  </p>
                 </div>
-                <div className="p-6">
+                <div className="p-6 space-y-6">
+                  {/* My details, which used to be a tab of its own */}
+                  <div className="p-4 border border-gray-200 rounded-lg">
+                    <h3 className="font-semibold text-gray-900 mb-1">My Profile</h3>
+                    <p className="mb-4 text-sm text-gray-600">
+                      Your name, picture and where your orders are delivered.
+                    </p>
                   <div className="space-y-4">
                     <div className="border-b pb-5">
                       <p className="mb-3 text-sm font-semibold text-gray-700">Profile Picture</p>
@@ -1644,6 +1590,22 @@ export default function BuyerDashboard() {
                       />
                     </div>
                     <div>
+                      <label htmlFor="profileGender" className="block text-sm font-semibold text-gray-700 mb-2">
+                        Gender
+                      </label>
+                      <select
+                        id="profileGender"
+                        value={profileForm.gender}
+                        onChange={(e) => setProfileForm({ ...profileForm, gender: e.target.value })}
+                        className="w-full min-h-[44px] px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      >
+                        <option value="">Prefer not to say</option>
+                        <option value="female">Female</option>
+                        <option value="male">Male</option>
+                        <option value="other">Other</option>
+                      </select>
+                    </div>
+                    <div>
                       <label className="block text-sm font-semibold text-gray-700 mb-2">Delivery Address</label>
                       <textarea
                         value={profileForm.address}
@@ -1653,19 +1615,6 @@ export default function BuyerDashboard() {
                         placeholder="House number, street, barangay, Daet"
                       />
                     </div>
-                    <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-2">Reward Points</label>
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="text"
-                          value={`${points} points`}
-                          disabled
-                          className="flex-1 px-4 py-3 border-2 border-gray-200 rounded-xl bg-gray-50"
-                        />
-                        <span className="text-2xl">🏆</span>
-                      </div>
-                    </div>
-
                     <button
                       onClick={saveProfile}
                       disabled={savingProfile}
@@ -1674,17 +1623,8 @@ export default function BuyerDashboard() {
                       {savingProfile ? 'Saving...' : 'Save Profile'}
                     </button>
                   </div>
-                </div>
-              </div>
-            )}
+                  </div>
 
-            {activeTab === 'settings' && (
-              <div className="bg-white rounded-xl shadow-sm border border-gray-100">
-                <div className="p-6 border-b">
-                  <h2 className="text-2xl font-bold text-gray-900">Settings</h2>
-                  <p className="text-sm text-gray-600 mt-1">Change your password and review account details.</p>
-                </div>
-                <div className="p-6 space-y-6">
                   <div className="p-4 border border-gray-200 rounded-lg">
                     <ChangePasswordCard
                       email={user?.email}

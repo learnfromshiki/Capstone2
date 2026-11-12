@@ -11,11 +11,10 @@ import AuthModal from '@/components/AuthModal';
 import { useDialog } from '@/components/ui/Dialog';
 import NotificationCenter from '@/components/ui/NotificationCenter';
 import { uploadPhotos } from '@/lib/attachments';
-import { WISHLIST_EVENT, readWishlist, toggleWishlist as toggleSavedProduct } from '@/lib/wishlist';
 import ShopProfileModal from '@/components/shop/ShopProfileModal';
 import ProductOptionsModal from '@/components/shop/ProductOptionsModal';
 import { cartLineId, describeSelection, hasOptions } from '@/lib/productOptions';
-import { openConversation } from '@/lib/messages';
+import { countUnread, openConversation } from '@/lib/messages';
 import { storeBuyNow } from '@/lib/buyNow';
 import ShopFooter from '@/components/shop/ShopFooter';
 
@@ -28,9 +27,8 @@ export default function ShopPage() {
   const [showCart, setShowCart] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [selectedSellerId, setSelectedSellerId] = useState(null);
-  // Products this shopper has saved; the Wishlist tab of their dashboard
-  // reads the same list.
-  const [wishlist, setWishlist] = useState([]);
+  // Unread replies from shops, for the badge on the messages icon
+  const [unreadMessages, setUnreadMessages] = useState(0);
   // The product whose options sheet is open, and why it was opened
   const [optionsFor, setOptionsFor] = useState(null);
   const [reviewsByProduct, setReviewsByProduct] = useState({});
@@ -51,7 +49,7 @@ export default function ShopPage() {
   };
 
   // Links from the dashboard: ?cart=1 opens the cart, ?product=<id> opens that
-  // product so a wishlist or "View" button lands on the product itself.
+  // product so a shared link or "View" button lands on the product itself.
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
@@ -399,38 +397,28 @@ export default function ShopPage() {
     }
   };
 
-  // The saved list belongs to the signed-in shopper and follows them to the
-  // Wishlist tab of their dashboard, in this tab or another one.
+  // Keep the badge on the messages icon honest while the shopper browses.
   useEffect(() => {
-    if (!user?.id) {
-      setWishlist([]);
+    if (!user?.id || role === 'admin' || role === 'seller') {
+      setUnreadMessages(0);
       return undefined;
     }
 
-    const sync = () => setWishlist(readWishlist(user.id));
-    sync();
-
-    window.addEventListener(WISHLIST_EVENT, sync);
-    window.addEventListener('storage', sync);
-    return () => {
-      window.removeEventListener(WISHLIST_EVENT, sync);
-      window.removeEventListener('storage', sync);
+    let cancelled = false;
+    const refresh = () => {
+      countUnread('buyer').then((count) => {
+        if (!cancelled) setUnreadMessages(count);
+      });
     };
-  }, [user?.id]);
 
-  const handleToggleWishlist = (product) => {
-    if (!user) {
-      setShowAuthModal(true);
-      return;
-    }
+    refresh();
+    const timer = setInterval(refresh, 30000);
 
-    const { ids, saved } = toggleSavedProduct(user.id, product.id);
-    setWishlist(ids);
-    showToast(
-      saved ? `${product.name} saved to your wishlist.` : `${product.name} removed from your wishlist.`,
-      saved ? 'success' : 'info'
-    );
-  };
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [user?.id, role]);
 
   /** Shared gate: a shopper must be signed in, active, and the item in stock. */
   const canShop = (product) => {
@@ -493,8 +481,21 @@ export default function ShopPage() {
   };
 
   /**
-   * "Add to Cart" on a card. A product with choices opens the options sheet
-   * first, exactly as Shopee and Lazada do; a plain product goes straight in.
+   * "Add to Cart" on a card always opens the options sheet first, exactly as
+   * Shopee and Lazada do: nothing lands in the cart until the shopper has
+   * actually chosen how many, and which colour or size, rather than a silent
+   * "one of the default" the moment the button is tapped.
+   */
+  const addToCartFromCard = (product) => {
+    if (!canShop(product)) return;
+
+    setSelectedProduct(null);
+    setOptionsFor({ product, intent: 'cart' });
+  };
+
+  /**
+   * "Add to Cart" from the product window, where the quantity has already
+   * been picked. A product with choices still goes through the sheet.
    */
   const addToCart = (product, quantity = 1) => {
     if (!canShop(product)) return;
@@ -654,10 +655,6 @@ export default function ShopPage() {
       }
     });
 
-  const cartTotal = cart.reduce(
-    (sum, item) => sum + (Number(item.price) || 0) * (Number(item.quantity) || 0),
-    0
-  );
   const cartItemCount = cart.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0);
   const accountHref =
     role === 'admin'
@@ -689,22 +686,34 @@ export default function ShopPage() {
 
             {/* Actions */}
             <div className="flex items-center gap-2 sm:gap-4">
-              <Link 
-                href="/"
-                className="text-gray-600 hover:text-gray-900 font-medium text-sm hidden sm:block"
-              >
-                Home
-              </Link>
-              
               {user ? (
                 <div className="flex items-center gap-2 sm:gap-3">
                   {/* Replies from shops and order updates, for a shopper who
                       never leaves the storefront. */}
                   {role !== 'admin' && role !== 'seller' && (
-                    <NotificationCenter
-                      audience="customer"
-                      emptyMessage="Nothing new yet. Order updates and replies from shops appear here."
-                    />
+                    <>
+                      <Link
+                        href="/shop/buyer?tab=messages"
+                        aria-label={
+                          unreadMessages > 0 ? `Messages, ${unreadMessages} unread` : 'Messages'
+                        }
+                        title="Messages"
+                        className="relative flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900"
+                      >
+                        <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                        </svg>
+                        {unreadMessages > 0 && (
+                          <span className="absolute right-1 top-1 flex h-5 min-w-[20px] items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">
+                            {unreadMessages > 99 ? '99+' : unreadMessages}
+                          </span>
+                        )}
+                      </Link>
+                      <NotificationCenter
+                        audience="customer"
+                        emptyMessage="Nothing new yet. Order updates and replies from shops appear here."
+                      />
+                    </>
                   )}
                   <Link
                     href={accountHref}
@@ -901,14 +910,12 @@ export default function ShopPage() {
               <ProductCard
                 key={product.id}
                 product={product}
-                onAddToCart={addToCart}
+                onAddToCart={addToCartFromCard}
                 onBuyNow={buyNow}
                 onViewDetails={setSelectedProduct}
                 sellerInfo={sellers[product.seller_id]}
                 onViewShop={() => setSelectedSellerId(product.seller_id)}
                 reviewSummary={reviewSummaries[product.id]}
-                onToggleWishlist={handleToggleWishlist}
-                isWishlisted={wishlist.includes(product.id)}
               />
             ))}
           </div>
@@ -924,7 +931,7 @@ export default function ShopPage() {
         onClose={() => setShowCart(false)}
         onUpdateQuantity={updateQuantity}
         onRemoveItem={removeFromCart}
-        total={cartTotal}
+        userId={user?.id}
       />
 
       {/* Product quick view */}
@@ -943,8 +950,6 @@ export default function ShopPage() {
         onClose={() => setSelectedProduct(null)}
         onAddToCart={addToCart}
         onBuyNow={buyNow}
-        onToggleWishlist={handleToggleWishlist}
-        isWishlisted={Boolean(selectedProduct && wishlist.includes(selectedProduct.id))}
       />
 
       {/* Choose options (Buy Now / products with variants) */}

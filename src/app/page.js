@@ -7,25 +7,25 @@ export default function Home() {
       <nav className="border-b bg-white sticky top-0 z-50 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
-            <div className="flex items-center">
+            {/* The name is the way home, so it is a link rather than plain text */}
+            <Link href="/" aria-label="CONNECT-Daet home" className="flex items-center gap-3">
+              <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br from-blue-600 to-blue-700">
+                <svg className="h-6 w-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
+                </svg>
+              </span>
               <span className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-blue-700 bg-clip-text text-transparent">
                 CONNECT-Daet
               </span>
-            </div>
-            <div className="flex items-center gap-4">
-              <Link 
-                href="/shop"
-                className="inline-flex min-h-[44px] items-center text-gray-700 hover:text-blue-600 font-medium transition-colors"
-              >
-                Shop
-              </Link>
-              <Link 
-                href="/shop"
-                className="bg-blue-600 text-white px-6 py-2.5 rounded-lg font-semibold hover:bg-blue-700 transition-all hover:shadow-lg"
-              >
-                Start Shopping
-              </Link>
-            </div>
+            </Link>
+            {/* One way into the shop from here; the hero and the section at the
+                bottom of the page carry the others. */}
+            <Link
+              href="/shop"
+              className="inline-flex min-h-[44px] items-center rounded-lg bg-blue-600 px-6 font-semibold text-white transition-all hover:bg-blue-700 hover:shadow-lg"
+            >
+              Start Shopping
+            </Link>
           </div>
         </div>
       </nav>

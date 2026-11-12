@@ -1,11 +1,37 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { describeSelection } from '@/lib/productOptions';
 import { useDialog } from '@/components/ui/Dialog';
+import { storeSelection } from '@/lib/checkoutSelection';
 
-export default function Cart({ cart, isOpen, onClose, onUpdateQuantity, onRemoveItem, total }) {
+export default function Cart({ cart, isOpen, onClose, onUpdateQuantity, onRemoveItem, userId }) {
   const { showConfirm } = useDialog();
+  // Which lines are going through checkout. Everything starts ticked, so the
+  // common case - buy the lot - is still one tap.
+  const [selected, setSelected] = useState([]);
+
+  // A new line is ticked by default; a removed one stops counting.
+  useEffect(() => {
+    setSelected((current) => {
+      const present = cart.map((item) => item.lineId);
+      const kept = current.filter((lineId) => present.includes(lineId));
+      const added = present.filter((lineId) => !current.includes(lineId));
+      return [...kept, ...added];
+    });
+  }, [cart]);
+
+  const toggleLine = (lineId) =>
+    setSelected((current) =>
+      current.includes(lineId) ? current.filter((id) => id !== lineId) : [...current, lineId]
+    );
+
+  const allSelected = cart.length > 0 && selected.length === cart.length;
+  const selectedItems = cart.filter((item) => selected.includes(item.lineId));
+  const selectedTotal = selectedItems.reduce(
+    (sum, item) => sum + (Number(item.price) || 0) * (Number(item.quantity) || 0),
+    0
+  );
 
   /** Removing something from the cart is easy to do by accident, so ask. */
   const confirmRemove = async (item) => {
@@ -47,7 +73,7 @@ export default function Cart({ cart, isOpen, onClose, onUpdateQuantity, onRemove
           <div>
             <h2 className="text-2xl font-bold">Your Cart</h2>
             <p className="text-blue-100 text-sm">
-              {cart.length} {cart.length === 1 ? 'item' : 'items'}
+              {selectedItems.length} of {cart.length} {cart.length === 1 ? 'item' : 'items'} selected
             </p>
           </div>
           <button
@@ -75,11 +101,32 @@ export default function Cart({ cart, isOpen, onClose, onUpdateQuantity, onRemove
             </div>
           ) : (
             <div className="space-y-4">
+              <label className="flex min-h-[44px] cursor-pointer items-center gap-3 rounded-xl bg-white px-4 shadow-sm">
+                <input
+                  type="checkbox"
+                  checked={allSelected}
+                  onChange={(event) => setSelected(event.target.checked ? cart.map((item) => item.lineId) : [])}
+                  className="h-5 w-5 rounded border-gray-300 text-blue-600 focus:ring-2 focus:ring-blue-600"
+                />
+                <span className="text-sm font-semibold text-gray-700">Select all</span>
+              </label>
+
               {cart.map((item) => (
                 <div
                   key={item.lineId}
-                  className="bg-white rounded-xl p-4 flex gap-4 shadow-sm hover:shadow-md transition-shadow border border-gray-100"
+                  className={`flex gap-3 rounded-xl border bg-white p-4 shadow-sm transition-shadow hover:shadow-md ${
+                    selected.includes(item.lineId) ? 'border-blue-300' : 'border-gray-100 opacity-70'
+                  }`}
                 >
+                  {/* Tick the lines you want to pay for now */}
+                  <input
+                    type="checkbox"
+                    checked={selected.includes(item.lineId)}
+                    onChange={() => toggleLine(item.lineId)}
+                    aria-label={`Check out ${item.name}`}
+                    className="mt-1 h-5 w-5 flex-shrink-0 rounded border-gray-300 text-blue-600 focus:ring-2 focus:ring-blue-600"
+                  />
+
                   {/* Product Image */}
                   <div className="w-24 h-24 bg-gray-100 rounded-lg flex-shrink-0 overflow-hidden">
                     {item.image_url ? (
@@ -171,8 +218,8 @@ export default function Cart({ cart, isOpen, onClose, onUpdateQuantity, onRemove
             {/* Totals */}
             <div className="space-y-2 mb-4">
               <div className="flex justify-between text-gray-600">
-                <span>Subtotal</span>
-                <span className="font-semibold">₱{(Number(total) || 0).toFixed(2)}</span>
+                <span>Subtotal ({selectedItems.length} selected)</span>
+                <span className="font-semibold">₱{selectedTotal.toFixed(2)}</span>
               </div>
               <div className="flex justify-between text-sm text-gray-500">
                 <span>Estimated Delivery</span>
@@ -181,7 +228,7 @@ export default function Cart({ cart, isOpen, onClose, onUpdateQuantity, onRemove
               <div className="border-t pt-2 flex justify-between items-center">
                 <span className="text-lg font-bold text-gray-900">Total</span>
                 <span className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-blue-700 bg-clip-text text-transparent">
-                  ₱{(Number(total) || 0).toFixed(2)}
+                  ₱{selectedTotal.toFixed(2)}
                 </span>
               </div>
             </div>
@@ -193,7 +240,7 @@ export default function Cart({ cart, isOpen, onClose, onUpdateQuantity, onRemove
                   <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
                 </svg>
                 <p className="text-sm text-yellow-900">
-                  <span className="font-bold">Earn {Math.floor((Number(total) || 0) / 100) * 10} points</span> with this purchase
+                  <span className="font-bold">Earn {Math.floor(selectedTotal / 100) * 10} points</span> with this purchase
                 </p>
               </div>
             </div>
@@ -201,12 +248,18 @@ export default function Cart({ cart, isOpen, onClose, onUpdateQuantity, onRemove
             {/* Checkout Button */}
             <button
               onClick={() => {
-                // Checkout is its own page now, not a window on top of the cart
+                // Only the ticked lines go to checkout; the rest stay in the cart
+                storeSelection(userId, selected);
                 window.location.href = '/shop/checkout';
               }}
-              className="w-full bg-gradient-to-r from-blue-600 to-blue-700 text-white py-4 rounded-xl font-bold text-lg hover:from-blue-700 hover:to-blue-800 transition-all shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 active:scale-95 flex items-center justify-center gap-2"
+              disabled={selectedItems.length === 0}
+              className="w-full bg-gradient-to-r from-blue-600 to-blue-700 text-white py-4 rounded-xl font-bold text-lg hover:from-blue-700 hover:to-blue-800 transition-all shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 active:scale-95 flex items-center justify-center gap-2 disabled:cursor-not-allowed disabled:from-gray-300 disabled:to-gray-300 disabled:shadow-none disabled:transform-none"
             >
-              <span>Proceed to Checkout</span>
+              <span>
+                {selectedItems.length === 0
+                  ? 'Select an item to check out'
+                  : `Check Out ${selectedItems.length} ${selectedItems.length === 1 ? 'Item' : 'Items'}`}
+              </span>
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
               </svg>

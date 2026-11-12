@@ -7,14 +7,19 @@ import { useAuth } from '@/contexts/AuthContext';
 import CheckoutModal from '@/components/shop/CheckoutModal';
 import { cartLineId } from '@/lib/productOptions';
 import { clearBuyNow, readBuyNow } from '@/lib/buyNow';
+import { clearSelection, readSelection } from '@/lib/checkoutSelection';
 
 /**
  * The checkout page.
  *
  * Two ways in:
- *   /shop/checkout              - everything in the cart
+ *   /shop/checkout              - the lines ticked in the cart (everything,
+ *                                 when nothing was ticked in particular)
  *   /shop/checkout?mode=buynow  - one item bought straight away, which is
- *                                never added to the cart
+ *                                 never added to the cart
+ *
+ * Whatever arrives here, place_order() prices and checks every line again on
+ * the server, so a tampered selection buys nothing it should not.
  */
 export default function CheckoutPage() {
   const { user, loading: authLoading } = useAuth();
@@ -49,14 +54,20 @@ export default function CheckoutPage() {
       const stored = localStorage.getItem(cartKey);
       const parsed = stored ? JSON.parse(stored) : [];
 
-      setItems(
-        (Array.isArray(parsed) ? parsed : []).map((item) => ({
-          ...item,
-          productId: item.productId || item.id,
-          selectedOptions: item.selectedOptions || {},
-          lineId: item.lineId || cartLineId(item.productId || item.id, item.selectedOptions),
-        }))
-      );
+      const lines = (Array.isArray(parsed) ? parsed : []).map((item) => ({
+        ...item,
+        productId: item.productId || item.id,
+        selectedOptions: item.selectedOptions || {},
+        lineId: item.lineId || cartLineId(item.productId || item.id, item.selectedOptions),
+      }));
+
+      // Only what the customer ticked in the cart. A selection that no longer
+      // matches anything (the cart changed in another tab) falls back to the
+      // whole cart rather than an empty checkout.
+      const chosen = readSelection(user.id);
+      const picked = chosen ? lines.filter((line) => chosen.includes(line.lineId)) : lines;
+
+      setItems(picked.length > 0 ? picked : lines);
     } catch (error) {
       console.error('Could not read your cart:', error);
       setItems([]);
@@ -76,13 +87,26 @@ export default function CheckoutPage() {
 
     if (mode === 'buynow') {
       clearBuyNow(user.id);
-    } else {
-      try {
-        localStorage.removeItem(cartKey);
-      } catch (error) {
-        console.error('Could not clear your cart:', error);
-      }
+      return;
     }
+
+    // Take out only what was just bought; anything left unticked stays in the
+    // cart for next time.
+    try {
+      const bought = new Set(items.map((item) => item.lineId));
+      const stored = localStorage.getItem(cartKey);
+      const parsed = stored ? JSON.parse(stored) : [];
+      const remaining = (Array.isArray(parsed) ? parsed : []).filter(
+        (item) => !bought.has(item.lineId || cartLineId(item.productId || item.id, item.selectedOptions))
+      );
+
+      if (remaining.length > 0) localStorage.setItem(cartKey, JSON.stringify(remaining));
+      else localStorage.removeItem(cartKey);
+    } catch (error) {
+      console.error('Could not update your cart:', error);
+    }
+
+    clearSelection(user.id);
   };
 
   if (authLoading || !ready) {
@@ -106,7 +130,9 @@ export default function CheckoutPage() {
             <span>
               <span className="block text-lg font-bold text-gray-900">Checkout</span>
               <span className="block text-xs text-gray-500">
-                {mode === 'buynow' ? 'Buying one item' : 'Everything in your cart'}
+                {mode === 'buynow'
+                  ? 'Buying one item'
+                  : `${items.length} ${items.length === 1 ? 'item' : 'items'} from your cart`}
               </span>
             </span>
           </Link>

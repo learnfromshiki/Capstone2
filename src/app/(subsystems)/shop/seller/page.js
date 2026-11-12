@@ -41,11 +41,18 @@ export default function SellerLoginPage() {
 
   // Redirect if already logged in. The verify step signs the new shop owner in,
   // so it must not be interrupted by this redirect.
+  //
+  // Only an approved shop has a dashboard. A shop still waiting for the admin
+  // stays here, on the portal, and sees the status panel below instead of
+  // being handed a dashboard it cannot use yet.
   useEffect(() => {
-    if (user && seller && mode !== 'verify') {
+    if (user && seller && seller.is_approved && mode !== 'verify') {
       router.push('/shop/seller/dashboard');
     }
   }, [user, seller, router, mode]);
+
+  const awaitingApproval = Boolean(user && seller && !seller.is_approved && !seller.is_rejected);
+  const wasRejected = Boolean(user && seller?.is_rejected);
 
   // "Sell on CONNECT-Daet" links here to open an account, so ?mode=signup
   // starts on the registration form instead of the login one.
@@ -116,7 +123,10 @@ export default function SellerLoginPage() {
           // (there was no session), so finish the registration now.
           await ensureProfileRow(data.user);
           await ensureSellerProfile(data.user);
-          router.push('/shop/seller/dashboard');
+          // No dashboard yet: the status panel on this page takes over once
+          // the shop row is in place.
+          setMode('login');
+          setSuccess('Email verified. Your shop application is now with the admin for approval.');
           return;
         }
 
@@ -137,9 +147,9 @@ export default function SellerLoginPage() {
           return;
         }
 
-        // An unapproved shop still belongs in the seller dashboard, which shows
-        // the "waiting for approval" screen.
-        router.push('/shop/seller/dashboard');
+        // An approved shop goes to its dashboard; the effect above handles
+        // that. One still waiting stays here and sees the status panel.
+        if (sellerRow.is_approved) router.push('/shop/seller/dashboard');
       } else {
         if (!formData.firstName.trim() || !formData.lastName.trim()) {
           setError('Please enter your first and last name.');
@@ -173,11 +183,12 @@ export default function SellerLoginPage() {
           return;
         }
 
-        // Confirmation turned off means the seller is signed in already: open the
-        // seller portal so the new account is never mistaken for a customer.
+        // Confirmation turned off means the seller is signed in already. There
+        // is still nothing to manage until an admin approves the shop, so the
+        // status panel on this page takes over.
         if (signUpData?.session) {
           setMode('login');
-          router.push('/shop/seller/dashboard');
+          setSuccess('Your shop application has been sent to the admin for approval.');
           return;
         }
 
@@ -244,7 +255,74 @@ export default function SellerLoginPage() {
 
       {/* Main Content */}
       <main className="max-w-md mx-auto px-4 py-12">
-        <div className="bg-white rounded-2xl shadow-xl border border-gray-200 overflow-hidden">
+        {/* Where the application stands, for a shop that cannot trade yet */}
+        {(awaitingApproval || wasRejected) && (
+          <div
+            className={`mb-6 rounded-2xl border-2 bg-white p-8 text-center shadow-xl ${
+              wasRejected ? 'border-red-200' : 'border-yellow-200'
+            }`}
+          >
+            <div
+              className={`mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full ${
+                wasRejected ? 'bg-red-100' : 'bg-yellow-100'
+              }`}
+            >
+              <svg
+                className={`h-8 w-8 ${wasRejected ? 'text-red-600' : 'text-yellow-600'}`}
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                {wasRejected ? (
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M5 19h14a2 2 0 001.84-2.75L13.74 4a2 2 0 00-3.5 0L3.16 16.25A2 2 0 005 19z" />
+                ) : (
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                )}
+              </svg>
+            </div>
+
+            <h2 className="mb-2 text-2xl font-bold text-gray-900">
+              {wasRejected ? 'Application Not Approved' : 'Waiting for Approval'}
+            </h2>
+            <p className="mb-4 text-gray-600">
+              {wasRejected
+                ? 'Your shop application was reviewed and not approved. Contact CONNECT-Daet support if you would like to re-apply.'
+                : 'Your shop has been submitted. An admin reviews every new shop before it opens, and we will email you the moment yours is approved.'}
+            </p>
+
+            {wasRejected && seller?.rejection_reason && (
+              <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-left">
+                <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-red-700">Reason</p>
+                <p className="break-words text-sm text-red-800">{seller.rejection_reason}</p>
+              </div>
+            )}
+
+            <div className="mb-6 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3">
+              <p className="text-xs text-gray-500">Shop</p>
+              <p className="break-words text-sm font-semibold text-gray-800">{seller?.business_name}</p>
+              <p className="mt-2 text-xs text-gray-500">Signed in as</p>
+              <p className="break-words text-sm font-semibold text-gray-800">{user?.email}</p>
+            </div>
+
+            <Link
+              href="/shop"
+              className="flex min-h-[44px] w-full items-center justify-center rounded-lg bg-blue-600 font-semibold text-white transition-colors hover:bg-blue-700"
+            >
+              Browse the Shop
+            </Link>
+            <button
+              type="button"
+              onClick={() => signOut()}
+              className="mt-2 min-h-[44px] w-full rounded-lg bg-gray-100 font-semibold text-gray-700 transition-colors hover:bg-gray-200"
+            >
+              Log Out
+            </button>
+          </div>
+        )}
+
+        <div className={`bg-white rounded-2xl shadow-xl border border-gray-200 overflow-hidden ${
+          awaitingApproval || wasRejected ? 'hidden' : ''
+        }`}>
           {/* Header */}
           <div className="bg-gradient-to-r from-blue-600 to-blue-700 p-8 text-white">
             <div className="flex items-center justify-center mb-4">

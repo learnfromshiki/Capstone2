@@ -556,6 +556,15 @@ begin
 end;
 $$;
 
+-- ----------------------------------------------------------------------------
+-- 7. Gender on a customer profile
+-- ----------------------------------------------------------------------------
+alter table profiles add column if not exists gender text;
+
+alter table profiles drop constraint if exists profiles_gender_check;
+alter table profiles add constraint profiles_gender_check
+  check (gender is null or gender in ('female', 'male', 'other'));
+
 commit;
 
 -- ============================================================================

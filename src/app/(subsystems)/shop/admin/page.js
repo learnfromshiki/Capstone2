@@ -1255,6 +1255,83 @@ export default function ShopAdminPage() {
     showToast('CSV file downloaded.', 'success');
   };
 
+  /**
+   * Print the report, not the dashboard.
+   *
+   * window.print() on this page sent the sidebar, the tab strip and every
+   * button to the printer, which is what made printing look broken. The report
+   * is written into a window of its own instead, so what comes out is a clean
+   * table with a heading and a date - and "Save as PDF" from that dialog gives
+   * a usable PDF.
+   */
+  const printReport = () => {
+    if (!report || report.rows.length === 0) {
+      showToast('Generate a report with data before printing.', 'error');
+      return;
+    }
+
+    const escapeHtml = (value) =>
+      String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+
+    const head = report.columns.map((column) => `<th>${escapeHtml(column.label)}</th>`).join('');
+    const body = report.rows
+      .map(
+        (row) =>
+          `<tr>${report.columns.map((column) => `<td>${escapeHtml(row[column.key])}</td>`).join('')}</tr>`
+      )
+      .join('');
+
+    const html = `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>${escapeHtml(report.title)} - CONNECT-Daet.ph</title>
+    <style>
+      * { box-sizing: border-box; }
+      body { font-family: Arial, Helvetica, sans-serif; color: #111827; margin: 32px; }
+      h1 { font-size: 20px; margin: 0 0 4px; }
+      p.meta { font-size: 12px; color: #6b7280; margin: 0 0 20px; }
+      table { width: 100%; border-collapse: collapse; font-size: 12px; }
+      th, td { border: 1px solid #d1d5db; padding: 8px 10px; text-align: left; }
+      th { background: #f3f4f6; font-weight: bold; }
+      tr:nth-child(even) td { background: #fafafa; }
+      footer { margin-top: 24px; font-size: 11px; color: #9ca3af; }
+      @page { margin: 16mm; }
+    </style>
+  </head>
+  <body>
+    <h1>${escapeHtml(report.title)}</h1>
+    <p class="meta">${escapeHtml(report.subtitle)} &middot; Generated ${escapeHtml(report.generatedAt)}</p>
+    <table>
+      <thead><tr>${head}</tr></thead>
+      <tbody>${body}</tbody>
+    </table>
+    <footer>CONNECT-Daet.ph &middot; ${escapeHtml(String(report.rows.length))} row(s)</footer>
+  </body>
+</html>`;
+
+    const printWindow = window.open('', '_blank', 'width=900,height=700');
+
+    if (!printWindow) {
+      showToast('Your browser blocked the print window. Allow pop-ups for this site and try again.', 'error');
+      return;
+    }
+
+    printWindow.document.open();
+    printWindow.document.write(html);
+    printWindow.document.close();
+    printWindow.focus();
+
+    // Give the window a moment to lay the table out before the dialog opens.
+    setTimeout(() => {
+      printWindow.print();
+    }, 250);
+  };
+
   const updateAdminProfile = async () => {
     try {
       const { data: { session } } = await supabase.auth.getSession();
@@ -2811,7 +2888,8 @@ export default function ShopAdminPage() {
             <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
               <h4 className="font-bold text-lg mb-2">Export Data</h4>
               <p className="text-xs text-gray-600 mb-4">
-                Generate a report above, then export it. CSV opens in Excel; Print → Save as PDF gives a PDF copy.
+                Generate a report above, then export it. CSV opens in Excel; Print opens the report on its own
+                page, where &quot;Save as PDF&quot; gives you a PDF copy.
               </p>
               <div className="flex flex-wrap gap-3">
                 <button
@@ -2824,7 +2902,7 @@ export default function ShopAdminPage() {
                   Export as CSV
                 </button>
                 <button
-                  onClick={() => window.print()}
+                  onClick={printReport}
                   className="flex items-center gap-2 px-4 py-2 bg-red-100 hover:bg-red-200 text-red-700 font-semibold rounded-lg transition-colors"
                 >
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

@@ -34,8 +34,6 @@ export default function ProductDetailsModal({
   onClose,
   onAddToCart,
   onBuyNow,
-  onToggleWishlist,
-  isWishlisted = false,
 }) {
   const [quantity, setQuantity] = useState(1);
   const [draftRating, setDraftRating] = useState(5);
@@ -318,29 +316,6 @@ export default function ProductDetailsModal({
                   </button>
                 </div>
               </div>
-
-              {onToggleWishlist && (
-                <button
-                  type="button"
-                  onClick={() => onToggleWishlist(product)}
-                  aria-pressed={isWishlisted}
-                  className={`mb-2 flex w-full items-center justify-center gap-2 rounded-lg border-2 py-3 text-sm font-bold transition-colors ${
-                    isWishlisted
-                      ? 'border-red-500 bg-red-50 text-red-600'
-                      : 'border-gray-200 text-gray-700 hover:border-red-300 hover:text-red-600'
-                  }`}
-                >
-                  <svg
-                    className="h-5 w-5"
-                    fill={isWishlisted ? 'currentColor' : 'none'}
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
-                  </svg>
-                  {isWishlisted ? 'Saved to Wishlist' : 'Add to Wishlist'}
-                </button>
-              )}
 
               <div className="flex gap-2">
                 <button

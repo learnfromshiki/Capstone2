@@ -10,8 +10,6 @@ export default function ProductCard({
   sellerInfo,
   reviewSummary,
   onViewShop,
-  onToggleWishlist,
-  isWishlisted = false,
 }) {
   const categoryIcons = {
     handicrafts: '🧺',
@@ -52,32 +50,6 @@ export default function ProductCard({
           </div>
         )}
         
-        {/* Save for later: a heart in the corner of the photo, like Shopee */}
-        {onToggleWishlist && (
-          <button
-            type="button"
-            onClick={(event) => {
-              event.stopPropagation();
-              onToggleWishlist(product);
-            }}
-            aria-label={isWishlisted ? `Remove ${product.name} from your wishlist` : `Add ${product.name} to your wishlist`}
-            aria-pressed={isWishlisted}
-            title={isWishlisted ? 'Saved to your wishlist' : 'Add to wishlist'}
-            className={`absolute bottom-3 right-3 z-10 flex h-10 w-10 items-center justify-center rounded-full shadow-lg backdrop-blur-sm transition-colors ${
-              isWishlisted ? 'bg-red-500 text-white' : 'bg-white/95 text-gray-500 hover:text-red-500'
-            }`}
-          >
-            <svg
-              className="h-5 w-5"
-              fill={isWishlisted ? 'currentColor' : 'none'}
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
-            </svg>
-          </button>
-        )}
-
         {/* Category Badge */}
         {product.category && (
           <div className="absolute top-3 right-3 bg-white/95 backdrop-blur-sm text-gray-900 text-xs px-3 py-1.5 rounded-full font-semibold shadow-lg flex items-center gap-1">
