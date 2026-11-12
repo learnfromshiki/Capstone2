@@ -14,11 +14,19 @@ import { ROLE_LABELS } from '@/lib/roles';
 import { useDialog } from '@/components/ui/Dialog';
 import { cartLineId, describeSelection } from '@/lib/productOptions';
 import ChatPanel from '@/components/shop/ChatPanel';
+import { countUnread } from '@/lib/messages';
 import Avatar from '@/components/ui/Avatar';
 import AvatarUpload from '@/components/ui/AvatarUpload';
 import NotificationCenter from '@/components/ui/NotificationCenter';
 import { uploadPhotos } from '@/lib/attachments';
 import { storeSelection } from '@/lib/checkoutSelection';
+import {
+  PHONE_HINT,
+  describeNameProblem,
+  describePhoneProblem,
+  sanitizeName,
+  sanitizePhone,
+} from '@/lib/fieldRules';
 
 // What each row of the points history was earned for
 const REWARD_SOURCES = {
@@ -27,6 +35,10 @@ const REWARD_SOURCES = {
   event_attendance: 'Event attendance',
   signup_bonus: 'Welcome bonus',
 };
+
+// Shopee and Lazada both stop at five, and more than that is unreadable in a
+// review card anyway.
+const MAX_REVIEW_PHOTOS = 5;
 
 const ORDER_STEPS = [
   { key: 'pending', label: 'Placed' },
@@ -95,6 +107,11 @@ export default function BuyerDashboard() {
   const [pointsHistory, setPointsHistory] = useState([]);
   // Which cart lines the customer wants to pay for now
   const [selectedLines, setSelectedLines] = useState([]);
+  // Unread replies from shops, for the badge on the messages icon
+  const [unreadMessages, setUnreadMessages] = useState(0);
+  // What a notification pointed at: one conversation, or one order to scroll to
+  const [openConversationId, setOpenConversationId] = useState(null);
+  const [highlightOrderId, setHighlightOrderId] = useState(null);
   const [suspended, setSuspended] = useState(false);
   const [cancellingOrderId, setCancellingOrderId] = useState(null);
   const [confirmingOrderId, setConfirmingOrderId] = useState(null);
@@ -124,18 +141,34 @@ export default function BuyerDashboard() {
   }, []);
   const [shopSettings, setShopSettings] = useState(null);
 
-  // Open a specific tab from a link, e.g. "Track my order" after checkout
-  // goes to /shop/buyer?tab=orders.
+  // Open exactly what a link points at: a tab, and the order or conversation
+  // inside it. Notifications link this way, so tapping one lands on the thing
+  // it is about rather than on the top of a list.
   useEffect(() => {
     try {
-      const tab = new URLSearchParams(window.location.search).get('tab');
+      const params = new URLSearchParams(window.location.search);
+      const tab = params.get('tab');
+      const conversation = params.get('conversation');
+      const order = params.get('order');
+
       if (['orders', 'cart', 'messages', 'reviews', 'rewards', 'settings'].includes(tab)) {
         setActiveTab(tab);
       }
+
+      if (conversation) setOpenConversationId(conversation);
+      if (order) setHighlightOrderId(order);
     } catch (error) {
       console.error('Could not read the requested tab:', error);
     }
   }, []);
+
+  // Bring the order a notification pointed at into view, once it has loaded.
+  useEffect(() => {
+    if (!highlightOrderId || activeTab !== 'orders' || orders.length === 0) return;
+
+    const node = document.getElementById(`order-${highlightOrderId}`);
+    if (node) node.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, [highlightOrderId, activeTab, orders]);
 
   // Contact and payment details from Admin -> Settings
   useEffect(() => {
@@ -315,6 +348,26 @@ export default function BuyerDashboard() {
     });
   }, [cart]);
 
+  // Keep the badge on the messages icon honest while the dashboard is open.
+  useEffect(() => {
+    if (!user?.id) return undefined;
+
+    let cancelled = false;
+    const refresh = () => {
+      countUnread('buyer').then((count) => {
+        if (!cancelled) setUnreadMessages(count);
+      });
+    };
+
+    refresh();
+    const timer = setInterval(refresh, 30000);
+
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [user?.id, activeTab]);
+
   const toggleCartLine = (lineId) =>
     setSelectedLines((current) =>
       current.includes(lineId) ? current.filter((id) => id !== lineId) : [...current, lineId]
@@ -399,12 +452,25 @@ export default function BuyerDashboard() {
     setSavingProfile(true);
 
     try {
-      const fullName = joinName(profileForm.first_name, profileForm.last_name);
-
-      if (!fullName) {
-        showAlert('Please enter your first and last name.');
+      const firstNameProblem = describeNameProblem(profileForm.first_name, 'first name');
+      if (firstNameProblem) {
+        showAlert(firstNameProblem);
         return;
       }
+
+      const lastNameProblem = describeNameProblem(profileForm.last_name, 'last name');
+      if (lastNameProblem) {
+        showAlert(lastNameProblem);
+        return;
+      }
+
+      const phoneProblem = describePhoneProblem(profileForm.phone, { required: false });
+      if (phoneProblem) {
+        showAlert(phoneProblem);
+        return;
+      }
+
+      const fullName = joinName(profileForm.first_name, profileForm.last_name);
 
       const base = {
         full_name: fullName,
@@ -459,10 +525,22 @@ export default function BuyerDashboard() {
 
     setReviewDrafts((prev) => {
       const draft = prev[productId] || { rating: 5, comment: '', photos: [] };
+      const current = draft.photos || [];
+      const room = MAX_REVIEW_PHOTOS - current.length;
+
+      if (room <= 0) {
+        showToast(`A review can have at most ${MAX_REVIEW_PHOTOS} photos.`, 'info');
+        return prev;
+      }
+
+      if (chosen.length > room) {
+        showToast(`Only ${room} more ${room === 1 ? 'photo' : 'photos'} fit on this review.`, 'info');
+      }
+
       const photos = [
-        ...(draft.photos || []),
-        ...chosen.map((file) => ({ file, preview: URL.createObjectURL(file) })),
-      ].slice(0, 5);
+        ...current,
+        ...chosen.slice(0, room).map((file) => ({ file, preview: URL.createObjectURL(file) })),
+      ];
 
       return { ...prev, [productId]: { ...draft, photos } };
     });
@@ -700,24 +778,60 @@ export default function BuyerDashboard() {
                   audience="customer"
                   emptyMessage="Nothing new yet. Order updates and replies from shops appear here."
                   onNavigate={(link) => {
-                    const tab = new URL(link, window.location.origin).searchParams.get('tab');
-                    if (link.startsWith('/shop/buyer') && tab) setActiveTab(tab);
-                    else window.location.href = link;
+                    const url = new URL(link, window.location.origin);
+
+                    if (!url.pathname.startsWith('/shop/buyer')) {
+                      window.location.href = link;
+                      return;
+                    }
+
+                    const tab = url.searchParams.get('tab');
+                    const conversation = url.searchParams.get('conversation');
+                    const order = url.searchParams.get('order');
+
+                    if (tab) setActiveTab(tab);
+                    if (conversation) setOpenConversationId(conversation);
+                    setHighlightOrderId(order || null);
                   }}
                 />
               </div>
-              <div className="hidden items-center gap-2 sm:flex">
+              {/* Messages stay one tap away here too: the icon in the shop
+                  header used to vanish the moment you opened your account. */}
+              <button
+                type="button"
+                onClick={() => setActiveTab('messages')}
+                aria-label={unreadMessages > 0 ? `Messages, ${unreadMessages} unread` : 'Messages'}
+                title="Messages"
+                className="relative flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full text-white transition-colors hover:bg-white/20"
+              >
+                <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                </svg>
+                {unreadMessages > 0 && (
+                  <span className="absolute right-1 top-1 flex h-5 min-w-[20px] items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">
+                    {unreadMessages > 99 ? '99+' : unreadMessages}
+                  </span>
+                )}
+              </button>
+
+              {/* Your own name and picture open your profile */}
+              <button
+                type="button"
+                onClick={() => setActiveTab('settings')}
+                title="View my profile"
+                className="hidden items-center gap-2 rounded-lg px-2 py-1 transition-colors hover:bg-white/10 sm:flex"
+              >
                 <Avatar src={profile?.avatar_url} name={profile?.full_name} email={user?.email} size="sm" />
-                <div className="max-w-[12rem] text-right">
-                  <p className="truncate text-sm font-semibold">{profile?.full_name || user?.email}</p>
-                  <p className="text-xs text-white/80">Customer</p>
-                </div>
-              </div>
+                <span className="max-w-[12rem] text-right">
+                  <span className="block truncate text-sm font-semibold">{profile?.full_name || user?.email}</span>
+                  <span className="block text-xs text-white/80">View my profile</span>
+                </span>
+              </button>
               {/* The tab strip below carries Log Out on phones, so this one
                   only appears once there is room for it. */}
               <button
                 onClick={handleLogout}
-                className="hidden min-h-[44px] rounded-lg bg-white/10 px-4 text-sm font-medium transition-colors hover:bg-white/20 sm:block"
+                className="hidden min-h-[44px] rounded-lg bg-red-600 px-4 text-sm font-semibold text-white transition-colors hover:bg-red-700 sm:block"
               >
                 Log Out
               </button>
@@ -912,7 +1026,15 @@ export default function BuyerDashboard() {
                   ) : (
                     <div className="space-y-4">
                       {orders.map((order) => (
-                        <div key={order.id} className="border border-gray-200 rounded-lg p-6 hover:border-blue-300 transition-colors">
+                        <div
+                          key={order.id}
+                          id={`order-${order.id}`}
+                          className={`rounded-lg border p-6 transition-colors ${
+                            highlightOrderId === order.id
+                              ? 'border-blue-500 ring-2 ring-blue-200'
+                              : 'border-gray-200 hover:border-blue-300'
+                          }`}
+                        >
                           <div className="flex flex-col gap-2 sm:flex-row sm:justify-between sm:items-start mb-4">
                             <div>
                               <p className="text-sm text-gray-600">Order <span className="font-mono font-semibold text-blue-600">{formatOrderNumber(order.id)}</span></p>
@@ -1050,7 +1172,11 @@ export default function BuyerDashboard() {
                   </svg>
                   Back to my orders
                 </button>
-                <ChatPanel role="buyer" shopNameById={shopNames} />
+                <ChatPanel
+                  role="buyer"
+                  shopNameById={shopNames}
+                  activeConversationId={openConversationId}
+                />
               </div>
             )}
 
@@ -1328,26 +1454,57 @@ export default function BuyerDashboard() {
                                   </div>
                                 ))}
 
-                                {(draft.photos || []).length < 5 && (
-                                  <label className="flex h-16 w-16 cursor-pointer flex-col items-center justify-center gap-0.5 rounded-lg border-2 border-dashed border-gray-300 text-gray-500 transition-colors hover:border-blue-500 hover:text-blue-600">
-                                    <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
-                                    </svg>
-                                    <span className="text-[10px] font-semibold">Photo</span>
-                                    <input
-                                      type="file"
-                                      accept="image/*"
-                                      multiple
-                                      onChange={(event) => {
-                                        addReviewPhotos(item.product_id, event.target.files);
-                                        event.target.value = '';
-                                      }}
-                                      className="hidden"
-                                    />
-                                  </label>
+                                {(draft.photos || []).length < MAX_REVIEW_PHOTOS && (
+                                  <>
+                                    {/* `capture` asks the phone for its camera
+                                        rather than its gallery; a laptop opens
+                                        the usual file picker instead. */}
+                                    <label
+                                      title="Take a photo"
+                                      className="flex h-16 w-16 cursor-pointer flex-col items-center justify-center gap-0.5 rounded-lg border-2 border-blue-200 bg-blue-50 text-blue-600 transition-colors hover:border-blue-500 hover:bg-blue-100"
+                                    >
+                                      <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                                      </svg>
+                                      <span className="text-[10px] font-semibold">Camera</span>
+                                      <input
+                                        type="file"
+                                        accept="image/*"
+                                        capture="environment"
+                                        onChange={(event) => {
+                                          addReviewPhotos(item.product_id, event.target.files);
+                                          event.target.value = '';
+                                        }}
+                                        className="hidden"
+                                      />
+                                    </label>
+
+                                    <label
+                                      title="Choose photos"
+                                      className="flex h-16 w-16 cursor-pointer flex-col items-center justify-center gap-0.5 rounded-lg border-2 border-dashed border-gray-300 text-gray-500 transition-colors hover:border-blue-500 hover:text-blue-600"
+                                    >
+                                      <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                      </svg>
+                                      <span className="text-[10px] font-semibold">Gallery</span>
+                                      <input
+                                        type="file"
+                                        accept="image/*"
+                                        multiple
+                                        onChange={(event) => {
+                                          addReviewPhotos(item.product_id, event.target.files);
+                                          event.target.value = '';
+                                        }}
+                                        className="hidden"
+                                      />
+                                    </label>
+                                  </>
                                 )}
                               </div>
+                              <p className="mt-1 text-xs text-gray-500">
+                                {(draft.photos || []).length}/{MAX_REVIEW_PHOTOS} photos
+                              </p>
 
                               <div className="mt-2 flex items-center justify-between gap-3">
                                 <button
@@ -1546,7 +1703,7 @@ export default function BuyerDashboard() {
                           id="profileFirstName"
                           type="text"
                           value={profileForm.first_name}
-                          onChange={(e) => setProfileForm({ ...profileForm, first_name: e.target.value })}
+                          onChange={(e) => setProfileForm({ ...profileForm, first_name: sanitizeName(e.target.value) })}
                           autoComplete="given-name"
                           maxLength={60}
                           className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -1561,7 +1718,7 @@ export default function BuyerDashboard() {
                           id="profileLastName"
                           type="text"
                           value={profileForm.last_name}
-                          onChange={(e) => setProfileForm({ ...profileForm, last_name: e.target.value })}
+                          onChange={(e) => setProfileForm({ ...profileForm, last_name: sanitizeName(e.target.value) })}
                           autoComplete="family-name"
                           maxLength={60}
                           className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -1580,14 +1737,20 @@ export default function BuyerDashboard() {
                       <p className="text-xs text-gray-500 mt-1">Your login email cannot be changed here.</p>
                     </div>
                     <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-2">Phone Number</label>
+                      <label htmlFor="profilePhone" className="block text-sm font-semibold text-gray-700 mb-2">
+                        Mobile Number
+                      </label>
                       <input
+                        id="profilePhone"
                         type="tel"
+                        inputMode="numeric"
                         value={profileForm.phone}
-                        onChange={(e) => setProfileForm({ ...profileForm, phone: e.target.value })}
-                        className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        placeholder="+63 XXX XXX XXXX"
+                        onChange={(e) => setProfileForm({ ...profileForm, phone: sanitizePhone(e.target.value) })}
+                        maxLength={11}
+                        className="w-full min-h-[44px] px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        placeholder="09171234567"
                       />
+                      <p className="mt-1 text-xs text-gray-500">{PHONE_HINT}</p>
                     </div>
                     <div>
                       <label htmlFor="profileGender" className="block text-sm font-semibold text-gray-700 mb-2">

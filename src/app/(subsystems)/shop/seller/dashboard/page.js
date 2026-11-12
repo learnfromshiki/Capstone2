@@ -7,7 +7,17 @@ import { supabase } from '@/lib/supabaseClient';
 import { uploadProductImage } from '@/lib/imageUpload';
 import { formatOrderNumber, getAllowedStatuses, PAYMENT_LABELS, STATUS_LABELS, transitionOrderStatus } from '@/lib/orders';
 import ChangePasswordCard from '@/components/ChangePasswordCard';
+import {
+  PHONE_HINT,
+  describeNameProblem,
+  describePhoneProblem,
+  describePriceProblem,
+  sanitizeName,
+  sanitizePhone,
+  sanitizePrice,
+} from '@/lib/fieldRules';
 import SellerPaymentSettings from '@/components/shop/SellerPaymentSettings';
+import ProductReviewsModal from '@/components/shop/ProductReviewsModal';
 import PaymentProof from '@/components/shop/PaymentProof';
 import { fetchProfileRow, joinName, splitName } from '@/lib/profile';
 import { describeSelection, readOptions } from '@/lib/productOptions';
@@ -120,6 +130,8 @@ export default function SellerDashboard() {
   const [activeTab, setActiveTab] = useState('dashboard');
   // Which stage of the Orders tab is showing
   const [orderStage, setOrderStage] = useState('all');
+  // A product a notification pointed at, so its reviews open on arrival
+  const [highlightProductId, setHighlightProductId] = useState(null);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [imagePreview, setImagePreview] = useState('');
   const [uploadingLogo, setUploadingLogo] = useState(false);
@@ -172,6 +184,26 @@ export default function SellerDashboard() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, seller, authLoading, router, activeTab]);
+
+  // Open exactly what a link points at. A notification opened in another tab,
+  // or from a phone's notification shade, arrives as a URL rather than as a
+  // click inside this page, so the same parts are read here too.
+  useEffect(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const tab = params.get('tab');
+      const conversation = params.get('conversation');
+      const order = params.get('order');
+      const product = params.get('product');
+
+      if (tab) setActiveTab(tab);
+      if (conversation) setOpenConversationId(conversation);
+      if (product) setHighlightProductId(product);
+      if (order) setSearchQuery(order);
+    } catch (error) {
+      console.error('Could not read the requested tab:', error);
+    }
+  }, []);
 
   // Seed the editable shop settings form from the seller record
   useEffect(() => {
@@ -512,14 +544,41 @@ export default function SellerDashboard() {
       return;
     }
 
-    if (!Number.isFinite(price) || price <= 0) {
-      showAlert('Price must be greater than zero.');
+    const priceProblem = describePriceProblem(newProduct.price);
+    if (priceProblem) {
+      showAlert(priceProblem);
       return;
     }
 
     if (!Number.isInteger(stock) || stock < 0) {
       showAlert('Stock must be a whole number of zero or more.');
       return;
+    }
+
+    // Two products with the same name in one shop are impossible to tell
+    // apart in a cart, an order or a review, so the name has to be new.
+    // Compared without case, because "Adobong Manok" and "adobong manok"
+    // are the same thing to a customer.
+    try {
+      let duplicateQuery = supabase
+        .from('shop_products')
+        .select('id')
+        .eq('seller_id', seller.id)
+        .ilike('name', name)
+        .limit(1);
+
+      if (editingProductId) duplicateQuery = duplicateQuery.neq('id', editingProductId);
+
+      const { data: duplicates, error: duplicateError } = await duplicateQuery;
+
+      if (duplicateError) {
+        console.warn('Could not check for a duplicate product name:', duplicateError.message);
+      } else if (duplicates && duplicates.length > 0) {
+        showAlert(`You already have a product called "${name}". Please use a different name.`);
+        return;
+      }
+    } catch (duplicateError) {
+      console.warn('Could not check for a duplicate product name:', duplicateError);
     }
 
     if (!newProduct.image_url) {
@@ -757,13 +816,52 @@ export default function SellerDashboard() {
     };
   }, [user]);
 
-  const handleSaveOwnerName = async () => {
-    const fullName = joinName(ownerName.first_name, ownerName.last_name);
+  /**
+   * Open what a notification is about, not just the tab it lives on: the
+   * order itself, the conversation itself, that product's reviews.
+   */
+  const openNotificationLink = (link) => {
+    try {
+      const url = new URL(link, window.location.origin);
 
-    if (!fullName) {
-      setSettingsFeedback({ type: 'error', text: 'Please enter your first and last name.' });
+      // A link to another part of the site is a plain navigation.
+      if (!url.pathname.startsWith('/shop/seller/dashboard')) {
+        window.location.href = link;
+        return;
+      }
+
+      const tab = url.searchParams.get('tab');
+      const conversation = url.searchParams.get('conversation');
+      const order = url.searchParams.get('order');
+      const product = url.searchParams.get('product');
+
+      if (tab) setActiveTab(tab);
+      if (conversation) setOpenConversationId(conversation);
+      if (product) setHighlightProductId(product);
+
+      // Search is how this dashboard narrows a long list, so pointing it at
+      // the order number puts that one order on screen on its own.
+      if (order) setSearchQuery(order);
+      else if (!product) setSearchQuery('');
+    } catch (error) {
+      console.warn('Could not follow that notification:', error);
+    }
+  };
+
+  const handleSaveOwnerName = async () => {
+    const firstNameProblem = describeNameProblem(ownerName.first_name, 'first name');
+    if (firstNameProblem) {
+      setSettingsFeedback({ type: 'error', text: firstNameProblem });
       return;
     }
+
+    const lastNameProblem = describeNameProblem(ownerName.last_name, 'last name');
+    if (lastNameProblem) {
+      setSettingsFeedback({ type: 'error', text: lastNameProblem });
+      return;
+    }
+
+    const fullName = joinName(ownerName.first_name, ownerName.last_name);
 
     setSavingOwnerName(true);
     setSettingsFeedback({ type: '', text: '' });
@@ -817,6 +915,12 @@ export default function SellerDashboard() {
   }, [seller?.id, activeTab]);
 
   const handleSaveShopProfile = async () => {
+    const phoneProblem = describePhoneProblem(profileForm.contact_phone, { required: false });
+    if (phoneProblem) {
+      setSettingsFeedback({ type: 'error', text: phoneProblem });
+      return;
+    }
+
     setSavingProfile(true);
     setSettingsFeedback({ type: '', text: '' });
 
@@ -1210,7 +1314,7 @@ export default function SellerDashboard() {
         <div className="p-4 border-t border-blue-800">
           <button
             onClick={handleLogout}
-            className="w-full flex items-center gap-3 px-4 py-3 text-left bg-blue-800 hover:bg-blue-700 rounded-lg transition-colors"
+            className="w-full flex items-center gap-3 px-4 py-3 text-left bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
@@ -1240,22 +1344,41 @@ export default function SellerDashboard() {
             </div>
           </div>
           <div className="flex items-center justify-between gap-4 sm:justify-end">
+            <button
+              type="button"
+              onClick={() => setActiveTab('messages')}
+              aria-label={unreadMessages > 0 ? `Messages, ${unreadMessages} unread` : 'Messages'}
+              title="Messages"
+              className="relative flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900"
+            >
+              <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+              </svg>
+              {unreadMessages > 0 && (
+                <span className="absolute right-1 top-1 flex h-5 min-w-[20px] items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">
+                  {unreadMessages > 99 ? '99+' : unreadMessages}
+                </span>
+              )}
+            </button>
             <NotificationCenter
               audience="seller"
               emptyMessage="Nothing new. Your shop is all caught up."
               items={sellerNotifications}
-              onNavigate={(link) => {
-                const tab = new URL(link, window.location.origin).searchParams.get('tab');
-                if (tab) setActiveTab(tab);
-              }}
+              onNavigate={(link) => openNotificationLink(link)}
             />
-            <div className="flex items-center gap-2">
+            {/* Your own name and picture open your profile */}
+            <button
+              type="button"
+              onClick={() => setActiveTab('profile')}
+              title="View my profile"
+              className="flex items-center gap-2 rounded-lg px-2 py-1 transition-colors hover:bg-gray-100"
+            >
               <Avatar src={avatarUrl} name={joinName(ownerName.first_name, ownerName.last_name)} email={user?.email} size="md" />
-              <div className="max-w-[10rem] text-left sm:max-w-none sm:text-right">
-                <p className="truncate text-sm font-semibold text-gray-900">{seller.business_name}</p>
-                <p className="text-xs text-gray-600">Seller</p>
-              </div>
-            </div>
+              <span className="max-w-[10rem] text-left sm:max-w-none sm:text-right">
+                <span className="block truncate text-sm font-semibold text-gray-900">{seller.business_name}</span>
+                <span className="block text-xs text-gray-600">View my profile</span>
+              </span>
+            </button>
           </div>
         </header>
 
@@ -1672,6 +1795,12 @@ export default function SellerDashboard() {
                             Edit
                           </button>
                           <button
+                            onClick={() => setHighlightProductId(product.id)}
+                            className="min-h-[44px] px-3 py-1.5 text-xs font-medium rounded-lg bg-yellow-100 text-yellow-700 hover:bg-yellow-200"
+                          >
+                            Reviews
+                          </button>
+                          <button
                             onClick={() => handleToggleAvailability(product.id, product.available)}
                             className="min-h-[44px] px-3 py-1.5 text-xs font-medium rounded-lg bg-blue-100 text-blue-700 hover:bg-blue-200"
                           >
@@ -1979,13 +2108,20 @@ export default function SellerDashboard() {
                   <p className="text-xs text-gray-500 mt-1">Your login email cannot be changed here.</p>
                 </div>
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">Contact Phone</label>
+                  <label htmlFor="shopPhone" className="block text-sm font-semibold text-gray-700 mb-2">
+                    Contact Phone
+                  </label>
                   <input
+                    id="shopPhone"
                     type="tel"
+                    inputMode="numeric"
+                    maxLength={11}
                     value={profileForm.contact_phone}
-                    onChange={(e) => setProfileForm({ ...profileForm, contact_phone: e.target.value })}
-                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    onChange={(e) => setProfileForm({ ...profileForm, contact_phone: sanitizePhone(e.target.value) })}
+                    placeholder="09171234567"
+                    className="w-full min-h-[44px] px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   />
+                  <p className="mt-1 text-xs text-gray-500">{PHONE_HINT}</p>
                 </div>
 
                 <button
@@ -2065,7 +2201,7 @@ export default function SellerDashboard() {
                         id="ownerFirstName"
                         type="text"
                         value={ownerName.first_name}
-                        onChange={(e) => setOwnerName({ ...ownerName, first_name: e.target.value })}
+                        onChange={(e) => setOwnerName({ ...ownerName, first_name: sanitizeName(e.target.value) })}
                         autoComplete="given-name"
                         maxLength={60}
                         placeholder="Juan"
@@ -2080,7 +2216,7 @@ export default function SellerDashboard() {
                         id="ownerLastName"
                         type="text"
                         value={ownerName.last_name}
-                        onChange={(e) => setOwnerName({ ...ownerName, last_name: e.target.value })}
+                        onChange={(e) => setOwnerName({ ...ownerName, last_name: sanitizeName(e.target.value) })}
                         autoComplete="family-name"
                         maxLength={60}
                         placeholder="Dela Cruz"
@@ -2117,14 +2253,20 @@ export default function SellerDashboard() {
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-2">Contact Phone</label>
+                    <label htmlFor="profilePhone" className="block text-sm font-semibold text-gray-700 mb-2">
+                      Contact Phone
+                    </label>
                     <input
+                      id="profilePhone"
                       type="tel"
+                      inputMode="numeric"
+                      maxLength={11}
                       value={profileForm.contact_phone}
-                      onChange={(e) => setProfileForm({ ...profileForm, contact_phone: e.target.value })}
-                      placeholder="Not provided"
-                      className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      onChange={(e) => setProfileForm({ ...profileForm, contact_phone: sanitizePhone(e.target.value) })}
+                      placeholder="09171234567"
+                      className="w-full min-h-[44px] px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     />
+                    <p className="mt-1 text-xs text-gray-500">{PHONE_HINT}</p>
                   </div>
                   <div>
                     <label className="block text-sm font-semibold text-gray-700 mb-2">Member Since</label>
@@ -2239,15 +2381,19 @@ export default function SellerDashboard() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-semibold mb-2">Price (₱) *</label>
+                  <label htmlFor="productPrice" className="block text-sm font-semibold mb-2">Price (₱) *</label>
                   <input
-                    type="number"
-                    step="0.01"
+                    id="productPrice"
+                    type="text"
+                    inputMode="decimal"
                     value={newProduct.price}
-                    onChange={(e) => setNewProduct({ ...newProduct, price: e.target.value })}
-                    className="w-full px-4 py-3 border-2 rounded-xl focus:ring-2 focus:ring-blue-500"
+                    onChange={(e) => setNewProduct({ ...newProduct, price: sanitizePrice(e.target.value) })}
+                    placeholder="1.50"
+                    maxLength={10}
+                    className="w-full min-h-[44px] px-4 py-3 border-2 rounded-xl focus:ring-2 focus:ring-blue-500"
                     required
                   />
+                  <p className="mt-1 text-xs text-gray-500">Centavos are fine, for example 1.50 or 249.99.</p>
                 </div>
 
                 <div>
@@ -2533,6 +2679,13 @@ export default function SellerDashboard() {
           </div>
         </div>
       )}
+
+      {/* The reviews a product has received, opened from its row or straight
+          from a "new review" notification. */}
+      <ProductReviewsModal
+        product={products.find((entry) => entry.id === highlightProductId) || null}
+        onClose={() => setHighlightProductId(null)}
+      />
     </div>
   );
 }

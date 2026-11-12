@@ -123,9 +123,11 @@ export const uploadProfileImage = async (file) => {
       throw new Error('Please choose a JPG, PNG, GIF or WebP image.');
     }
 
-    const maxSize = 2 * 1024 * 1024; // 2MB
+    // Phone cameras produce 4-8MB photos, so 2MB turned away most of what
+    // people actually tried to upload.
+    const maxSize = 10 * 1024 * 1024; // 10MB
     if (file.size > maxSize) {
-      throw new Error('That picture is too large. Please choose one under 2MB.');
+      throw new Error('That picture is too large. Please choose one under 10MB.');
     }
 
     const { data: authData } = await supabase.auth.getUser();

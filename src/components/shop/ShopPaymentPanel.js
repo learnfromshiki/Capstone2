@@ -50,7 +50,7 @@ export default function ShopPaymentPanel({ method, groups, receipts, onChange })
               <p className="text-lg font-bold text-blue-700">₱{group.amount.toFixed(2)}</p>
             </div>
 
-            <div className="mt-3 flex flex-wrap items-start gap-4">
+            <div className="mt-3 flex flex-col items-start gap-4 sm:flex-row sm:flex-wrap">
               {qr && (
                 <button
                   type="button"
@@ -142,7 +142,7 @@ export default function ShopPaymentPanel({ method, groups, receipts, onChange })
                     }
                     placeholder="Reference number (optional)"
                     aria-label={`Reference number for ${group.name}`}
-                    className="min-h-[44px] w-56 rounded-lg border-2 border-gray-200 px-3 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+                    className="min-h-[44px] w-full max-w-[14rem] rounded-lg border-2 border-gray-200 px-3 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
               </div>

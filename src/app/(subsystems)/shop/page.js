@@ -10,6 +10,7 @@ import ProductDetailsModal from '@/components/shop/ProductDetailsModal';
 import AuthModal from '@/components/AuthModal';
 import { useDialog } from '@/components/ui/Dialog';
 import NotificationCenter from '@/components/ui/NotificationCenter';
+import Avatar from '@/components/ui/Avatar';
 import { uploadPhotos } from '@/lib/attachments';
 import ShopProfileModal from '@/components/shop/ShopProfileModal';
 import ProductOptionsModal from '@/components/shop/ProductOptionsModal';
@@ -626,11 +627,11 @@ export default function ShopPage() {
     .filter((p) => {
       const matchesCategory = filter === 'all' || p.category === filter;
       const matchesStock = !inStockOnly || (Number(p.stock) || 0) > 0;
-      const sellerName = sellers[p.seller_id]?.business_name || '';
+      // The search box looks for the product's name and nothing else.
+      // Matching descriptions as well meant typing "wood" returned anything
+      // whose write-up mentioned wood, which made the results look random.
       const matchesSearch =
-        normalizedQuery === '' ||
-        [p.name, p.description, p.artisan_name, p.category, sellerName]
-          .some((value) => String(value || '').toLowerCase().includes(normalizedQuery));
+        normalizedQuery === '' || String(p.name || '').toLowerCase().includes(normalizedQuery);
       return matchesCategory && matchesStock && matchesSearch;
     })
     .sort((a, b) => {
@@ -671,23 +672,36 @@ export default function ShopPage() {
       <header className="bg-white border-b sticky top-0 z-50 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
-            {/* Logo/Brand */}
-            <Link href="/" className="flex items-center gap-3">
+            {/* Logo/Brand: back to the front of the shop, cleared of any
+                search, category or product the customer had open. */}
+            <Link
+              href="/shop"
+              aria-label="Back to the shop home page"
+              onClick={() => {
+                setSearchQuery('');
+                setFilter('all');
+                setSelectedProduct(null);
+                setSelectedSellerId(null);
+                setShowCart(false);
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              }}
+              className="flex items-center gap-3"
+            >
               <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-blue-700 rounded-lg flex items-center justify-center">
                 <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
                 </svg>
               </div>
-              <div>
+              <div className="hidden sm:block">
                 <h1 className="text-lg font-bold text-gray-900">Daet Local Shop</h1>
                 <p className="text-xs text-gray-500">Authentic Bicol Products</p>
               </div>
             </Link>
 
             {/* Actions */}
-            <div className="flex items-center gap-2 sm:gap-4">
+            <div className="flex items-center gap-1 sm:gap-4">
               {user ? (
-                <div className="flex items-center gap-2 sm:gap-3">
+                <div className="flex items-center gap-1 sm:gap-3">
                   {/* Replies from shops and order updates, for a shopper who
                       never leaves the storefront. */}
                   {role !== 'admin' && role !== 'seller' && (
@@ -715,28 +729,35 @@ export default function ShopPage() {
                       />
                     </>
                   )}
+                  {/* The whole pill is the link, picture included, so tapping
+                      anywhere on your own name opens your account rather than
+                      only the few words of text in the middle of it. */}
                   <Link
                     href={accountHref}
                     aria-label={accountLabel}
-                    className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 sm:hidden"
+                    title={accountLabel}
+                    className="flex min-h-[44px] items-center gap-2 rounded-lg bg-blue-50 px-2 text-blue-700 transition-colors hover:bg-blue-100 sm:px-3"
                   >
-                    <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" />
-                    </svg>
+                    <Avatar
+                      src={profile?.avatar_url}
+                      name={profile?.full_name}
+                      email={user?.email}
+                      size="sm"
+                    />
+                    <span className="hidden max-w-[10rem] truncate text-sm font-medium text-gray-700 sm:block">
+                      {profile?.full_name || accountLabel}
+                    </span>
                   </Link>
-                  <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 bg-blue-50 rounded-lg">
-                    <svg className="w-4 h-4 text-blue-600" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" />
-                    </svg>
-                    <Link href={accountHref} className="text-sm font-medium text-gray-700 hover:text-blue-600">
-                      {accountLabel}
-                    </Link>
-                  </div>
                   <button
                     onClick={confirmSignOut}
-                    className="min-h-[44px] px-2 text-sm text-gray-600 hover:text-gray-900 font-medium"
+                    aria-label="Log out"
+                    title="Log out"
+                    className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg px-2 text-sm font-semibold text-red-600 transition-colors hover:bg-red-50"
                   >
-                    Logout
+                    <svg className="h-5 w-5 sm:hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                    </svg>
+                    <span className="hidden sm:inline">Logout</span>
                   </button>
                 </div>
               ) : (
@@ -750,7 +771,7 @@ export default function ShopPage() {
               
               <button
                 onClick={() => setShowCart(!showCart)}
-                className="relative bg-blue-600 text-white rounded-lg px-4 py-3 hover:bg-blue-700 transition-all shadow-sm hover:shadow flex items-center gap-2"
+                className="relative flex min-h-[44px] items-center gap-2 rounded-lg bg-blue-600 px-3 text-white shadow-sm transition-all hover:bg-blue-700 hover:shadow sm:px-4"
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
@@ -775,9 +796,9 @@ export default function ShopPage() {
 
       {/* Search and Filter Bar */}
       <div className="bg-white border-b sticky top-16 z-40">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3">
           {/* Search Bar */}
-          <div className="mb-4">
+          <div className="mb-3">
             <div className="relative max-w-2xl mx-auto">
               {/* "text", not "search": a search input draws its own clear X in
                   Chrome, which doubled up with our styled clear button below. */}
@@ -786,8 +807,8 @@ export default function ShopPage() {
                 aria-label="Search products"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search for products, sellers, artisans, categories..."
-                className="w-full px-6 py-3.5 pl-12 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all text-sm"
+                placeholder="Search products by name..."
+                className="w-full min-h-[44px] rounded-xl border-2 border-gray-200 px-6 pl-12 text-sm transition-all focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
               />
               <svg className="w-5 h-5 text-gray-400 absolute left-4 top-1/2 transform -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
@@ -805,20 +826,25 @@ export default function ShopPage() {
             </div>
           </div>
           
-          {/* Category Tabs */}
-          <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
+          {/* Category Tabs. The emoji is a fixed-width inline-flex box so the
+              label sits on the same line as its icon on every chip, whatever
+              the emoji's own height, and the selected chip is marked with a
+              ring rather than scale-105, which used to overlap its neighbours. */}
+          <div className="-mx-1 flex gap-2.5 overflow-x-auto px-1 py-1 scrollbar-hide">
             {categories.map((category) => (
               <button
                 key={category.value}
                 onClick={() => setFilter(category.value)}
-                className={`flex items-center gap-2 px-5 py-2.5 rounded-lg whitespace-nowrap font-medium transition-all ${
+                className={`flex min-h-[44px] flex-shrink-0 items-center gap-2 whitespace-nowrap rounded-lg px-4 font-medium transition-colors ${
                   filter === category.value
-                    ? 'bg-blue-600 text-white shadow-md scale-105'
+                    ? 'bg-blue-600 text-white shadow-md ring-2 ring-blue-300'
                     : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                 }`}
               >
-                <span>{category.icon}</span>
-                <span className="text-sm">{category.label}</span>
+                <span aria-hidden="true" className="inline-flex w-5 justify-center text-base leading-none">
+                  {category.icon}
+                </span>
+                <span className="text-sm leading-none">{category.label}</span>
               </button>
             ))}
           </div>

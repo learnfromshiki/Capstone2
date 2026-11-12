@@ -11,6 +11,9 @@ export default function ProductCard({
   reviewSummary,
   onViewShop,
 }) {
+  // One reading of the stock for the badge, the label and the buttons, so they
+  // can never disagree about whether something is sold out.
+  const stock = Number(product.stock) || 0;
   const categoryIcons = {
     handicrafts: '🧺',
     food: '🍽️',
@@ -23,7 +26,7 @@ export default function ProductCard({
     <div className="group bg-white rounded-xl border border-gray-200 overflow-hidden hover:shadow-2xl hover:border-blue-300 transition-all duration-300 transform hover:-translate-y-1">
       {/* Product Image */}
       <div
-        className="relative h-56 bg-gradient-to-br from-gray-100 to-gray-200 overflow-hidden cursor-pointer"
+        className="relative aspect-[4/3] max-h-44 bg-gradient-to-br from-gray-100 to-gray-200 overflow-hidden cursor-pointer"
         onClick={() => onViewDetails && onViewDetails(product)}
         role="button"
         tabIndex={0}
@@ -58,25 +61,29 @@ export default function ProductCard({
           </div>
         )}
 
-        {/* Stock Badge */}
-        {product.stock <= 5 && product.stock > 0 && (
+        {/* Stock Badge. Read through Number() so a stock of null, or of "0"
+            coming back from the database as text, still counts as sold out. */}
+        {stock > 0 && stock <= 5 && (
           <div className="absolute top-3 left-3 bg-yellow-500 text-white text-xs px-3 py-1.5 rounded-full font-bold shadow-lg">
-            Only {product.stock} left!
+            Only {stock} left!
           </div>
         )}
-        {product.stock === 0 && (
-          <div className="absolute top-3 left-3 bg-red-500 text-white text-xs px-3 py-1.5 rounded-full font-bold shadow-lg">
-            Sold Out
-          </div>
+        {stock <= 0 && (
+          <>
+            <div className="absolute inset-0 bg-white/60" aria-hidden="true" />
+            <div className="absolute top-3 left-3 bg-red-500 text-white text-xs px-3 py-1.5 rounded-full font-bold shadow-lg">
+              Sold Out
+            </div>
+          </>
         )}
       </div>
 
       {/* Product Info */}
-      <div className="p-5">
+      <div className="p-4">
         <button
           type="button"
           onClick={() => onViewDetails && onViewDetails(product)}
-          className="text-left w-full font-bold text-lg text-gray-900 mb-2 line-clamp-2 min-h-[3.5rem] group-hover:text-blue-600 transition-colors"
+          className="mb-1.5 line-clamp-2 w-full text-left text-base font-bold text-gray-900 transition-colors group-hover:text-blue-600"
         >
           {product.name}
         </button>
@@ -136,12 +143,12 @@ export default function ProductCard({
           </div>
         )}
 
-        <p className="text-sm text-gray-600 mb-4 line-clamp-2 min-h-[2.5rem]">
+        <p className="mb-3 line-clamp-2 text-sm text-gray-600">
           {product.description || 'Authentic Daet product handcrafted with care'}
         </p>
 
         {/* Price and Stock Row */}
-        <div className="flex justify-between items-end mb-4 pb-4 border-b border-gray-100">
+        <div className="mb-3 flex items-end justify-between border-b border-gray-100 pb-3">
           <div>
             <p className="text-xs text-gray-500 mb-1">Price</p>
             <span className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-blue-700 bg-clip-text text-transparent">
@@ -150,14 +157,14 @@ export default function ProductCard({
           </div>
           <div className="text-right">
             <p className="text-xs text-gray-500 mb-1">Stock</p>
-            <span className={`text-sm font-bold ${product.stock > 5 ? 'text-green-600' : product.stock > 0 ? 'text-yellow-600' : 'text-red-600'}`}>
-              {product.stock > 0 ? `${product.stock} available` : 'Out of stock'}
+            <span className={`text-sm font-bold ${stock > 5 ? 'text-green-600' : stock > 0 ? 'text-yellow-600' : 'text-red-600'}`}>
+              {stock > 0 ? `${stock} available` : 'Out of stock'}
             </span>
           </div>
         </div>
 
         {/* Buy now + Add to cart */}
-        {product.stock > 0 ? (
+        {stock > 0 ? (
           <div className="flex gap-2">
             <button
               onClick={() => onAddToCart(product)}

@@ -6,6 +6,7 @@ import { dashboardPathForRole } from '@/lib/roles';
 import { ensureSellerProfile } from '@/lib/sellerProfile';
 import { ensureProfileRow } from '@/lib/profile';
 import { describePasswordProblem, isPasswordValid } from '@/lib/passwordPolicy';
+import { describeNameProblem, sanitizeName } from '@/lib/fieldRules';
 import PasswordRequirements from '@/components/PasswordRequirements';
 
 // Supabase decides how long the emailed code is (Authentication -> Sign In ->
@@ -125,13 +126,15 @@ export default function AuthModal({ isOpen, onClose, mode: initialMode = 'login'
   };
 
   const validateSignup = () => {
-    if (!firstName.trim()) {
-      setError('Please enter your first name.');
+    const firstNameProblem = describeNameProblem(firstName, 'first name');
+    if (firstNameProblem) {
+      setError(firstNameProblem);
       return false;
     }
 
-    if (!lastName.trim()) {
-      setError('Please enter your last name.');
+    const lastNameProblem = describeNameProblem(lastName, 'last name');
+    if (lastNameProblem) {
+      setError(lastNameProblem);
       return false;
     }
 
@@ -171,7 +174,8 @@ export default function AuthModal({ isOpen, onClose, mode: initialMode = 'login'
         setResendIn(RESEND_SECONDS);
         switchMode('reset');
         setNotice(
-          `If an account exists for ${email.trim()}, we sent a reset code. Enter it below with your new password.`
+          `If an account exists for ${email.trim()}, we have emailed you. Tap the "Reset password" link in that email, ` +
+            'or, if the email also shows a code, type it below with your new password. Check your spam folder too.'
         );
         return;
       }
@@ -354,9 +358,9 @@ export default function AuthModal({ isOpen, onClose, mode: initialMode = 'login'
     mode === 'login'
       ? 'Sign in to continue shopping'
       : mode === 'forgot'
-      ? 'Enter your email and we will send you a reset code'
+      ? 'Enter your email and we will send you a reset link'
       : mode === 'reset'
-      ? 'Enter the code we emailed you and choose a new password'
+      ? 'Use the link in your email, or type the code if your email shows one'
       : mode === 'verify'
       ? 'Enter the code we emailed you'
       : 'Join our e-commerce platform';
@@ -472,7 +476,7 @@ export default function AuthModal({ isOpen, onClose, mode: initialMode = 'login'
                     id="firstName"
                     type="text"
                     value={firstName}
-                    onChange={(e) => setFirstName(e.target.value)}
+                    onChange={(e) => setFirstName(sanitizeName(e.target.value))}
                     autoComplete="given-name"
                     maxLength={60}
                     className={inputClass}
@@ -488,7 +492,7 @@ export default function AuthModal({ isOpen, onClose, mode: initialMode = 'login'
                     id="lastName"
                     type="text"
                     value={lastName}
-                    onChange={(e) => setLastName(e.target.value)}
+                    onChange={(e) => setLastName(sanitizeName(e.target.value))}
                     autoComplete="family-name"
                     maxLength={60}
                     className={inputClass}

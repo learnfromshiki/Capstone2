@@ -295,7 +295,7 @@ begin
       'message',
       'New message from ' || coalesce(nullif(btrim(v_conversation.buyer_name), ''), 'a customer'),
       v_preview,
-      '/shop/seller/dashboard?tab=messages'
+      '/shop/seller/dashboard?tab=messages&conversation=' || new.conversation_id::text
     );
   else
     v_shop_name := coalesce(nullif(btrim(v_conversation.business_name), ''), 'the shop');
@@ -305,7 +305,7 @@ begin
       'message',
       'New message from ' || v_shop_name,
       v_preview,
-      '/shop/buyer?tab=messages'
+      '/shop/buyer?tab=messages&conversation=' || new.conversation_id::text
     );
   end if;
 
@@ -340,7 +340,7 @@ begin
     'order',
     'New order from ' || coalesce(nullif(btrim(new.customer_name), ''), 'a customer'),
     'Total ' || to_char(coalesce(new.total_amount, 0), 'FM999G999G999D00') || ' - waiting for you to confirm it.',
-    '/shop/seller/dashboard?tab=orders'
+    '/shop/seller/dashboard?tab=orders&order=' || new.id::text
   );
 
   perform public.push_admin_notification(
@@ -394,7 +394,7 @@ begin
     coalesce(nullif(btrim(v_shop_name), ''), 'The shop') ||
       case when new.status = 'shipped' then ' has shipped your order. Tap Order Received once it arrives.'
            else ' updated your order.' end,
-    '/shop/buyer?tab=orders'
+    '/shop/buyer?tab=orders&order=' || new.id::text
   );
 
   -- The customer confirming delivery, or cancelling, is news for the shop too.
@@ -405,7 +405,7 @@ begin
       'order',
       'An order was ' || new.status,
       coalesce(nullif(btrim(new.customer_name), ''), 'A customer') || '''s order is now ' || new.status || '.',
-      '/shop/seller/dashboard?tab=orders'
+      '/shop/seller/dashboard?tab=orders&order=' || new.id::text
     );
   end if;
 
@@ -503,7 +503,8 @@ begin
     'review',
     new.rating || '-star review on ' || coalesce(v_product_name, 'your product'),
     coalesce(nullif(btrim(new.comment), ''), 'No comment was left.'),
-    '/shop/seller/dashboard?tab=products'
+    -- Straight to that product's reviews, not just the product list.
+    '/shop/seller/dashboard?tab=products&product=' || new.product_id::text || '#reviews'
   );
 
   return new;
@@ -557,7 +558,23 @@ end;
 $$;
 
 -- ----------------------------------------------------------------------------
--- 7. Gender on a customer profile
+-- 7. Bigger profile pictures
+-- ----------------------------------------------------------------------------
+-- A photo straight off a phone is 4-8MB, and the old 2MB cap turned away most
+-- of what people actually tried to upload. Storage enforces this itself, so
+-- raising it in the app alone would not have been enough.
+do $$
+begin
+  if exists (select 1 from information_schema.tables where table_schema = 'storage' and table_name = 'buckets') then
+    update storage.buckets
+    set file_size_limit = 10485760 -- 10 MB
+    where id = 'profile-images';
+  end if;
+end;
+$$;
+
+-- ----------------------------------------------------------------------------
+-- 8. Gender on a customer profile
 -- ----------------------------------------------------------------------------
 alter table profiles add column if not exists gender text;
 

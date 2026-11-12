@@ -136,7 +136,7 @@ export default function NotificationCenter({
               <button
                 type="button"
                 onClick={clearAll}
-                className="text-xs font-semibold text-blue-600 hover:underline"
+                className="min-h-[44px] px-2 text-xs font-semibold text-blue-600 hover:underline"
               >
                 Mark all read
               </button>

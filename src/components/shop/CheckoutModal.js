@@ -9,7 +9,8 @@ import { fetchShopSettings } from '@/lib/shopSettings';
 import PaymentInstructions from './PaymentInstructions';
 import { describeSelection } from '@/lib/productOptions';
 import AddressFields from './AddressFields';
-import { formatAddress, parseAddress } from '@/lib/philippineAddresses';
+import { DEFAULT_CITY, DEFAULT_PROVINCE, formatAddress, parseAddress } from '@/lib/philippineAddresses';
+import { PHONE_HINT, describeNameProblem, describePhoneProblem, sanitizeName, sanitizePhone } from '@/lib/fieldRules';
 import { fetchShippingFee } from '@/lib/shipping';
 import ShopPaymentPanel from './ShopPaymentPanel';
 import { acceptsMethod, attachPaymentProof, fetchSellerPayments } from '@/lib/sellerPayments';
@@ -61,8 +62,8 @@ export default function CheckoutModal({
   // The address as separate parts; formData.address keeps the single line that
   // is stored on the order.
   const [addressParts, setAddressParts] = useState({
-    province: '',
-    city: '',
+    province: DEFAULT_PROVINCE,
+    city: DEFAULT_CITY,
     barangay: '',
     street: '',
     landmark: '',
@@ -123,7 +124,10 @@ export default function CheckoutModal({
       if (cancelled || profileError || !data) return;
 
       setSavedProfile({ phone: data.phone || '', address: data.address || '' });
-      if (data.address) setAddressParts(parseAddress(data.address));
+      if (data.address) {
+        const parsed = parseAddress(data.address);
+        setAddressParts({ ...parsed, province: DEFAULT_PROVINCE, city: DEFAULT_CITY });
+      }
       setFormData((prev) => ({
         ...prev,
         fullName: prev.fullName || data.full_name || '',
@@ -205,13 +209,19 @@ export default function CheckoutModal({
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
+
+    // The name box takes letters and the phone box digits, as they are typed.
+    const cleaned =
+      name === 'fullName' ? sanitizeName(value) : name === 'phone' ? sanitizePhone(value) : value;
+
+    setFormData((prev) => ({ ...prev, [name]: cleaned }));
   };
 
   // The Continue button is not a form submit, so nothing validates the fields otherwise
   const detailsAreValid = () => {
-    if (!formData.fullName.trim()) {
-      reportError('Please enter your full name.');
+    const nameProblem = describeNameProblem(formData.fullName, 'full name');
+    if (nameProblem) {
+      reportError(nameProblem);
       return false;
     }
 
@@ -220,18 +230,9 @@ export default function CheckoutModal({
       return false;
     }
 
-    if (formData.phone.replace(/\D/g, '').length < 7) {
-      reportError('Please enter a valid phone number.');
-      return false;
-    }
-
-    if (!addressParts.province.trim()) {
-      reportError('Please choose your province.');
-      return false;
-    }
-
-    if (!addressParts.city.trim()) {
-      reportError('Please choose your city or municipality.');
+    const phoneProblem = describePhoneProblem(formData.phone);
+    if (phoneProblem) {
+      reportError(phoneProblem);
       return false;
     }
 
@@ -820,14 +821,15 @@ export default function CheckoutModal({
                   type="tel"
                   name="phone"
                   autoComplete="tel"
-                  inputMode="tel"
-                  placeholder="09XX XXX XXXX"
-                  maxLength={30}
+                  inputMode="numeric"
+                  placeholder="09171234567"
+                  maxLength={11}
                   value={formData.phone}
                   onChange={handleInputChange}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full min-h-[44px] px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   required
                 />
+                <p className="mt-1 text-xs text-gray-500">{PHONE_HINT}</p>
               </div>
 
               <div>

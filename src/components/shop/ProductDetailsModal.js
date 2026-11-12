@@ -11,6 +11,10 @@ const formatReviewDate = (value) => {
   return date.toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' });
 };
 
+// Shopee and Lazada both stop at five, and more than that is unreadable in a
+// review card anyway.
+const MAX_REVIEW_PHOTOS = 5;
+
 const categoryIcons = {
   handicrafts: '🧺',
   food: '🍽️',
@@ -44,6 +48,9 @@ export default function ProductDetailsModal({
   // Photos the shopper is attaching to their own review (up to five)
   const [reviewPhotos, setReviewPhotos] = useState([]);
   const reviewFileRef = useRef(null);
+  // A second input with `capture` opens the phone's camera instead of its
+  // gallery; a laptop falls back to a normal file picker.
+  const reviewCameraRef = useRef(null);
 
   // Every product opens with a clean review draft and its first photo.
   useEffect(() => {
@@ -122,9 +129,23 @@ export default function ProductDetailsModal({
       setReviewFeedback({ type: 'error', message: 'Only photos can be added to a review.' });
     }
 
-    setReviewPhotos((current) =>
-      [...current, ...images.map((file) => ({ file, preview: URL.createObjectURL(file) }))].slice(0, 5)
-    );
+    setReviewPhotos((current) => {
+      const room = MAX_REVIEW_PHOTOS - current.length;
+
+      if (images.length > room) {
+        setReviewFeedback({
+          type: 'error',
+          message: `A review can have at most ${MAX_REVIEW_PHOTOS} photos, so only the first ${room} ${
+            room === 1 ? 'was' : 'were'
+          } added.`,
+        });
+      }
+
+      return [
+        ...current,
+        ...images.slice(0, Math.max(0, room)).map((file) => ({ file, preview: URL.createObjectURL(file) })),
+      ];
+    });
   };
 
   const removeReviewPhoto = (index) => {
@@ -477,7 +498,7 @@ export default function ProductDetailsModal({
                     </div>
                   ))}
 
-                  {reviewPhotos.length < 5 && (
+                  {reviewPhotos.length < MAX_REVIEW_PHOTOS && (
                     <>
                       <input
                         ref={reviewFileRef}
@@ -487,22 +508,49 @@ export default function ProductDetailsModal({
                         onChange={addReviewPhotos}
                         className="hidden"
                       />
+                      {/* `capture` asks the phone for its camera rather than
+                          its gallery. A laptop ignores it and opens the usual
+                          file picker, so the button works everywhere. */}
+                      <input
+                        ref={reviewCameraRef}
+                        type="file"
+                        accept="image/*"
+                        capture="environment"
+                        onChange={addReviewPhotos}
+                        className="hidden"
+                      />
+
                       <button
                         type="button"
-                        onClick={() => reviewFileRef.current?.click()}
-                        className="flex h-16 w-16 flex-col items-center justify-center gap-0.5 rounded-lg border-2 border-dashed border-gray-300 text-gray-500 transition-colors hover:border-blue-500 hover:text-blue-600"
+                        onClick={() => reviewCameraRef.current?.click()}
+                        aria-label="Take a photo with the camera"
+                        title="Take a photo"
+                        className="flex h-16 w-16 flex-col items-center justify-center gap-0.5 rounded-lg border-2 border-blue-200 bg-blue-50 text-blue-600 transition-colors hover:border-blue-500 hover:bg-blue-100"
                       >
                         <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
                         </svg>
-                        <span className="text-[10px] font-semibold">Photo</span>
+                        <span className="text-[10px] font-semibold">Camera</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => reviewFileRef.current?.click()}
+                        aria-label="Choose photos from this device"
+                        title="Choose photos"
+                        className="flex h-16 w-16 flex-col items-center justify-center gap-0.5 rounded-lg border-2 border-dashed border-gray-300 text-gray-500 transition-colors hover:border-blue-500 hover:text-blue-600"
+                      >
+                        <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                        </svg>
+                        <span className="text-[10px] font-semibold">Gallery</span>
                       </button>
                     </>
                   )}
                 </div>
                 <p className="mt-1.5 text-xs text-gray-500">
-                  Add up to 5 photos so other shoppers can see how it arrived.
+                  {reviewPhotos.length}/{MAX_REVIEW_PHOTOS} photos. Show other shoppers how it arrived.
                 </p>
               </div>
 

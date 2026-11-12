@@ -1,14 +1,17 @@
 /**
  * Address choices for the delivery form.
  *
- * CONNECT-Daet delivers within Camarines Norte only, so the province is fixed
- * and not a choice. The municipalities of the province are listed, with the
- * barangays of Daet itself; other municipalities accept a typed barangay.
+ * CONNECT-Daet delivers inside Daet, Camarines Norte, and nowhere else, so
+ * neither the province nor the municipality is a choice: both are fixed and
+ * shown read-only, and the only thing a customer picks is their barangay.
+ * That also means every delivery fee and every "can you deliver here?" has a
+ * single answer.
  *
- * To cover another municipality's barangays, add them to the list below -
- * nothing else needs to change.
+ * To serve another municipality later, add it to PROVINCES with its barangays
+ * and turn the city field back into a dropdown in AddressFields.
  */
 export const DEFAULT_PROVINCE = 'Camarines Norte';
+export const DEFAULT_CITY = 'Daet';
 export const OTHER = 'Other';
 
 const DAET_BARANGAYS = [
@@ -41,21 +44,8 @@ const DAET_BARANGAYS = [
 
 export const PROVINCES = [
   {
-    name: 'Camarines Norte',
-    cities: [
-      { name: 'Daet', barangays: DAET_BARANGAYS },
-      { name: 'Basud', barangays: [] },
-      { name: 'Capalonga', barangays: [] },
-      { name: 'Jose Panganiban', barangays: [] },
-      { name: 'Labo', barangays: [] },
-      { name: 'Mercedes', barangays: [] },
-      { name: 'Paracale', barangays: [] },
-      { name: 'San Lorenzo Ruiz', barangays: [] },
-      { name: 'San Vicente', barangays: [] },
-      { name: 'Santa Elena', barangays: [] },
-      { name: 'Talisay', barangays: [] },
-      { name: 'Vinzons', barangays: [] },
-    ],
+    name: DEFAULT_PROVINCE,
+    cities: [{ name: DEFAULT_CITY, barangays: DAET_BARANGAYS }],
   },
 ];
 
@@ -72,7 +62,8 @@ export const barangayNames = (provinceName, cityName) => {
   const province = PROVINCES.find((entry) => entry.name === provinceName);
   const city = province?.cities.find((entry) => entry.name === cityName);
   if (!city || city.barangays.length === 0) return [];
-  return [...city.barangays, OTHER];
+  // Daet's barangays are listed in full, so there is nothing to type in.
+  return [...city.barangays];
 };
 
 /** Build the single address line that is stored on the order. */

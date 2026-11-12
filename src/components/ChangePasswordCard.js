@@ -83,7 +83,9 @@ export default function ChangePasswordCard({ email, title = 'Change Password', d
       setCodeSent(true);
       setFeedback({
         type: 'success',
-        text: `We sent a code to ${email}. Type it below along with your new password. Check your spam folder too.`,
+        text:
+          `We emailed ${email}. Tap the "Reset password" link in that email, or, if the email also shows a ` +
+          'code, type it below with your new password. Check your spam folder too.',
       });
     } catch (error) {
       setFeedback({ type: 'error', text: error.message || 'Could not send the reset email.' });
@@ -210,7 +212,10 @@ export default function ChangePasswordCard({ email, title = 'Change Password', d
         {/* The code from the email, typed in right here */}
         {codeSent && (
           <div className="space-y-3 rounded-xl border-2 border-blue-100 bg-blue-50 p-4">
-            <p className="text-sm font-semibold text-gray-900">I have the code from the email</p>
+            <p className="text-sm font-semibold text-gray-900">I have a code from the email</p>
+            <p className="-mt-1 text-xs text-gray-600">
+              Only if your email shows one. Otherwise just tap the link in the email.
+            </p>
 
             <input
               type="text"

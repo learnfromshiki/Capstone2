@@ -64,7 +64,7 @@ export default function AvatarUpload({ userId, url, name, email, onChange, size 
         >
           {uploading ? 'Uploading...' : url ? 'Change photo' : 'Upload photo'}
         </button>
-        <p className="mt-1 text-xs text-gray-500">JPG, PNG, GIF or WebP, up to 2MB.</p>
+        <p className="mt-1 text-xs text-gray-500">JPG, PNG, GIF or WebP, up to 10MB.</p>
       </div>
     </div>
   );

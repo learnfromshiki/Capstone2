@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
-import { DEFAULT_PROVINCE, OTHER, barangayNames, cityNames } from '@/lib/philippineAddresses';
+import { DEFAULT_CITY, DEFAULT_PROVINCE, barangayNames } from '@/lib/philippineAddresses';
 
 const selectClass =
   'w-full min-h-[48px] px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white';
@@ -9,10 +9,11 @@ const inputClass =
   'w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent';
 
 /**
- * Province, city/municipality and barangay as dropdowns, plus the street line.
+ * The delivery address.
  *
- * Anything not on the lists is still deliverable: choosing "Other" swaps that
- * dropdown for a text box, and the lower levels follow.
+ * CONNECT-Daet delivers inside Daet only, so the province and the municipality
+ * are shown but not asked for: the barangay dropdown, the street line and an
+ * optional landmark are all the customer fills in.
  *
  * `value` is { province, city, barangay, street, landmark } and every change
  * is reported through `onChange` with the whole object.
@@ -20,20 +21,16 @@ const inputClass =
 export default function AddressFields({ value, onChange, disabled = false }) {
   const { province = '', city = '', barangay = '', street = '', landmark = '' } = value || {};
 
-  const cities = cityNames(DEFAULT_PROVINCE);
-  const barangays = barangayNames(DEFAULT_PROVINCE, city);
+  const barangays = barangayNames(DEFAULT_PROVINCE, DEFAULT_CITY);
 
-  // The shop delivers inside Camarines Norte only, so the province is set for
-  // the customer instead of being asked for.
+  // Province and municipality are set for the customer rather than asked for,
+  // including on an address saved before this form was narrowed to Daet.
   useEffect(() => {
-    if (province !== DEFAULT_PROVINCE) {
-      onChange({ ...value, province: DEFAULT_PROVINCE });
+    if (province !== DEFAULT_PROVINCE || city !== DEFAULT_CITY) {
+      onChange({ ...value, province: DEFAULT_PROVINCE, city: DEFAULT_CITY });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [province]);
-
-  const cityIsCustom = Boolean(city) && cities.length > 0 && !cities.includes(city);
-  const barangayIsCustom = Boolean(barangay) && barangays.length > 0 && !barangays.includes(barangay);
+  }, [province, city]);
 
   const update = (patch) => onChange({ ...value, ...patch });
 
@@ -56,38 +53,20 @@ export default function AddressFields({ value, onChange, disabled = false }) {
           <p className="mt-1 text-xs text-gray-500">CONNECT-Daet delivers within Camarines Norte.</p>
         </div>
 
-        {/* City or municipality */}
+        {/* City or municipality: fixed, deliveries are inside Daet */}
         <div>
           <label htmlFor="addressCity" className="block text-sm font-semibold text-gray-700 mb-2">
-            City / Municipality *
+            City / Municipality
           </label>
-          {cityIsCustom ? (
-            <input
-              id="addressCity"
-              type="text"
-              value={city}
-              onChange={(event) => update({ city: event.target.value, barangay: '' })}
-              disabled={disabled}
-              maxLength={60}
-              className={inputClass}
-              placeholder="Type your city or municipality"
-            />
-          ) : (
-            <select
-              id="addressCity"
-              value={city}
-              disabled={disabled}
-              onChange={(event) => update({ city: event.target.value, barangay: '' })}
-              className={selectClass}
-            >
-              <option value="">Select city or municipality</option>
-              {cities.map((name) => (
-                <option key={name} value={name}>
-                  {name}
-                </option>
-              ))}
-            </select>
-          )}
+          <input
+            id="addressCity"
+            type="text"
+            value={DEFAULT_CITY}
+            readOnly
+            disabled
+            className="w-full min-h-[48px] cursor-not-allowed rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 font-medium text-gray-700"
+          />
+          <p className="mt-1 text-xs text-gray-500">We deliver within Daet only.</p>
         </div>
       </div>
 
@@ -96,36 +75,20 @@ export default function AddressFields({ value, onChange, disabled = false }) {
         <label htmlFor="addressBarangay" className="block text-sm font-semibold text-gray-700 mb-2">
           Barangay *
         </label>
-        {barangays.length === 0 || barangayIsCustom ? (
-          <input
-            id="addressBarangay"
-            type="text"
-            value={barangay}
-            onChange={(event) => update({ barangay: event.target.value })}
-            disabled={disabled || !city}
-            maxLength={80}
-            className={inputClass}
-            placeholder={city ? 'Type your barangay' : 'Choose a city first'}
-          />
-        ) : (
-          <select
-            id="addressBarangay"
-            value={barangay}
-            disabled={disabled || !city}
-            onChange={(event) => {
-              const next = event.target.value;
-              update({ barangay: next === OTHER ? ' ' : next });
-            }}
-            className={selectClass}
-          >
-            <option value="">Select barangay</option>
-            {barangays.map((name) => (
-              <option key={name} value={name}>
-                {name}
-              </option>
-            ))}
-          </select>
-        )}
+        <select
+          id="addressBarangay"
+          value={barangay}
+          disabled={disabled}
+          onChange={(event) => update({ barangay: event.target.value })}
+          className={selectClass}
+        >
+          <option value="">Select your barangay</option>
+          {barangays.map((name) => (
+            <option key={name} value={name}>
+              {name}
+            </option>
+          ))}
+        </select>
       </div>
 
       {/* Street */}

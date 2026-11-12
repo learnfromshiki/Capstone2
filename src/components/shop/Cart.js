@@ -26,8 +26,11 @@ export default function Cart({ cart, isOpen, onClose, onUpdateQuantity, onRemove
       current.includes(lineId) ? current.filter((id) => id !== lineId) : [...current, lineId]
     );
 
-  const allSelected = cart.length > 0 && selected.length === cart.length;
-  const selectedItems = cart.filter((item) => selected.includes(item.lineId));
+  const isSoldOut = (item) => (Number(item.stock) || 0) <= 0;
+
+  const sellable = cart.filter((item) => (Number(item.stock) || 0) > 0);
+  const allSelected = sellable.length > 0 && selectedItems.length === sellable.length;
+  const selectedItems = cart.filter((item) => selected.includes(item.lineId) && !isSoldOut(item));
   const selectedTotal = selectedItems.reduce(
     (sum, item) => sum + (Number(item.price) || 0) * (Number(item.quantity) || 0),
     0
@@ -105,7 +108,7 @@ export default function Cart({ cart, isOpen, onClose, onUpdateQuantity, onRemove
                 <input
                   type="checkbox"
                   checked={allSelected}
-                  onChange={(event) => setSelected(event.target.checked ? cart.map((item) => item.lineId) : [])}
+                  onChange={(event) => setSelected(event.target.checked ? sellable.map((item) => item.lineId) : [])}
                   className="h-5 w-5 rounded border-gray-300 text-blue-600 focus:ring-2 focus:ring-blue-600"
                 />
                 <span className="text-sm font-semibold text-gray-700">Select all</span>
@@ -121,10 +124,11 @@ export default function Cart({ cart, isOpen, onClose, onUpdateQuantity, onRemove
                   {/* Tick the lines you want to pay for now */}
                   <input
                     type="checkbox"
-                    checked={selected.includes(item.lineId)}
+                    checked={selected.includes(item.lineId) && !isSoldOut(item)}
                     onChange={() => toggleLine(item.lineId)}
+                    disabled={isSoldOut(item)}
                     aria-label={`Check out ${item.name}`}
-                    className="mt-1 h-5 w-5 flex-shrink-0 rounded border-gray-300 text-blue-600 focus:ring-2 focus:ring-blue-600"
+                    className="mt-1 h-5 w-5 flex-shrink-0 rounded border-gray-300 text-blue-600 focus:ring-2 focus:ring-blue-600 disabled:cursor-not-allowed disabled:opacity-40"
                   />
 
                   {/* Product Image */}
@@ -165,6 +169,12 @@ export default function Cart({ cart, isOpen, onClose, onUpdateQuantity, onRemove
                     {describeSelection(item.selectedOptions) && (
                       <p className="mb-1 text-xs font-medium text-gray-500">
                         {describeSelection(item.selectedOptions)}
+                      </p>
+                    )}
+
+                    {isSoldOut(item) && (
+                      <p className="mb-1 inline-block rounded-full bg-red-100 px-2 py-0.5 text-xs font-bold text-red-700">
+                        Sold Out — remove it to check out
                       </p>
                     )}
 

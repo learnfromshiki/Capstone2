@@ -6,6 +6,13 @@ import { useSellerAuth } from '@/contexts/SellerAuthContext';
 import { useAuth } from '@/contexts/AuthContext';
 import Link from 'next/link';
 import { describePasswordProblem, isPasswordValid } from '@/lib/passwordPolicy';
+import {
+  PHONE_HINT,
+  describeNameProblem,
+  describePhoneProblem,
+  sanitizeName,
+  sanitizePhone,
+} from '@/lib/fieldRules';
 import PasswordRequirements from '@/components/PasswordRequirements';
 import { ensureSellerProfile } from '@/lib/sellerProfile';
 import { ensureProfileRow } from '@/lib/profile';
@@ -74,7 +81,17 @@ export default function SellerLoginPage() {
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
+
+    // A name takes letters only and a phone number digits only, so the box
+    // refuses the wrong character rather than waiting for the submit button.
+    const cleaned =
+      name === 'firstName' || name === 'lastName'
+        ? sanitizeName(value)
+        : name === 'phone'
+        ? sanitizePhone(value)
+        : value;
+
+    setFormData((prev) => ({ ...prev, [name]: cleaned }));
   };
 
   const handleResend = async () => {
@@ -151,8 +168,21 @@ export default function SellerLoginPage() {
         // that. One still waiting stays here and sees the status panel.
         if (sellerRow.is_approved) router.push('/shop/seller/dashboard');
       } else {
-        if (!formData.firstName.trim() || !formData.lastName.trim()) {
-          setError('Please enter your first and last name.');
+        const firstNameProblem = describeNameProblem(formData.firstName, 'first name');
+        if (firstNameProblem) {
+          setError(firstNameProblem);
+          return;
+        }
+
+        const lastNameProblem = describeNameProblem(formData.lastName, 'last name');
+        if (lastNameProblem) {
+          setError(lastNameProblem);
+          return;
+        }
+
+        const phoneProblem = describePhoneProblem(formData.phone);
+        if (phoneProblem) {
+          setError(phoneProblem);
           return;
         }
 
@@ -488,17 +518,22 @@ export default function SellerLoginPage() {
             {mode === 'signup' && (
               <>
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    Phone Number
+                  <label htmlFor="sellerPhone" className="block text-sm font-semibold text-gray-700 mb-2">
+                    Mobile Number *
                   </label>
                   <input
+                    id="sellerPhone"
                     type="tel"
+                    inputMode="numeric"
                     name="phone"
                     value={formData.phone}
                     onChange={handleInputChange}
-                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    placeholder="+63 XXX XXX XXXX"
+                    maxLength={11}
+                    className="w-full min-h-[44px] px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    placeholder="09171234567"
+                    required
                   />
+                  <p className="mt-1 text-xs text-gray-500">{PHONE_HINT}</p>
                 </div>
 
                 <div>

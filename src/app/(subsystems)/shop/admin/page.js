@@ -7,6 +7,7 @@ import { supabase, startAdminSession } from '@/lib/supabaseClient';
 import { uploadProductImage } from '@/lib/imageUpload';
 import { getAccountRole } from '@/lib/roles';
 import { formatOrderNumber, getAllowedStatuses, PAYMENT_LABELS, STATUS_LABELS, transitionOrderStatus } from '@/lib/orders';
+import { describePriceProblem, sanitizePrice } from '@/lib/fieldRules';
 import { DEFAULT_SHOP_SETTINGS, fetchShopSettings } from '@/lib/shopSettings';
 import PasswordRequirements from '@/components/PasswordRequirements';
 import { describePasswordProblem, isPasswordValid } from '@/lib/passwordPolicy';
@@ -641,8 +642,9 @@ export default function ShopAdminPage() {
         return;
       }
 
-      if (!Number.isFinite(price) || price <= 0 || price > 99999999.99) {
-        showAlert('Price must be a number greater than 0.');
+      const priceProblem = describePriceProblem(newProduct.price);
+      if (priceProblem) {
+        showAlert(priceProblem);
         return;
       }
 
@@ -1264,6 +1266,18 @@ export default function ShopAdminPage() {
    * table with a heading and a date - and "Save as PDF" from that dialog gives
    * a usable PDF.
    */
+  // The admin shell is a full-height column that scrolls inside its own main
+  // area. Without this the page behind it scrolls too, and the browser draws a
+  // second scrollbar down the right-hand edge.
+  useEffect(() => {
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
+    return () => {
+      document.body.style.overflow = previous;
+    };
+  }, []);
+
   const printReport = () => {
     if (!report || report.rows.length === 0) {
       showToast('Generate a report with data before printing.', 'error');
@@ -1749,7 +1763,7 @@ export default function ShopAdminPage() {
         <div className="hidden border-t border-blue-800 p-4 lg:block">
           <button
             onClick={handleLogout}
-            className="w-full flex items-center gap-3 px-4 py-3 text-left bg-blue-800 hover:bg-blue-700 rounded-lg transition-colors"
+            className="w-full flex items-center gap-3 px-4 py-3 text-left bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
@@ -3304,14 +3318,16 @@ export default function ShopAdminPage() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-semibold mb-2">Price (₱) *</label>
+                  <label htmlFor="adminProductPrice" className="block text-sm font-semibold mb-2">Price (₱) *</label>
                   <input
-                    type="number"
-                    step="0.01"
-                    min="0.01"
+                    id="adminProductPrice"
+                    type="text"
+                    inputMode="decimal"
+                    placeholder="1.50"
+                    maxLength={10}
                     value={newProduct.price}
-                    onChange={(e) => setNewProduct({ ...newProduct, price: e.target.value })}
-                    className="w-full px-4 py-3 border-2 rounded-xl focus:ring-2 focus:ring-blue-500"
+                    onChange={(e) => setNewProduct({ ...newProduct, price: sanitizePrice(e.target.value) })}
+                    className="w-full min-h-[44px] px-4 py-3 border-2 rounded-xl focus:ring-2 focus:ring-blue-500"
                     required
                   />
                 </div>
