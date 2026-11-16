@@ -250,6 +250,16 @@ export const confirmOrderReceived = async (orderId) => {
   return { status: data?.status || 'delivered' };
 };
 
+/**
+ * Does this order count as a sale in totals and reports? Cancelled orders are
+ * refunds, and an online (PayMongo) order that was never paid is not money
+ * received. Every dashboard uses this one rule so their figures agree.
+ */
+export const isCountedSale = (order) =>
+  Boolean(order) &&
+  order.status !== 'cancelled' &&
+  !(order.payment_method === 'paymongo' && order.payment_status !== 'paid');
+
 /** Short, readable order number shown to buyers, sellers and admins. */
 export const formatOrderNumber = (orderId) =>
   orderId ? `#${String(orderId).slice(0, 8).toUpperCase()}` : '';

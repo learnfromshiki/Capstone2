@@ -69,7 +69,9 @@ export default function CheckoutModal({
     street: '',
     landmark: '',
   });
-  const [shippingFee, setShippingFee] = useState(0);
+  // Delivery fee per shop: { [sellerId | 'platform']: fee }
+  const [shippingFees, setShippingFees] = useState({});
+  const shippingFee = Object.values(shippingFees).reduce((sum, fee) => sum + (Number(fee) || 0), 0);
   // The GCash / bank details of every shop in the basket, and the receipt the
   // customer attaches for each of them: { [sellerId]: { url, reference } }
   const [sellerPayments, setSellerPayments] = useState({});
@@ -149,28 +151,43 @@ export default function CheckoutModal({
     };
   }, [user]);
 
-  // The delivery fee for this address. The database works out the real figure
-  // again when the order is placed, so this is only what the customer sees.
+  // The delivery fee for this address. Every shop delivers separately, so
+  // place_order() charges one fee per shop, each worked out on that shop's own
+  // subtotal (a free-delivery threshold applies per shop). The same is asked
+  // for here so the total the customer sees is the total they are charged.
+  const groupSubtotalsKey = JSON.stringify(
+    Object.entries(
+      (verifiedCart?.items || cart).reduce((groups, item) => {
+        const key = item.seller_id || 'platform';
+        groups[key] = (groups[key] || 0) + (Number(item.price) || 0) * (Number(item.quantity) || 0);
+        return groups;
+      }, {})
+    ).sort(([a], [b]) => a.localeCompare(b))
+  );
+
   useEffect(() => {
     let cancelled = false;
+    const groups = JSON.parse(groupSubtotalsKey);
 
-    if (!addressParts.province) {
-      setShippingFee(0);
+    if (!addressParts.province || groups.length === 0) {
+      setShippingFees({});
       return undefined;
     }
 
-    fetchShippingFee({
-      province: addressParts.province,
-      city: addressParts.city,
-      subtotal: Number(total) || 0,
-    }).then((fee) => {
-      if (!cancelled) setShippingFee(fee);
+    Promise.all(
+      groups.map(([key, subtotal]) =>
+        fetchShippingFee({ province: addressParts.province, city: addressParts.city, subtotal }).then(
+          (fee) => [key, fee]
+        )
+      )
+    ).then((entries) => {
+      if (!cancelled) setShippingFees(Object.fromEntries(entries));
     });
 
     return () => {
       cancelled = true;
     };
-  }, [addressParts.province, addressParts.city, total]);
+  }, [addressParts.province, addressParts.city, groupSubtotalsKey]);
 
   // GCash / bank details the admin saved in Admin -> Settings
   useEffect(() => {
@@ -230,6 +247,16 @@ export default function CheckoutModal({
       cancelled = true;
     };
   }, [sellerIdKey]);
+
+  // Take the bought items out of the cart the moment the order exists. Waiting
+  // for "Continue Shopping" left them in the cart whenever the customer
+  // closed the tab or used the header links, ready to be bought twice.
+  const clearedCartRef = useRef(false);
+  useEffect(() => {
+    if (step !== 3 || placedOrders.length === 0 || clearedCartRef.current) return;
+    clearedCartRef.current = true;
+    if (onSuccess) onSuccess();
+  }, [step, placedOrders.length, onSuccess]);
 
   // Escape closes checkout. After an order is placed it behaves like
   // "Continue Shopping" so the cart is cleared.
@@ -745,7 +772,7 @@ export default function CheckoutModal({
       groups[key].amount += line;
       return groups;
     }, {})
-  ).map((group) => ({ ...group, amount: group.amount + shippingFee }));
+  ).map((group) => ({ ...group, amount: group.amount + (Number(shippingFees[group.key]) || 0) }));
 
   /**
    * A shop that has not saved its GCash number cannot be paid by GCash, so

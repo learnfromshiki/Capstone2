@@ -6,7 +6,7 @@ import { useState, useEffect } from 'react';
 import { supabase, startAdminSession } from '@/lib/supabaseClient';
 import { uploadProductImage } from '@/lib/imageUpload';
 import { getAccountRole } from '@/lib/roles';
-import { formatOrderNumber, getAllowedStatuses, PAYMENT_LABELS, STATUS_LABELS, transitionOrderStatus } from '@/lib/orders';
+import { formatOrderNumber, getAllowedStatuses, isCountedSale, isMissingFunction, PAYMENT_LABELS, STATUS_LABELS, transitionOrderStatus } from '@/lib/orders';
 import PaymongoStatus from '@/components/shop/PaymongoStatus';
 import { describePriceProblem, sanitizePrice } from '@/lib/fieldRules';
 import { DEFAULT_SHOP_SETTINGS, fetchShopSettings } from '@/lib/shopSettings';
@@ -26,11 +26,13 @@ import { describeArea, listShippingRates } from '@/lib/shipping';
 const REPORT_CONFIG = {
   sales: {
     title: 'Sales Report',
-    subtitle: 'Revenue grouped by day (cancelled orders excluded)',
+    subtitle: 'Sales grouped by day (cancelled and unpaid online orders excluded)',
     columns: [
       { key: 'date', label: 'Date' },
       { key: 'orders', label: 'Orders' },
-      { key: 'revenue', label: 'Revenue (PHP)' }
+      { key: 'items', label: 'Items (PHP)' },
+      { key: 'delivery', label: 'Delivery (PHP)' },
+      { key: 'revenue', label: 'Total (PHP)' }
     ]
   },
   products: {
@@ -40,6 +42,20 @@ const REPORT_CONFIG = {
       { key: 'name', label: 'Product' },
       { key: 'units', label: 'Units Sold' },
       { key: 'revenue', label: 'Revenue (PHP)' }
+    ]
+  },
+  inventory: {
+    title: 'Inventory Report',
+    subtitle: 'Stock on hand per product, lowest first (low stock = 5 or fewer)',
+    columns: [
+      { key: 'name', label: 'Product' },
+      { key: 'shop', label: 'Shop' },
+      { key: 'price', label: 'Price (PHP)' },
+      { key: 'stock', label: 'In Stock' },
+      { key: 'level', label: 'Stock Level' },
+      { key: 'listed', label: 'Listing' },
+      { key: 'sold', label: 'Units Sold' },
+      { key: 'value', label: 'Stock Value (PHP)' }
     ]
   },
   customers: {
@@ -521,17 +537,17 @@ export default function ShopAdminPage() {
       if (activeTab === 'dashboard') {
         // Fetch all stats AND recent orders for dashboard
         const [ordersRes, customersRes, sellersRes, recentOrdersRes] = await Promise.all([
-          supabase.from('shop_orders').select('total_amount, status, created_at', { count: 'exact' }),
+          supabase.from('shop_orders').select('total_amount, status, created_at, payment_method, payment_status', { count: 'exact' }),
           supabase.from('profiles').select('id, user_type'),
           supabase.from('shop_sellers').select('is_approved, is_rejected, user_id', { count: 'exact' }),
           supabase.from('shop_orders').select('*, shop_order_items(*)').order('created_at', { ascending: false }).limit(10)
         ]);
 
         // Cancelled orders are refunds, not revenue
-        const paidOrders = ordersRes.data?.filter(order => order.status !== 'cancelled') || [];
+        const paidOrders = ordersRes.data?.filter(isCountedSale) || [];
         const totalSales = paidOrders.reduce((sum, order) => sum + (Number(order.total_amount) || 0), 0);
         const pendingSellers = sellersRes.data?.filter(s => !s.is_approved && !s.is_rejected).length || 0;
-        const toFulfill = paidOrders.filter(order => ['pending', 'confirmed', 'processing'].includes(order.status)).length;
+        const toFulfill = (ordersRes.data || []).filter(order => ['pending', 'confirmed', 'processing'].includes(order.status)).length;
 
         // Customers are profiles that are neither sellers nor admins
         const sellerUserIds = new Set((sellersRes.data || []).map(s => s.user_id).filter(Boolean));
@@ -848,22 +864,22 @@ export default function ShopAdminPage() {
       tone: 'error',
       title: `Delete "${name}" permanently?`,
       message:
-        'Their profile and reward history are removed. Past orders stay in Transactions so sales records are not lost. This cannot be undone.',
+        'Their login, profile and reward history are removed. Past orders stay in Transactions so sales records are not lost. This cannot be undone.',
       confirmLabel: 'Delete customer',
     });
     if (!confirmed) return;
 
     try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .delete()
-        .eq('id', customer.id)
-        .select('id');
+      // Deletes the login as well as the profile. Removing only the profile
+      // left an account that could sign in but never check out.
+      const { error } = await supabase.rpc('admin_delete_account', { p_user_id: customer.id });
 
-      if (error) throw error;
-      if (!data || data.length === 0) {
-        showToast('Could not delete this customer — the database blocked the change. Run supabase-final-fixes.sql in Supabase.', 'error');
-        return;
+      if (error) {
+        if (isMissingFunction(error)) {
+          showToast('Deleting customers needs supabase-deep-scan-fixes.sql. Run it in Supabase first.', 'error');
+          return;
+        }
+        throw error;
       }
 
       showToast(`${name} deleted.`, 'success');
@@ -881,44 +897,24 @@ export default function ShopAdminPage() {
       tone: 'error',
       title: `Delete "${name}" permanently?`,
       message:
-        'This removes the shop, every product they listed and their account profile. This cannot be undone.',
+        'This removes the shop and their login. Products that were never ordered are deleted; products in past orders are hidden so sales records stay intact. This cannot be undone.',
       confirmLabel: 'Delete seller',
     });
     if (!confirmed) return;
 
     try {
-      // Products first: seller_id is SET NULL on delete, so removing the shop
-      // afterwards would leave orphan listings in the catalog.
-      const { error: productsError } = await supabase
-        .from('shop_products')
-        .delete()
-        .eq('seller_id', seller.id);
+      // One database call: products without orders are deleted, products that
+      // appear in past orders are hidden (they cannot be deleted), then the
+      // shop and its login are removed. Doing this from the browser left
+      // ordered products on sale with no owner.
+      const { error } = await supabase.rpc('admin_delete_seller', { p_seller_id: seller.id });
 
-      if (productsError) {
-        console.warn('Could not remove the seller\'s products:', productsError.message);
-      }
-
-      const { data, error } = await supabase
-        .from('shop_sellers')
-        .delete()
-        .eq('id', seller.id)
-        .select('id');
-
-      if (error) throw error;
-      if (!data || data.length === 0) {
-        showToast('Could not delete this seller — the database blocked the change. Run supabase-final-fixes.sql in Supabase.', 'error');
-        return;
-      }
-
-      if (seller.user_id) {
-        const { error: profileError } = await supabase
-          .from('profiles')
-          .delete()
-          .eq('id', seller.user_id);
-
-        if (profileError) {
-          console.warn('Seller removed but the profile stayed:', profileError.message);
+      if (error) {
+        if (isMissingFunction(error)) {
+          showToast('Deleting sellers needs supabase-deep-scan-fixes.sql. Run it in Supabase first.', 'error');
+          return;
         }
+        throw error;
       }
 
       showToast(`Seller "${name}" deleted.`, 'success');
@@ -1097,7 +1093,7 @@ export default function ShopAdminPage() {
     setReportLoading(type);
 
     try {
-      const salesOrders = orders.filter((order) => order.status !== 'cancelled');
+      const salesOrders = orders.filter(isCountedSale);
       let rows = [];
 
       if (type === 'sales') {
@@ -1105,29 +1101,71 @@ export default function ShopAdminPage() {
 
         salesOrders.forEach((order) => {
           const day = new Date(order.created_at).toLocaleDateString('en-CA');
-          byDay[day] = byDay[day] || { date: day, orders: 0, revenue: 0 };
+          const total = Number(order.total_amount) || 0;
+          const delivery = Number(order.shipping_fee) || 0;
+          byDay[day] = byDay[day] || { date: day, orders: 0, items: 0, delivery: 0, revenue: 0 };
           byDay[day].orders += 1;
-          byDay[day].revenue += Number(order.total_amount) || 0;
+          byDay[day].items += total - delivery;
+          byDay[day].delivery += delivery;
+          byDay[day].revenue += total;
         });
 
         rows = Object.values(byDay)
           .sort((a, b) => b.date.localeCompare(a.date))
-          .map((row) => ({ ...row, revenue: row.revenue.toFixed(2) }));
+          .map((row) => ({
+            ...row,
+            items: row.items.toFixed(2),
+            delivery: row.delivery.toFixed(2),
+            revenue: row.revenue.toFixed(2)
+          }));
       } else if (type === 'products') {
+        // Grouped by product id: a renamed product is still one product.
         const byProduct = {};
 
         salesOrders.forEach((order) => {
           (order.shop_order_items || []).forEach((item) => {
-            const key = item.product_name;
-            byProduct[key] = byProduct[key] || { name: key, units: 0, revenue: 0 };
-            byProduct[key].units += item.quantity || 0;
-            byProduct[key].revenue += (Number(item.price) || 0) * (item.quantity || 0);
+            const key = item.product_id || item.product_name;
+            byProduct[key] = byProduct[key] || { name: item.product_name, units: 0, revenue: 0 };
+            byProduct[key].units += Number(item.quantity) || 0;
+            byProduct[key].revenue += (Number(item.price) || 0) * (Number(item.quantity) || 0);
           });
         });
 
         rows = Object.values(byProduct)
           .sort((a, b) => b.revenue - a.revenue)
           .map((row) => ({ ...row, revenue: row.revenue.toFixed(2) }));
+      } else if (type === 'inventory') {
+        const [{ data: productRows, error: productsError }, { data: sellerRows }] = await Promise.all([
+          supabase.from('shop_products').select('id, name, price, stock, available, seller_id'),
+          supabase.from('shop_sellers').select('id, business_name')
+        ]);
+
+        if (productsError) throw productsError;
+
+        const sellerNames = new Map((sellerRows || []).map((seller) => [seller.id, seller.business_name]));
+        const sold = {};
+        salesOrders.forEach((order) => {
+          (order.shop_order_items || []).forEach((item) => {
+            if (item.product_id) sold[item.product_id] = (sold[item.product_id] || 0) + (Number(item.quantity) || 0);
+          });
+        });
+
+        rows = (productRows || [])
+          .map((product) => {
+            const stock = Number(product.stock) || 0;
+            const price = Number(product.price) || 0;
+            return {
+              name: product.name,
+              shop: product.seller_id ? sellerNames.get(product.seller_id) || 'Unknown shop' : 'Platform',
+              price: price.toFixed(2),
+              stock,
+              level: stock <= 0 ? 'Out of stock' : stock <= 5 ? 'Low' : 'OK',
+              listed: product.available ? 'Active' : 'Hidden',
+              sold: sold[product.id] || 0,
+              value: (price * stock).toFixed(2)
+            };
+          })
+          .sort((a, b) => a.stock - b.stock || a.name.localeCompare(b.name));
       } else if (type === 'customers') {
         const byCustomer = {};
 
@@ -2846,6 +2884,27 @@ export default function ShopAdminPage() {
                   className="w-full py-2 px-4 bg-red-50 hover:bg-red-100 text-red-700 font-semibold rounded-lg transition-colors disabled:opacity-50"
                 >
                   {reportLoading === 'orders' ? 'Generating...' : 'Generate Report'}
+                </button>
+              </div>
+
+              <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
+                <div className="flex items-center gap-4 mb-4">
+                  <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
+                    <svg className="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                    </svg>
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-gray-900">Inventory Report</h4>
+                    <p className="text-xs text-gray-600">Stock levels, low & out of stock</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => generateReport('inventory')}
+                  disabled={reportLoading !== ''}
+                  className="w-full py-2 px-4 bg-purple-50 hover:bg-purple-100 text-purple-700 font-semibold rounded-lg transition-colors disabled:opacity-50"
+                >
+                  {reportLoading === 'inventory' ? 'Generating...' : 'Generate Report'}
                 </button>
               </div>
 

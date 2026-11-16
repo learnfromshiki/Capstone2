@@ -442,17 +442,82 @@ export default function ShopPage() {
   };
 
   /**
+   * The cart lives in localStorage, so its prices and stock are whatever they
+   * were when the item was added. Once the live catalog has loaded, copy the
+   * current price, stock, name and photo onto every line. A product that is
+   * no longer listed shows as sold out, and a quantity above what is left is
+   * trimmed, so the cart never promises more than checkout will accept.
+   */
+  useEffect(() => {
+    if (loading || !cartKey || cartOwner !== cartKey) return;
+
+    const live = new Map(products.map((product) => [product.id, product]));
+
+    setCart((prevCart) => {
+      let changed = false;
+      const used = new Map();
+
+      const next = prevCart.map((item) => {
+        const productId = item.productId || item.id;
+        const product = live.get(productId);
+        const stock = product ? Number(product.stock) || 0 : 0;
+        const alreadyUsed = used.get(productId) || 0;
+        const quantity = Math.max(1, Math.min(Number(item.quantity) || 1, Math.max(stock - alreadyUsed, 1)));
+        used.set(productId, alreadyUsed + quantity);
+
+        const updated = product
+          ? {
+              ...item,
+              name: product.name,
+              price: product.price,
+              stock,
+              image_url: product.image_url,
+              seller_id: product.seller_id,
+              quantity,
+            }
+          : { ...item, stock: 0 };
+
+        if (
+          updated.price !== item.price ||
+          updated.stock !== item.stock ||
+          updated.quantity !== item.quantity ||
+          updated.name !== item.name ||
+          updated.image_url !== item.image_url
+        ) {
+          changed = true;
+        }
+
+        return updated;
+      });
+
+      return changed ? next : prevCart;
+    });
+  }, [products, loading, cartKey, cartOwner]);
+
+  /** Units of one product already in the cart, across every colour/size. */
+  const unitsInCart = (productId, exceptLineId = null) =>
+    cart
+      .filter((item) => (item.productId || item.id) === productId && item.lineId !== exceptLineId)
+      .reduce((sum, item) => sum + (Number(item.quantity) || 0), 0);
+
+  /**
    * Put a chosen variant into the cart. Each combination of product and
-   * choices is its own line, so one red and one blue are counted separately.
+   * choices is its own line, so one red and one blue are counted separately,
+   * but they share the product's one stock count.
    */
   const addLineToCart = (product, quantity = 1, selectedOptions = {}) => {
     const lineId = cartLineId(product.id, selectedOptions);
     const stock = Number(product.stock) || 0;
+    const room = stock - unitsInCart(product.id);
 
-    const existing = cart.find((item) => item.lineId === lineId);
-    if (existing && existing.quantity >= stock) {
-      showToast(`Cannot add more. Only ${stock} in stock.`, 'error');
+    if (room <= 0) {
+      showToast(`Cannot add more. Only ${stock} in stock, and they are all in your cart.`, 'error');
       return false;
+    }
+
+    const adding = Math.min(Math.max(1, Number(quantity) || 1), room);
+    if (adding < quantity) {
+      showToast(`Only ${room} more could be added. ${stock} in stock.`, 'info');
     }
 
     setCart((prevCart) => {
@@ -461,7 +526,7 @@ export default function ShopPage() {
       if (current) {
         return prevCart.map((item) =>
           item.lineId === lineId
-            ? { ...item, quantity: Math.min(item.quantity + quantity, stock) }
+            ? { ...item, price: product.price, stock, quantity: item.quantity + adding }
             : item
         );
       }
@@ -473,7 +538,7 @@ export default function ShopPage() {
           lineId,
           productId: product.id,
           selectedOptions,
-          quantity: Math.min(quantity, stock),
+          quantity: adding,
         },
       ];
     });
@@ -527,9 +592,15 @@ export default function ShopPage() {
     // and that asks first.
     if (quantity < 1) return;
 
-    const maxStock = Number(item.stock) || 0;
+    // Other colours/sizes of the same product use up the same stock.
+    const maxStock = (Number(item.stock) || 0) - unitsInCart(item.productId || item.id, lineId);
     if (quantity > maxStock) {
-      showToast(`Only ${maxStock} of ${item.name} in stock.`, 'error');
+      showToast(
+        maxStock > 0
+          ? `Only ${Number(item.stock) || 0} of ${item.name} in stock, including the other options in your cart.`
+          : `${item.name} is out of stock.`,
+        'error'
+      );
       return;
     }
 

@@ -351,8 +351,55 @@ export default function BuyerDashboard() {
     }
   };
 
+  // Show the cart at once, then replace the saved prices and stock with the
+  // live ones: what was stored when the item was added may be out of date.
   useEffect(() => {
-    setCart(readCart());
+    const stored = readCart();
+    setCart(stored);
+
+    const ids = [...new Set(stored.map((item) => item.productId || item.id).filter(Boolean))];
+    if (ids.length === 0) return undefined;
+
+    let cancelled = false;
+    (async () => {
+      const { data, error } = await supabase
+        .from('shop_products')
+        .select('id, name, price, stock, image_url, available, seller_id')
+        .in('id', ids);
+
+      if (cancelled || error) return;
+
+      const live = new Map((data || []).map((product) => [product.id, product]));
+      const used = new Map();
+      const refreshed = stored.map((item) => {
+        const productId = item.productId || item.id;
+        const product = live.get(productId);
+        if (!product || product.available === false) return { ...item, stock: 0 };
+
+        const stock = Number(product.stock) || 0;
+        const alreadyUsed = used.get(productId) || 0;
+        const quantity = Math.max(1, Math.min(Number(item.quantity) || 1, Math.max(stock - alreadyUsed, 1)));
+        used.set(productId, alreadyUsed + quantity);
+
+        return {
+          ...item,
+          name: product.name,
+          price: product.price,
+          stock,
+          image_url: product.image_url,
+          seller_id: product.seller_id,
+          quantity,
+        };
+      });
+
+      writeCart(refreshed);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+    // writeCart only touches state and localStorage
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [readCart]);
 
   const cartCount = cart.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0);
@@ -392,8 +439,10 @@ export default function BuyerDashboard() {
       current.includes(lineId) ? current.filter((id) => id !== lineId) : [...current, lineId]
     );
 
-  const selectedCartItems = cart.filter((item) => selectedLines.includes(item.lineId));
-  const allLinesSelected = cart.length > 0 && selectedCartItems.length === cart.length;
+  // A sold-out line stays in the cart but cannot go through checkout.
+  const sellableCart = cart.filter((item) => (Number(item.stock) || 0) > 0);
+  const selectedCartItems = sellableCart.filter((item) => selectedLines.includes(item.lineId));
+  const allLinesSelected = sellableCart.length > 0 && selectedCartItems.length === sellableCart.length;
   const selectedCartTotal = selectedCartItems.reduce(
     (sum, item) => sum + (Number(item.price) || 0) * (Number(item.quantity) || 0),
     0
@@ -406,9 +455,18 @@ export default function BuyerDashboard() {
     // The minus button never empties a line; "Remove" does, and it asks first.
     if (quantity < 1) return;
 
-    const maxStock = Number(item.stock) || 0;
-    if (maxStock && quantity > maxStock) {
-      showAlert(`Only ${maxStock} of ${item.name} in stock.`);
+    // Other colours/sizes of the same product share its stock.
+    const productId = item.productId || item.id;
+    const otherLines = cart
+      .filter((entry) => (entry.productId || entry.id) === productId && entry.lineId !== lineId)
+      .reduce((sum, entry) => sum + (Number(entry.quantity) || 0), 0);
+    const maxStock = (Number(item.stock) || 0) - otherLines;
+    if (quantity > maxStock) {
+      showAlert(
+        maxStock > 0
+          ? `Only ${Number(item.stock) || 0} of ${item.name} in stock, including the other options in your cart.`
+          : `${item.name} is out of stock.`
+      );
       return;
     }
 
@@ -1220,7 +1278,9 @@ export default function BuyerDashboard() {
                     <p className="text-sm text-gray-600 mt-1">
                       {cartCount === 0
                         ? 'Your cart is empty.'
-                        : `${cartCount} ${cartCount === 1 ? 'item' : 'items'} ready for checkout.`}
+                        : sellableCart.length === cart.length
+                          ? `${cartCount} ${cartCount === 1 ? 'item' : 'items'} ready for checkout.`
+                          : `${cart.length - sellableCart.length} sold out · ${sellableCart.length} ready for checkout.`}
                     </p>
                   </div>
                   <Link
@@ -1253,7 +1313,7 @@ export default function BuyerDashboard() {
                           type="checkbox"
                           checked={allLinesSelected}
                           onChange={(event) =>
-                            setSelectedLines(event.target.checked ? cart.map((item) => item.lineId) : [])
+                            setSelectedLines(event.target.checked ? sellableCart.map((item) => item.lineId) : [])
                           }
                           className="h-5 w-5 rounded border-gray-300 text-blue-600 focus:ring-2 focus:ring-blue-600"
                         />
@@ -1275,10 +1335,11 @@ export default function BuyerDashboard() {
                             {/* Tick the lines you want to pay for now */}
                             <input
                               type="checkbox"
-                              checked={selectedLines.includes(item.lineId)}
+                              checked={selectedLines.includes(item.lineId) && (Number(item.stock) || 0) > 0}
                               onChange={() => toggleCartLine(item.lineId)}
+                              disabled={(Number(item.stock) || 0) <= 0}
                               aria-label={`Check out ${item.name}`}
-                              className="h-5 w-5 flex-shrink-0 rounded border-gray-300 text-blue-600 focus:ring-2 focus:ring-blue-600"
+                              className="h-5 w-5 flex-shrink-0 rounded border-gray-300 text-blue-600 focus:ring-2 focus:ring-blue-600 disabled:cursor-not-allowed disabled:opacity-40"
                             />
 
                             <div className="h-20 w-20 flex-shrink-0 overflow-hidden rounded-lg bg-gray-100">
@@ -1299,6 +1360,11 @@ export default function BuyerDashboard() {
                               {describeSelection(item.selectedOptions) && (
                                 <p className="text-xs font-medium text-gray-500">
                                   {describeSelection(item.selectedOptions)}
+                                </p>
+                              )}
+                              {(Number(item.stock) || 0) <= 0 && (
+                                <p className="mt-1 inline-block rounded-full bg-red-100 px-2 py-0.5 text-xs font-bold text-red-700">
+                                  Sold out — remove it to check out
                                 </p>
                               )}
                               <p className="font-bold text-blue-600">₱{Number(item.price).toFixed(2)}</p>
@@ -1359,7 +1425,7 @@ export default function BuyerDashboard() {
                             type="button"
                             onClick={() => {
                               // Only the ticked lines travel to checkout
-                              storeSelection(user.id, selectedLines);
+                              storeSelection(user.id, selectedCartItems.map((item) => item.lineId));
                               router.push('/shop/checkout');
                             }}
                             disabled={selectedCartItems.length === 0}

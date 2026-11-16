@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useSellerAuth } from '@/contexts/SellerAuthContext';
 import { supabase } from '@/lib/supabaseClient';
 import { uploadProductImage } from '@/lib/imageUpload';
-import { formatOrderNumber, getAllowedStatuses, PAYMENT_LABELS, STATUS_LABELS, transitionOrderStatus } from '@/lib/orders';
+import { formatOrderNumber, getAllowedStatuses, isCountedSale, PAYMENT_LABELS, STATUS_LABELS, transitionOrderStatus } from '@/lib/orders';
 import PaymongoStatus from '@/components/shop/PaymongoStatus';
 import ChangePasswordCard from '@/components/ChangePasswordCard';
 import {
@@ -127,6 +127,8 @@ export default function SellerDashboard() {
   };
   const [savingCategory, setSavingCategory] = useState(false);
   const [editingProductId, setEditingProductId] = useState(null);
+  // Stock when the edit form was opened, to detect a sale made meanwhile
+  const [editingOriginalStock, setEditingOriginalStock] = useState(null);
   const [savingProduct, setSavingProduct] = useState(false);
   const [activeTab, setActiveTab] = useState('dashboard');
   // Which stage of the Orders tab is showing
@@ -354,20 +356,26 @@ export default function SellerDashboard() {
       const { orders: orderRows, products: myProducts } = await loadSellerOrders();
       const commissionRate = Number(seller?.commission_rate) || 15;
 
-      // Cancelled orders are refunds, not sales
-      const salesOrders = orderRows.filter((order) => order.status !== 'cancelled');
+      // Cancelled orders are refunds and unpaid online orders are not money
+      // received; the admin dashboard uses the same rule.
+      const salesOrders = orderRows.filter(isCountedSale);
       const totalSales = salesOrders.reduce((sum, order) => sum + order.my_total, 0);
       const platformFee = totalSales * (commissionRate / 100);
 
       // Real earnings rows are created by a DB trigger; fall back to the commission rate
       const { data: earningRows } = await supabase
         .from('shop_seller_earnings')
-        .select('seller_earning, status')
+        .select('seller_earning, status, order_id')
         .eq('seller_id', seller.id);
+
+      // Leave out earnings on online orders that were never paid.
+      const notCounted = new Set(
+        orderRows.filter((order) => !isCountedSale(order)).map((order) => order.id)
+      );
 
       const sumByStatus = (status) =>
         (earningRows || [])
-          .filter((row) => row.status === status)
+          .filter((row) => row.status === status && !notCounted.has(row.order_id))
           .reduce((sum, row) => sum + (Number(row.seller_earning) || 0), 0);
 
       const pendingEarnings = earningRows?.length ? sumByStatus('pending') : null;
@@ -618,13 +626,44 @@ export default function SellerDashboard() {
       };
 
       if (editingProductId) {
-        const { error } = await supabase
+        // Stock is written only when the seller actually changed it, and only
+        // if nobody bought one while the form was open. Otherwise a sale made
+        // in the meantime would be overwritten and the units sold twice.
+        const stockChanged = editingOriginalStock === null || stock !== editingOriginalStock;
+        const { stock: _unchanged, ...withoutStock } = payload;
+
+        let query = supabase
           .from('shop_products')
-          .update({ ...payload, updated_at: new Date().toISOString() })
+          .update({ ...(stockChanged ? payload : withoutStock), updated_at: new Date().toISOString() })
           .eq('id', editingProductId)
           .eq('seller_id', seller.id);
 
+        if (stockChanged && editingOriginalStock !== null) {
+          query = query.eq('stock', editingOriginalStock);
+        }
+
+        const { data: saved, error } = await query.select('id');
+
         if (error) throw error;
+
+        if (!saved || saved.length === 0) {
+          const { data: current } = await supabase
+            .from('shop_products')
+            .select('stock')
+            .eq('id', editingProductId)
+            .maybeSingle();
+
+          if (current && stockChanged && Number(current.stock) !== editingOriginalStock) {
+            showAlert(
+              `Someone bought this product while you were editing, so the stock is now ${current.stock}, not ${editingOriginalStock}. Check the number and save again.`
+            );
+            setEditingOriginalStock(Number(current.stock) || 0);
+            setNewProduct((prev) => ({ ...prev, stock: String(current.stock ?? '') }));
+            return;
+          }
+
+          throw new Error('The change was not saved. Your shop may not be approved or active.');
+        }
       } else {
         const { error } = await supabase
           .from('shop_products')
@@ -686,13 +725,17 @@ export default function SellerDashboard() {
 
   const handleToggleAvailability = async (productId, currentStatus) => {
     try {
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('shop_products')
-        .update({ available: !currentStatus })
+        .update({ available: !currentStatus, updated_at: new Date().toISOString() })
         .eq('id', productId)
-        .eq('seller_id', seller.id);
+        .eq('seller_id', seller.id)
+        .select('id');
 
       if (error) throw error;
+      if (!data || data.length === 0) {
+        throw new Error('The change was not saved. Your shop may not be approved or active.');
+      }
       fetchProducts();
     } catch (error) {
       console.error('Error toggling availability:', error);
@@ -755,6 +798,7 @@ export default function SellerDashboard() {
 
   const openEditProduct = (product) => {
     setEditingProductId(product.id);
+    setEditingOriginalStock(Number.isInteger(Number(product.stock)) ? Number(product.stock) : null);
     setNewProduct({
       name: product.name || '',
       description: product.description || '',
@@ -776,6 +820,7 @@ export default function SellerDashboard() {
   const closeProductModal = () => {
     setShowAddProduct(false);
     setEditingProductId(null);
+    setEditingOriginalStock(null);
     setImagePreview('');
     setShowNewCategory(false);
     setNewCategoryName('');
@@ -1067,7 +1112,7 @@ export default function SellerDashboard() {
     ? searchedOrders.filter((order) => activeStage.statuses.includes(order.status))
     : searchedOrders;
   const dailySales = buildDailySales(
-    orders.filter((order) => order.status !== 'cancelled'),
+    orders.filter(isCountedSale),
     Number(salesRange)
   );
 

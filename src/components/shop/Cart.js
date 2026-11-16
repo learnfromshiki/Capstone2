@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { describeSelection } from '@/lib/productOptions';
 import { useDialog } from '@/components/ui/Dialog';
 import { storeSelection } from '@/lib/checkoutSelection';
+import { estimateRewardPoints } from '@/lib/orders';
 
 export default function Cart({ cart, isOpen, onClose, onUpdateQuantity, onRemoveItem, userId }) {
   const { showConfirm } = useDialog();
@@ -29,8 +30,8 @@ export default function Cart({ cart, isOpen, onClose, onUpdateQuantity, onRemove
   const isSoldOut = (item) => (Number(item.stock) || 0) <= 0;
 
   const sellable = cart.filter((item) => (Number(item.stock) || 0) > 0);
-  const allSelected = sellable.length > 0 && selectedItems.length === sellable.length;
   const selectedItems = cart.filter((item) => selected.includes(item.lineId) && !isSoldOut(item));
+  const allSelected = sellable.length > 0 && selectedItems.length === sellable.length;
   const selectedTotal = selectedItems.reduce(
     (sum, item) => sum + (Number(item.price) || 0) * (Number(item.quantity) || 0),
     0
@@ -232,11 +233,11 @@ export default function Cart({ cart, isOpen, onClose, onUpdateQuantity, onRemove
                 <span className="font-semibold">₱{selectedTotal.toFixed(2)}</span>
               </div>
               <div className="flex justify-between text-sm text-gray-500">
-                <span>Estimated Delivery</span>
-                <span>FREE</span>
+                <span>Delivery</span>
+                <span>Calculated at checkout</span>
               </div>
               <div className="border-t pt-2 flex justify-between items-center">
-                <span className="text-lg font-bold text-gray-900">Total</span>
+                <span className="text-lg font-bold text-gray-900">Items total</span>
                 <span className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-blue-700 bg-clip-text text-transparent">
                   ₱{selectedTotal.toFixed(2)}
                 </span>
@@ -250,7 +251,7 @@ export default function Cart({ cart, isOpen, onClose, onUpdateQuantity, onRemove
                   <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
                 </svg>
                 <p className="text-sm text-yellow-900">
-                  <span className="font-bold">Earn {Math.floor(selectedTotal / 100) * 10} points</span> with this purchase
+                  <span className="font-bold">Earn about {estimateRewardPoints(selectedItems)} points</span> with this purchase
                 </p>
               </div>
             </div>
