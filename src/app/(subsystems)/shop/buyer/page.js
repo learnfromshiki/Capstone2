@@ -7,6 +7,8 @@ import { supabase } from '@/lib/supabaseClient';
 import Link from 'next/link';
 import { cancelMyOrder, confirmOrderReceived, formatOrderNumber, PAYMENT_LABELS } from '@/lib/orders';
 import { fetchShopSettings } from '@/lib/shopSettings';
+import { startPaymongoCheckout } from '@/lib/paymongo';
+import PaymongoStatus from '@/components/shop/PaymongoStatus';
 import PaymentInstructions from '@/components/shop/PaymentInstructions';
 import ChangePasswordCard from '@/components/ChangePasswordCard';
 import { joinName, splitName } from '@/lib/profile';
@@ -114,6 +116,23 @@ export default function BuyerDashboard() {
   const [highlightOrderId, setHighlightOrderId] = useState(null);
   const [suspended, setSuspended] = useState(false);
   const [cancellingOrderId, setCancellingOrderId] = useState(null);
+  const [payingOrderId, setPayingOrderId] = useState(null);
+
+  // Reopen PayMongo for an order that was placed but not paid yet. The
+  // payment covers the whole checkout it belongs to.
+  const handlePayOnline = async (order) => {
+    if (!order?.checkout_id) return;
+    setPayingOrderId(order.id);
+    try {
+      const url = await startPaymongoCheckout(order.checkout_id);
+      window.location.assign(
+        url || `/shop/checkout/paymongo?status=success&checkout=${order.checkout_id}`
+      );
+    } catch (error) {
+      window.alert(error.message || 'Could not start the online payment.');
+      setPayingOrderId(null);
+    }
+  };
   const [confirmingOrderId, setConfirmingOrderId] = useState(null);
   const [cart, setCart] = useState([]);
   const [shopNames, setShopNames] = useState({});
@@ -1098,6 +1117,19 @@ export default function BuyerDashboard() {
                             </div>
                             <div className="flex flex-col gap-2 text-sm text-gray-600 sm:items-end">
                               <p>Payment: <span className="font-semibold">{PAYMENT_LABELS[order.payment_method] || order.payment_method}</span></p>
+                              <PaymongoStatus order={order} />
+                              {order.payment_method === 'paymongo' &&
+                                order.payment_status !== 'paid' &&
+                                order.status === 'pending' && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handlePayOnline(order)}
+                                    disabled={payingOrderId === order.id}
+                                    className="min-h-[44px] rounded-lg bg-blue-600 px-5 font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
+                                  >
+                                    {payingOrderId === order.id ? 'Opening PayMongo...' : 'Pay now'}
+                                  </button>
+                                )}
                               {order.payment_proof_url && (
                                 <a
                                   href={order.payment_proof_url}
@@ -1108,7 +1140,7 @@ export default function BuyerDashboard() {
                                   Receipt attached ✓
                                 </a>
                               )}
-                              {order.status === 'pending' && (
+                              {order.status === 'pending' && order.payment_status !== 'paid' && (
                                 <button
                                   type="button"
                                   onClick={() => handleCancelOrder(order)}

@@ -7,6 +7,7 @@ import { supabase, startAdminSession } from '@/lib/supabaseClient';
 import { uploadProductImage } from '@/lib/imageUpload';
 import { getAccountRole } from '@/lib/roles';
 import { formatOrderNumber, getAllowedStatuses, PAYMENT_LABELS, STATUS_LABELS, transitionOrderStatus } from '@/lib/orders';
+import PaymongoStatus from '@/components/shop/PaymongoStatus';
 import { describePriceProblem, sanitizePrice } from '@/lib/fieldRules';
 import { DEFAULT_SHOP_SETTINGS, fetchShopSettings } from '@/lib/shopSettings';
 import PasswordRequirements from '@/components/PasswordRequirements';
@@ -1081,11 +1082,12 @@ export default function ShopAdminPage() {
         if (order.payment_method === 'cod') acc.cod += amount;
         if (order.payment_method === 'gcash') acc.gcash += amount;
         if (order.payment_method === 'bank') acc.bank += amount;
+        if (order.payment_method === 'paymongo' && order.payment_status === 'paid') acc.paymongo += amount;
       }
 
       return acc;
     },
-    { completed: 0, pending: 0, refunded: 0, cod: 0, gcash: 0, bank: 0 }
+    { completed: 0, pending: 0, refunded: 0, cod: 0, gcash: 0, bank: 0, paymongo: 0 }
   );
 
   const generateReport = async (type) => {
@@ -1197,7 +1199,8 @@ export default function ShopAdminPage() {
         const methods = [
           { key: 'gcash', label: 'GCash' },
           { key: 'cod', label: 'Cash on Delivery' },
-          { key: 'bank', label: 'Bank Transfer' }
+          { key: 'bank', label: 'Bank Transfer' },
+          { key: 'paymongo', label: 'Online (PayMongo)' }
         ];
 
         rows = methods.map((method) => {
@@ -2474,6 +2477,7 @@ export default function ShopAdminPage() {
                     <span className="text-sm text-gray-600">
                       Payment: {PAYMENT_LABELS[order.payment_method] || order.payment_method || 'Unknown'}
                     </span>
+                    <PaymongoStatus order={order} />
                   </div>
 
                   {/* What the customer sent, for a GCash or bank order */}
@@ -2652,6 +2656,22 @@ export default function ShopAdminPage() {
                     <p className="text-xs text-gray-600 font-medium">Bank Transfer</p>
                     <p className="text-xl font-bold text-gray-900">
                       ₱{orderTotals.bank.toLocaleString()}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                <div className="flex items-center gap-3 mb-2">
+                  <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
+                    <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                    </svg>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-600 font-medium">Paid online (PayMongo)</p>
+                    <p className="text-xl font-bold text-gray-900">
+                      ₱{orderTotals.paymongo.toLocaleString()}
                     </p>
                   </div>
                 </div>

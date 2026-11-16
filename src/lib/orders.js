@@ -255,6 +255,7 @@ export const formatOrderNumber = (orderId) =>
   orderId ? `#${String(orderId).slice(0, 8).toUpperCase()}` : '';
 
 export const PAYMENT_LABELS = {
+  paymongo: 'Online payment (PayMongo)',
   gcash: 'GCash',
   cod: 'Cash on Delivery',
   bank: 'Bank Transfer',

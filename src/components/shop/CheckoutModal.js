@@ -14,6 +14,7 @@ import { PHONE_HINT, describeNameProblem, describePhoneProblem, sanitizeName, sa
 import { fetchShippingFee } from '@/lib/shipping';
 import ShopPaymentPanel from './ShopPaymentPanel';
 import { acceptsMethod, attachPaymentProof, fetchSellerPayments } from '@/lib/sellerPayments';
+import { fetchPaymongoEnabled, startPaymongoCheckout } from '@/lib/paymongo';
 
 const MAX_QUANTITY = 9999;
 
@@ -73,6 +74,11 @@ export default function CheckoutModal({
   // customer attaches for each of them: { [sellerId]: { url, reference } }
   const [sellerPayments, setSellerPayments] = useState({});
   const [receipts, setReceipts] = useState({});
+  // Online payment through PayMongo (GCash, Maya, cards, GrabPay)
+  const [paymongoEnabled, setPaymongoEnabled] = useState(false);
+  const [placedCheckoutId, setPlacedCheckoutId] = useState(null);
+  const [paymentStartError, setPaymentStartError] = useState('');
+  const [startingPayment, setStartingPayment] = useState(false);
   const topRef = useRef(null);
 
   /**
@@ -176,6 +182,36 @@ export default function CheckoutModal({
       cancelled = true;
     };
   }, []);
+
+  // Offer online payment only when the server has PayMongo keys, and make it
+  // the default choice when it is there.
+  useEffect(() => {
+    let cancelled = false;
+    fetchPaymongoEnabled().then((enabled) => {
+      if (cancelled) return;
+      setPaymongoEnabled(enabled);
+      if (enabled) {
+        setFormData((prev) => (prev.paymentMethod === 'gcash' ? { ...prev, paymentMethod: 'paymongo' } : prev));
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  /** Send the customer to PayMongo for an order that has been placed. */
+  const goToPaymongo = async (checkoutId) => {
+    setStartingPayment(true);
+    setPaymentStartError('');
+    try {
+      const url = await startPaymongoCheckout(checkoutId);
+      if (onSuccess) onSuccess();
+      window.location.assign(url || `/shop/checkout/paymongo?status=success&checkout=${checkoutId}`);
+    } catch (paymentError) {
+      setPaymentStartError(paymentError.message || 'Could not start the online payment.');
+      setStartingPayment(false);
+    }
+  };
 
   // ...and the details each shop in this basket saved for itself.
   const sellerIdKey = Array.from(new Set(cart.map((item) => item.seller_id).filter(Boolean)))
@@ -491,6 +527,39 @@ export default function CheckoutModal({
       }
 
       const serverResult = await placeOrderOnServer();
+
+      if (!serverResult && formData.paymentMethod === 'paymongo') {
+        throw new Error('Online payment is not available yet. Please choose another payment method.');
+      }
+
+      if (serverResult && formData.paymentMethod === 'paymongo') {
+        const orders = Array.isArray(serverResult.orders) ? serverResult.orders : [];
+        await saveDetailsToProfile(sessionUser.id);
+
+        setPlacedOrders(orders.map((order) => ({ id: order.id, total: Number(order.total) || 0 })));
+        setPlacedPayment('paymongo');
+        setPlacedCheckoutId(serverResult.checkout_id);
+        setVerifiedCart((previous) => ({
+          items: previous?.items || cart,
+          total: Number(serverResult.total) || previous?.total || 0,
+        }));
+        setAwardedPoints(Number(serverResult.points) || 0);
+
+        // The order is placed. If PayMongo cannot be reached, the customer
+        // lands on the success step with a "Pay now" button instead.
+        try {
+          const url = await startPaymongoCheckout(serverResult.checkout_id);
+          if (onSuccess) onSuccess();
+          window.location.assign(
+            url || `/shop/checkout/paymongo?status=success&checkout=${serverResult.checkout_id}`
+          );
+          return;
+        } catch (paymentError) {
+          setPaymentStartError(paymentError.message || 'Could not start the online payment.');
+          setStep(3);
+          return;
+        }
+      }
 
       if (serverResult) {
         const orders = Array.isArray(serverResult.orders) ? serverResult.orders : [];
@@ -947,6 +1016,25 @@ export default function CheckoutModal({
             {/* Payment Options. A method no shop in this basket accepts is
                 simply not offered. */}
             <div className="space-y-3 mb-6">
+              {paymongoEnabled && (
+                <label className="flex items-start p-4 border-2 rounded-xl cursor-pointer hover:bg-blue-50 transition-colors">
+                  <input
+                    type="radio"
+                    name="paymentMethod"
+                    value="paymongo"
+                    checked={formData.paymentMethod === 'paymongo'}
+                    onChange={handleInputChange}
+                    className="mt-0.5 w-5 h-5 text-blue-600"
+                  />
+                  <span className="ml-3">
+                    <span className="block font-medium">Pay online</span>
+                    <span className="block text-xs text-gray-500">
+                      GCash, Maya, card or GrabPay through PayMongo. Paid instantly, no receipt to upload.
+                    </span>
+                  </span>
+                </label>
+              )}
+
               {gcashAvailable && (
                 <label className="flex items-center p-4 border-2 rounded-xl cursor-pointer hover:bg-blue-50 transition-colors">
                   <input
@@ -1043,7 +1131,11 @@ export default function CheckoutModal({
                 title={receiptsComplete ? undefined : 'Attach your payment receipt first'}
                 className="flex-1 bg-blue-600 text-white py-4 rounded-full font-bold hover:bg-blue-700 disabled:bg-gray-400 transition-colors"
               >
-                {loading ? 'Processing...' : 'Place Order'}
+                {loading
+                  ? 'Processing...'
+                  : formData.paymentMethod === 'paymongo'
+                    ? 'Place Order & Pay'
+                    : 'Place Order'}
               </button>
             </div>
           </div>
@@ -1071,6 +1163,21 @@ export default function CheckoutModal({
                   Total: <span className="font-semibold">₱{summaryTotal.toFixed(2)}</span> · Payment:{' '}
                   <span className="font-semibold">{PAYMENT_LABELS[placedPayment] || placedPayment}</span>
                 </p>
+              </div>
+            )}
+            {placedPayment === 'paymongo' && placedCheckoutId && (
+              <div className="mb-4 rounded-xl border-2 border-amber-200 bg-amber-50 p-4 text-left text-sm text-amber-900">
+                <p className="font-semibold">Your order is waiting for payment.</p>
+                {paymentStartError && <p className="mt-1">{paymentStartError}</p>}
+                <p className="mt-1">You can pay now, or later from My Orders.</p>
+                <button
+                  type="button"
+                  onClick={() => goToPaymongo(placedCheckoutId)}
+                  disabled={startingPayment}
+                  className="mt-3 min-h-[44px] w-full rounded-full bg-blue-600 font-bold text-white hover:bg-blue-700 disabled:bg-gray-400"
+                >
+                  {startingPayment ? 'Opening PayMongo...' : 'Pay now'}
+                </button>
               </div>
             )}
             {(placedPayment === 'gcash' || placedPayment === 'bank') && (

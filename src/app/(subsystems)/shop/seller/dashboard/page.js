@@ -6,6 +6,7 @@ import { useSellerAuth } from '@/contexts/SellerAuthContext';
 import { supabase } from '@/lib/supabaseClient';
 import { uploadProductImage } from '@/lib/imageUpload';
 import { formatOrderNumber, getAllowedStatuses, PAYMENT_LABELS, STATUS_LABELS, transitionOrderStatus } from '@/lib/orders';
+import PaymongoStatus from '@/components/shop/PaymongoStatus';
 import ChangePasswordCard from '@/components/ChangePasswordCard';
 import {
   PHONE_HINT,
@@ -297,7 +298,7 @@ export default function SellerDashboard() {
     // The payment receipt arrives with supabase-notifications-payments.sql;
     // fall back so an older database still lists its orders.
     let { data: orderRows, error: ordersError } = await readOrders(
-      `${ORDER_COLUMNS}, payment_proof_url, payment_reference, payment_proof_at`
+      `${ORDER_COLUMNS}, payment_proof_url, payment_reference, payment_proof_at, payment_status, paid_at`
     );
 
     if (ordersError && /payment_proof|payment_reference|column/i.test(ordersError.message || '')) {
@@ -1950,6 +1951,7 @@ export default function SellerDashboard() {
                     <span className="text-sm text-gray-600">
                       Payment: {PAYMENT_LABELS[order.payment_method] || order.payment_method}
                     </span>
+                    <PaymongoStatus order={order} />
                     {order.user_id && (
                       <button
                         type="button"
@@ -1978,7 +1980,7 @@ export default function SellerDashboard() {
                       reference={order.payment_reference}
                       paidAt={order.payment_proof_at}
                     />
-                    {!order.payment_proof_url && order.payment_method !== 'cod' && (
+                    {!order.payment_proof_url && !['cod', 'paymongo'].includes(order.payment_method) && (
                       <p className="text-xs text-yellow-700">
                         No payment receipt was attached to this order yet.
                       </p>
