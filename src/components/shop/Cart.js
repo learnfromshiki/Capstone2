@@ -238,7 +238,7 @@ export default function Cart({ cart, isOpen, onClose, onUpdateQuantity, onRemove
               </div>
               <div className="border-t pt-2 flex justify-between items-center">
                 <span className="text-lg font-bold text-gray-900">Items total</span>
-                <span className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-blue-700 bg-clip-text text-transparent">
+                <span className="text-2xl font-bold text-blue-700">
                   ₱{selectedTotal.toFixed(2)}
                 </span>
               </div>

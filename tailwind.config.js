@@ -8,7 +8,24 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        'daet-blue': '#2563eb',
+        'daet-blue': '#3a62ad',
+        // A calmer blue than Tailwind's default. The stock blue-600 (#2563eb)
+        // is close to neon on a white screen and was used on almost every
+        // button, header and link, which made long sessions tiring. Same hue,
+        // less saturation, so every existing `blue-*` class softens at once.
+        blue: {
+          50: '#f3f6fb',
+          100: '#e3eaf5',
+          200: '#c8d5eb',
+          300: '#a2b8dc',
+          400: '#7593c8',
+          500: '#5276b6',
+          600: '#3d61a6',
+          700: '#334f89',
+          800: '#2d4370',
+          900: '#28395c',
+          950: '#1a243b',
+        },
       },
       keyframes: {
         'fade-in': {

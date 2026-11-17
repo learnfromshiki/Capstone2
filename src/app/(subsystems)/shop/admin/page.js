@@ -1649,9 +1649,9 @@ export default function ShopAdminPage() {
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-gray-50 lg:flex-row">
       {/* LEFT SIDEBAR */}
-      <aside className="flex w-full flex-shrink-0 flex-col bg-gradient-to-b from-blue-700 to-blue-900 text-white shadow-xl lg:w-64">
+      <aside className="flex w-full flex-shrink-0 flex-col bg-gradient-to-b from-slate-800 to-slate-900 text-white shadow-xl lg:w-64">
         {/* Logo */}
-        <div className="border-b border-blue-800 px-4 py-3 lg:p-6">
+        <div className="border-b border-slate-700 px-4 py-3 lg:p-6">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-white/10 rounded-lg flex items-center justify-center">
               <svg className="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 20 20">
@@ -1660,7 +1660,7 @@ export default function ShopAdminPage() {
             </div>
             <div>
               <h1 className="font-bold text-white">CONNECT-Daet</h1>
-              <p className="text-xs text-blue-200">Admin Panel</p>
+              <p className="text-xs text-slate-300">Admin Panel</p>
             </div>
           </div>
         </div>
@@ -1671,8 +1671,8 @@ export default function ShopAdminPage() {
             onClick={() => setActiveTab('dashboard')}
             className={`flex w-auto flex-shrink-0 items-center gap-3 px-4 py-3 text-left transition-colors lg:w-full lg:flex-shrink lg:px-6 ${
               activeTab === 'dashboard'
-                ? 'bg-blue-800 border-l-4 border-white font-semibold'
-                : 'hover:bg-blue-800/50'
+                ? 'bg-white/10 border-l-4 border-blue-400 font-semibold'
+                : 'hover:bg-white/5'
             }`}
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1685,8 +1685,8 @@ export default function ShopAdminPage() {
             onClick={() => setActiveTab('orders')}
             className={`flex w-auto flex-shrink-0 items-center gap-3 px-4 py-3 text-left transition-colors lg:w-full lg:flex-shrink lg:px-6 ${
               activeTab === 'orders'
-                ? 'bg-blue-800 border-l-4 border-white font-semibold'
-                : 'hover:bg-blue-800/50'
+                ? 'bg-white/10 border-l-4 border-blue-400 font-semibold'
+                : 'hover:bg-white/5'
             }`}
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1704,8 +1704,8 @@ export default function ShopAdminPage() {
             onClick={() => setActiveTab('products')}
             className={`flex w-auto flex-shrink-0 items-center gap-3 px-4 py-3 text-left transition-colors lg:w-full lg:flex-shrink lg:px-6 ${
               activeTab === 'products'
-                ? 'bg-blue-800 border-l-4 border-white font-semibold'
-                : 'hover:bg-blue-800/50'
+                ? 'bg-white/10 border-l-4 border-blue-400 font-semibold'
+                : 'hover:bg-white/5'
             }`}
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1718,8 +1718,8 @@ export default function ShopAdminPage() {
             onClick={() => setActiveTab('sellers')}
             className={`flex w-auto flex-shrink-0 items-center gap-3 px-4 py-3 text-left transition-colors lg:w-full lg:flex-shrink lg:px-6 ${
               activeTab === 'sellers'
-                ? 'bg-blue-800 border-l-4 border-white font-semibold'
-                : 'hover:bg-blue-800/50'
+                ? 'bg-white/10 border-l-4 border-blue-400 font-semibold'
+                : 'hover:bg-white/5'
             }`}
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1732,8 +1732,8 @@ export default function ShopAdminPage() {
             onClick={() => setActiveTab('customers')}
             className={`flex w-auto flex-shrink-0 items-center gap-3 px-4 py-3 text-left transition-colors lg:w-full lg:flex-shrink lg:px-6 ${
               activeTab === 'customers'
-                ? 'bg-blue-800 border-l-4 border-white font-semibold'
-                : 'hover:bg-blue-800/50'
+                ? 'bg-white/10 border-l-4 border-blue-400 font-semibold'
+                : 'hover:bg-white/5'
             }`}
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1746,8 +1746,8 @@ export default function ShopAdminPage() {
             onClick={() => setActiveTab('categories')}
             className={`flex w-auto flex-shrink-0 items-center gap-3 px-4 py-3 text-left transition-colors lg:w-full lg:flex-shrink lg:px-6 ${
               activeTab === 'categories'
-                ? 'bg-blue-800 border-l-4 border-white font-semibold'
-                : 'hover:bg-blue-800/50'
+                ? 'bg-white/10 border-l-4 border-blue-400 font-semibold'
+                : 'hover:bg-white/5'
             }`}
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1760,8 +1760,8 @@ export default function ShopAdminPage() {
             onClick={() => setActiveTab('transactions')}
             className={`flex w-auto flex-shrink-0 items-center gap-3 px-4 py-3 text-left transition-colors lg:w-full lg:flex-shrink lg:px-6 ${
               activeTab === 'transactions'
-                ? 'bg-blue-800 border-l-4 border-white font-semibold'
-                : 'hover:bg-blue-800/50'
+                ? 'bg-white/10 border-l-4 border-blue-400 font-semibold'
+                : 'hover:bg-white/5'
             }`}
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1774,8 +1774,8 @@ export default function ShopAdminPage() {
             onClick={() => setActiveTab('reports')}
             className={`flex w-auto flex-shrink-0 items-center gap-3 px-4 py-3 text-left transition-colors lg:w-full lg:flex-shrink lg:px-6 ${
               activeTab === 'reports'
-                ? 'bg-blue-800 border-l-4 border-white font-semibold'
-                : 'hover:bg-blue-800/50'
+                ? 'bg-white/10 border-l-4 border-blue-400 font-semibold'
+                : 'hover:bg-white/5'
             }`}
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1788,8 +1788,8 @@ export default function ShopAdminPage() {
             onClick={() => setActiveTab('settings')}
             className={`flex w-auto flex-shrink-0 items-center gap-3 px-4 py-3 text-left transition-colors lg:w-full lg:flex-shrink lg:px-6 ${
               activeTab === 'settings'
-                ? 'bg-blue-800 border-l-4 border-white font-semibold'
-                : 'hover:bg-blue-800/50'
+                ? 'bg-white/10 border-l-4 border-blue-400 font-semibold'
+                : 'hover:bg-white/5'
             }`}
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1801,10 +1801,10 @@ export default function ShopAdminPage() {
         </nav>
 
         {/* Logout Button */}
-        <div className="hidden border-t border-blue-800 p-4 lg:block">
+        <div className="hidden border-t border-slate-700 p-4 lg:block">
           <button
             onClick={handleLogout}
-            className="w-full flex items-center gap-3 px-4 py-3 text-left bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors"
+            className="w-full flex items-center gap-3 px-4 py-3 text-left bg-white/5 text-slate-200 hover:bg-red-500/20 hover:text-white rounded-lg transition-colors"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
@@ -1908,7 +1908,7 @@ export default function ShopAdminPage() {
                     <p className="text-sm font-medium text-gray-600">Total Sellers</p>
                     <h3 className="text-3xl font-bold text-gray-900 mt-2">{stats.totalSellers}</h3>
                     {stats.pendingSellers > 0 && (
-                      <p className="text-xs text-orange-600 mt-1">{stats.pendingSellers} pending approval</p>
+                      <p className="text-xs text-amber-700 mt-1">{stats.pendingSellers} pending approval</p>
                     )}
                   </div>
                   <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
@@ -1951,7 +1951,7 @@ export default function ShopAdminPage() {
                     <span className="font-semibold text-gray-900">View Sellers</span>
                   </div>
                   {stats.pendingSellers > 0 && (
-                    <span className="bg-orange-500 text-white text-xs font-bold px-2 py-1 rounded-full">{stats.pendingSellers}</span>
+                    <span className="bg-amber-100 text-amber-800 text-xs font-bold px-2 py-1 rounded-full">{stats.pendingSellers}</span>
                   )}
                 </button>
 
@@ -1988,7 +1988,7 @@ export default function ShopAdminPage() {
                   className="flex items-center justify-between p-4 bg-yellow-50 hover:bg-yellow-100 rounded-lg transition-colors group"
                 >
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-yellow-600 rounded-lg flex items-center justify-center">
+                    <div className="w-10 h-10 bg-amber-500 rounded-lg flex items-center justify-center">
                       <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
                       </svg>
@@ -2005,9 +2005,9 @@ export default function ShopAdminPage() {
               <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
                 <h3 className="text-lg font-bold mb-4">Pending Approvals</h3>
                 <div className="space-y-3">
-                  <div className="flex items-center justify-between p-3 bg-orange-50 rounded-lg">
+                  <div className="flex items-center justify-between p-3 bg-amber-50 rounded-lg">
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 bg-orange-500 rounded-lg flex items-center justify-center">
+                      <div className="w-10 h-10 bg-amber-500 rounded-lg flex items-center justify-center">
                         <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
                         </svg>
@@ -2017,7 +2017,7 @@ export default function ShopAdminPage() {
                         <p className="text-xs text-gray-600">New registrations</p>
                       </div>
                     </div>
-                    <span className="bg-orange-500 text-white text-sm font-bold px-3 py-1 rounded-full">{stats.pendingSellers}</span>
+                    <span className="bg-amber-100 text-amber-800 text-sm font-bold px-3 py-1 rounded-full">{stats.pendingSellers}</span>
                   </div>
 
                   <div className="flex items-center justify-between p-3 bg-blue-50 rounded-lg">

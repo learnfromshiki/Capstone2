@@ -64,7 +64,7 @@ export default function ProductCard({
         {/* Stock Badge. Read through Number() so a stock of null, or of "0"
             coming back from the database as text, still counts as sold out. */}
         {stock > 0 && stock <= 5 && (
-          <div className="absolute top-3 left-3 bg-yellow-500 text-white text-xs px-3 py-1.5 rounded-full font-bold shadow-lg">
+          <div className="absolute top-3 left-3 bg-amber-100 text-amber-900 text-xs px-3 py-1.5 rounded-full font-bold shadow-md ring-1 ring-amber-300">
             Only {stock} left!
           </div>
         )}
@@ -155,7 +155,7 @@ export default function ProductCard({
         <div className="mb-3 flex items-end justify-between border-b border-gray-100 pb-3">
           <div>
             <p className="text-xs text-gray-500 mb-1">Price</p>
-            <span className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-blue-700 bg-clip-text text-transparent">
+            <span className="text-2xl font-bold text-blue-700">
               ₱{Number(product.price || 0).toFixed(2)}
             </span>
           </div>

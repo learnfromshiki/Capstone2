@@ -42,7 +42,7 @@ const TONE_STYLES = {
   info: { ring: 'bg-blue-100 text-blue-600', button: 'bg-blue-600 hover:bg-blue-700', icon: 'i' },
   success: { ring: 'bg-green-100 text-green-600', button: 'bg-green-600 hover:bg-green-700', icon: '✓' },
   error: { ring: 'bg-red-100 text-red-600', button: 'bg-red-600 hover:bg-red-700', icon: '!' },
-  warning: { ring: 'bg-yellow-100 text-yellow-700', button: 'bg-yellow-600 hover:bg-yellow-700', icon: '!' },
+  warning: { ring: 'bg-amber-100 text-amber-700', button: 'bg-amber-600 hover:bg-amber-700', icon: '!' },
   question: { ring: 'bg-blue-100 text-blue-600', button: 'bg-blue-600 hover:bg-blue-700', icon: '?' },
 };
 

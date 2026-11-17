@@ -1239,9 +1239,9 @@ export default function SellerDashboard() {
   return (
     <div className="min-h-screen bg-gray-50 lg:flex lg:h-screen">
       {/* LEFT SIDEBAR */}
-      <aside className="hidden w-64 flex-col bg-gradient-to-b from-blue-700 to-blue-900 text-white shadow-xl lg:flex">
+      <aside className="hidden w-64 flex-col bg-gradient-to-b from-slate-800 to-slate-900 text-white shadow-xl lg:flex">
         {/* Logo */}
-        <div className="p-6 border-b border-blue-800">
+        <div className="p-6 border-b border-slate-700">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-white/10 rounded-lg flex items-center justify-center">
               <svg className="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 20 20">
@@ -1250,7 +1250,7 @@ export default function SellerDashboard() {
             </div>
             <div>
               <h1 className="font-bold text-white">CONNECT-Daet</h1>
-              <p className="text-xs text-blue-200">Seller Portal</p>
+              <p className="text-xs text-slate-300">Seller Portal</p>
             </div>
           </div>
         </div>
@@ -1261,8 +1261,8 @@ export default function SellerDashboard() {
             onClick={() => setActiveTab('dashboard')}
             className={`w-full flex items-center gap-3 px-6 py-3 text-left transition-colors ${
               activeTab === 'dashboard'
-                ? 'bg-blue-700 border-l-4 border-white font-semibold'
-                : 'hover:bg-blue-700/50'
+                ? 'bg-white/10 border-l-4 border-blue-400 font-semibold'
+                : 'hover:bg-white/5'
             }`}
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1275,8 +1275,8 @@ export default function SellerDashboard() {
             onClick={() => setActiveTab('products')}
             className={`w-full flex items-center gap-3 px-6 py-3 text-left transition-colors ${
               activeTab === 'products'
-                ? 'bg-blue-700 border-l-4 border-white font-semibold'
-                : 'hover:bg-blue-700/50'
+                ? 'bg-white/10 border-l-4 border-blue-400 font-semibold'
+                : 'hover:bg-white/5'
             }`}
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1289,8 +1289,8 @@ export default function SellerDashboard() {
             onClick={() => setActiveTab('orders')}
             className={`w-full flex items-center gap-3 px-6 py-3 text-left transition-colors ${
               activeTab === 'orders'
-                ? 'bg-blue-700 border-l-4 border-white font-semibold'
-                : 'hover:bg-blue-700/50'
+                ? 'bg-white/10 border-l-4 border-blue-400 font-semibold'
+                : 'hover:bg-white/5'
             }`}
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1308,8 +1308,8 @@ export default function SellerDashboard() {
             onClick={() => setActiveTab('messages')}
             className={`w-full flex items-center gap-3 px-6 py-3 text-left transition-colors ${
               activeTab === 'messages'
-                ? 'bg-blue-700 border-l-4 border-white font-semibold'
-                : 'hover:bg-blue-700/50'
+                ? 'bg-white/10 border-l-4 border-blue-400 font-semibold'
+                : 'hover:bg-white/5'
             }`}
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1322,8 +1322,8 @@ export default function SellerDashboard() {
             onClick={() => setActiveTab('earnings')}
             className={`w-full flex items-center gap-3 px-6 py-3 text-left transition-colors ${
               activeTab === 'earnings'
-                ? 'bg-blue-700 border-l-4 border-white font-semibold'
-                : 'hover:bg-blue-700/50'
+                ? 'bg-white/10 border-l-4 border-blue-400 font-semibold'
+                : 'hover:bg-white/5'
             }`}
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1336,8 +1336,8 @@ export default function SellerDashboard() {
             onClick={() => setActiveTab('settings')}
             className={`w-full flex items-center gap-3 px-6 py-3 text-left transition-colors ${
               activeTab === 'settings'
-                ? 'bg-blue-700 border-l-4 border-white font-semibold'
-                : 'hover:bg-blue-700/50'
+                ? 'bg-white/10 border-l-4 border-blue-400 font-semibold'
+                : 'hover:bg-white/5'
             }`}
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1350,8 +1350,8 @@ export default function SellerDashboard() {
             onClick={() => setActiveTab('profile')}
             className={`w-full flex items-center gap-3 px-6 py-3 text-left transition-colors ${
               activeTab === 'profile'
-                ? 'bg-blue-700 border-l-4 border-white font-semibold'
-                : 'hover:bg-blue-700/50'
+                ? 'bg-white/10 border-l-4 border-blue-400 font-semibold'
+                : 'hover:bg-white/5'
             }`}
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1362,10 +1362,10 @@ export default function SellerDashboard() {
         </nav>
 
         {/* Logout Button */}
-        <div className="p-4 border-t border-blue-800">
+        <div className="p-4 border-t border-slate-700">
           <button
             onClick={handleLogout}
-            className="w-full flex items-center gap-3 px-4 py-3 text-left bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors"
+            className="w-full flex items-center gap-3 px-4 py-3 text-left bg-white/5 text-slate-200 hover:bg-red-500/20 hover:text-white rounded-lg transition-colors"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
@@ -1640,7 +1640,7 @@ export default function SellerDashboard() {
                       className="w-full flex items-center justify-between p-3 bg-yellow-50 hover:bg-yellow-100 rounded-lg transition-colors"
                     >
                       <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 bg-yellow-600 rounded-lg flex items-center justify-center">
+                        <div className="w-10 h-10 bg-amber-500 rounded-lg flex items-center justify-center">
                           <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
                           </svg>

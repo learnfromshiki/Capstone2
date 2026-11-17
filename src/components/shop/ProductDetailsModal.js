@@ -222,7 +222,7 @@ export default function ProductDetailsModal({
             )}
 
             {inStock && stock <= 5 && (
-              <div className="absolute top-3 left-3 bg-yellow-500 text-white text-xs px-3 py-1.5 rounded-full font-bold shadow-lg">
+              <div className="absolute top-3 left-3 bg-amber-100 text-amber-900 text-xs px-3 py-1.5 rounded-full font-bold shadow-md ring-1 ring-amber-300">
                 Only {stock} left!
               </div>
             )}

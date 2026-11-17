@@ -936,7 +936,7 @@ export default function BuyerDashboard() {
                   only appears once there is room for it. */}
               <button
                 onClick={handleLogout}
-                className="hidden min-h-[44px] rounded-lg bg-red-600 px-4 text-sm font-semibold text-white transition-colors hover:bg-red-700 sm:block"
+                className="hidden min-h-[44px] rounded-lg bg-white/15 px-4 text-sm font-semibold text-white ring-1 ring-white/25 transition-colors hover:bg-white/25 sm:block"
               >
                 Log Out
               </button>
@@ -1751,10 +1751,10 @@ export default function BuyerDashboard() {
 
             {activeTab === 'rewards' && (
               <div className="space-y-6">
-                <div className="rounded-2xl bg-gradient-to-r from-yellow-400 to-yellow-500 p-6 text-white sm:p-8">
-                  <p className="text-sm font-semibold uppercase tracking-wide text-yellow-50">Your reward points</p>
+                <div className="rounded-2xl border border-amber-200 bg-gradient-to-r from-amber-50 to-yellow-50 p-6 text-amber-950 sm:p-8">
+                  <p className="text-sm font-semibold uppercase tracking-wide text-amber-700">Your reward points</p>
                   <p className="mt-1 text-5xl font-bold">{points}</p>
-                  <p className="mt-2 text-sm text-yellow-50">
+                  <p className="mt-2 text-sm text-amber-800">
                     You earn 10 points for every ₱100 of goods, added when you confirm the order arrived.
                   </p>
                 </div>

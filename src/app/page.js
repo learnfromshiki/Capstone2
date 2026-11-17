@@ -6,7 +6,7 @@ const FEATURES = [
   {
     title: '100% Authentic',
     text: 'Every seller is a verified local artisan or business from Daet and Camarines Norte.',
-    color: 'from-blue-500 to-indigo-600',
+    color: 'from-blue-500 to-blue-700',
     glow: 'group-hover:shadow-blue-500/30',
     icon: 'M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z',
   },
@@ -38,7 +38,7 @@ const CATEGORIES = [
   { value: 'food', label: 'Food', icon: '🍽️', text: 'Pili nuts, sweets and Bicol delicacies', tint: 'from-rose-100 to-pink-50' },
   { value: 'souvenirs', label: 'Souvenirs', icon: '🎁', text: 'Keepsakes to remember Daet by', tint: 'from-sky-100 to-blue-50' },
   { value: 'weavings', label: 'Weavings', icon: '🧵', text: 'Handwoven textiles and abaca crafts', tint: 'from-emerald-100 to-teal-50' },
-  { value: 'art', label: 'Art', icon: '🎨', text: 'Paintings and works by local artists', tint: 'from-violet-100 to-indigo-50' },
+  { value: 'art', label: 'Art', icon: '🎨', text: 'Paintings and works by local artists', tint: 'from-slate-100 to-blue-50' },
 ];
 
 const STEPS = [
@@ -66,7 +66,7 @@ export default function Home() {
         <div aria-hidden="true" className="pointer-events-none absolute inset-0 -z-10">
           <div className="bg-grid absolute inset-0 [mask-image:radial-gradient(ellipse_at_top,black_30%,transparent_75%)]" />
           <div className="absolute -left-32 top-10 h-96 w-96 rounded-full bg-blue-300/40 blur-3xl animate-blob" />
-          <div className="absolute right-0 top-0 h-[28rem] w-[28rem] rounded-full bg-indigo-300/30 blur-3xl animate-blob [animation-delay:-5s]" />
+          <div className="absolute right-0 top-0 h-[28rem] w-[28rem] rounded-full bg-blue-200/40 blur-3xl animate-blob [animation-delay:-5s]" />
           <div className="absolute bottom-0 left-1/3 h-80 w-80 rounded-full bg-sky-200/50 blur-3xl animate-blob [animation-delay:-9s]" />
         </div>
 
@@ -99,7 +99,7 @@ export default function Home() {
               <div className="mt-10 flex flex-col gap-4 sm:flex-row animate-fade-up [animation-delay:480ms]">
                 <Link
                   href="/shop"
-                  className="group relative inline-flex items-center justify-center overflow-hidden rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 px-8 py-4 text-lg font-bold text-white shadow-xl shadow-blue-600/30 transition-all duration-300 hover:-translate-y-1 hover:shadow-2xl hover:shadow-blue-600/40"
+                  className="group relative inline-flex items-center justify-center overflow-hidden rounded-2xl bg-gradient-to-r from-blue-600 to-blue-700 px-8 py-4 text-lg font-bold text-white shadow-xl shadow-blue-600/30 transition-all duration-300 hover:-translate-y-1 hover:shadow-2xl hover:shadow-blue-600/40"
                 >
                   <span className="absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/25 to-transparent transition-transform duration-700 group-hover:translate-x-full" />
                   Explore Products
@@ -127,7 +127,7 @@ export default function Home() {
 
             {/* Hero illustration: a floating stack of cards */}
             <div className="relative mx-auto h-[520px] w-full max-w-md animate-fade-up [animation-delay:300ms] sm:h-[480px]">
-              <div aria-hidden="true" className="absolute inset-8 rounded-[2.5rem] bg-gradient-to-br from-blue-500 via-indigo-500 to-sky-400 opacity-90 shadow-2xl shadow-blue-600/30 animate-float-slow" />
+              <div aria-hidden="true" className="absolute inset-8 rounded-[2.5rem] bg-gradient-to-br from-blue-500 via-blue-600 to-sky-400 opacity-90 shadow-2xl shadow-blue-600/30 animate-float-slow" />
 
               {/* Main card */}
               <div className="absolute inset-x-6 top-12 rounded-3xl border border-white/60 bg-white/90 p-6 shadow-2xl backdrop-blur-xl animate-float sm:inset-x-10">
@@ -275,11 +275,11 @@ export default function Home() {
           </Reveal>
 
           <div className="relative mt-16 grid gap-10 md:grid-cols-3">
-            <div aria-hidden="true" className="absolute left-[16%] right-[16%] top-10 hidden h-0.5 bg-gradient-to-r from-blue-200 via-indigo-300 to-blue-200 md:block" />
+            <div aria-hidden="true" className="absolute left-[16%] right-[16%] top-10 hidden h-0.5 bg-gradient-to-r from-blue-200 via-blue-300 to-blue-200 md:block" />
             {STEPS.map((step, i) => (
               <Reveal key={step.title} delay={i * 180} className="relative text-center">
                 <div className="group mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-white shadow-xl ring-8 ring-blue-50 transition-transform duration-500 hover:scale-110">
-                  <span className="flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-blue-600 to-indigo-600 text-white">
+                  <span className="flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-blue-600 to-blue-700 text-white">
                     <Icon d={step.icon} className="h-7 w-7" />
                   </span>
                 </div>
@@ -295,7 +295,7 @@ export default function Home() {
       {/* CTA */}
       <section className="px-4 pb-24 sm:px-6 lg:px-8">
         <Reveal variant="zoom" className="mx-auto max-w-6xl">
-          <div className="relative isolate overflow-hidden rounded-[2.5rem] bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 bg-[length:200%_200%] px-6 py-20 text-center shadow-2xl shadow-blue-600/30 animate-gradient-x sm:px-16">
+          <div className="relative isolate overflow-hidden rounded-[2.5rem] bg-gradient-to-r from-blue-600 via-blue-700 to-blue-700 bg-[length:200%_200%] px-6 py-20 text-center shadow-2xl shadow-blue-600/30 animate-gradient-x sm:px-16">
             <div aria-hidden="true" className="absolute -left-16 -top-16 -z-10 h-64 w-64 rounded-full bg-white/10 blur-2xl animate-blob" />
             <div aria-hidden="true" className="absolute -bottom-20 -right-10 -z-10 h-72 w-72 rounded-full bg-sky-300/20 blur-2xl animate-blob [animation-delay:-6s]" />
             <h2 className="text-4xl font-extrabold tracking-tight text-white sm:text-5xl">Ready to start shopping?</h2>
@@ -319,7 +319,7 @@ export default function Home() {
           <div className="grid gap-10 md:grid-cols-3">
             <div>
               <div className="flex items-center gap-3">
-                <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-blue-600 to-indigo-600">
+                <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-blue-600 to-blue-700">
                   <Icon d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" className="h-5 w-5 text-white" />
                 </span>
                 <h3 className="text-lg font-bold text-white">CONNECT-Daet</h3>

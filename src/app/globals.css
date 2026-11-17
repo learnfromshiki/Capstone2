@@ -3,8 +3,10 @@
 @tailwind utilities;
 
 :root {
-  --foreground-rgb: 0, 0, 0;
-  --background-rgb: 255, 255, 255;
+  /* Soft charcoal on an off-white page: pure black on pure white is the
+     harshest contrast a screen can show. */
+  --foreground-rgb: 31, 41, 55;
+  --background-rgb: 249, 250, 251;
   /* The UI is designed light-only. Inheriting the OS dark preference turned the
      page background pure black, which showed through whenever a screen did not
      paint a full-height light container (e.g. while a tab was loading). */
@@ -22,8 +24,8 @@ body {
 }
 
 ::selection {
-  background: rgba(37, 99, 235, 0.18);
-  color: #1e3a8a;
+  background: rgba(61, 97, 166, 0.18);
+  color: #28395c;
 }
 
 /* Slim, rounded scrollbars that match the theme instead of the grey OS default. */
@@ -49,7 +51,7 @@ body {
 
 /* Keyboard users get a clear ring; mouse clicks do not leave one behind. */
 :focus-visible {
-  outline: 2px solid #3b82f6;
+  outline: 2px solid #5276b6;
   outline-offset: 2px;
 }
 
@@ -169,7 +171,7 @@ input[type='password']::-webkit-strong-password-auto-fill-button {
   }
 
   .text-gradient-animated {
-    background-image: linear-gradient(90deg, #2563eb, #0ea5e9, #6366f1, #2563eb);
+    background-image: linear-gradient(90deg, #3d61a6, #4f86b8, #5b5fa8, #3d61a6);
     background-size: 300% 100%;
     -webkit-background-clip: text;
     background-clip: text;
@@ -182,8 +184,8 @@ input[type='password']::-webkit-strong-password-auto-fill-button {
   }
 
   .bg-grid {
-    background-image: linear-gradient(to right, rgba(37, 99, 235, 0.06) 1px, transparent 1px),
-      linear-gradient(to bottom, rgba(37, 99, 235, 0.06) 1px, transparent 1px);
+    background-image: linear-gradient(to right, rgba(61, 97, 166, 0.06) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(61, 97, 166, 0.06) 1px, transparent 1px);
     background-size: 44px 44px;
   }
 }
