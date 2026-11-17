@@ -232,8 +232,9 @@ export const cancelMyOrder = async (orderId) => {
 };
 
 /**
- * The buyer confirms a shipped parcel arrived. Needs confirm_order_received()
- * from supabase-buyer-confirm-order.sql; buyers cannot write to orders directly.
+ * The buyer confirms the order arrived (once the shop accepted it), which also
+ * grants their reward points. Needs confirm_order_received()
+ * from supabase-points-on-delivery.sql; buyers cannot write to orders directly.
  */
 export const confirmOrderReceived = async (orderId) => {
   const { data, error } = await supabase.rpc('confirm_order_received', { p_order_id: orderId });

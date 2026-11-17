@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabaseClient';
-import { addPoints } from '@/lib/rewards';
 import { useAuth } from '@/contexts/AuthContext';
 import { estimateRewardPoints, formatOrderNumber, isMissingFunction, PAYMENT_LABELS } from '@/lib/orders';
 import { fetchShopSettings } from '@/lib/shopSettings';
@@ -694,25 +693,13 @@ export default function CheckoutModal({
 
       if (itemsError) throw itemsError;
 
-      // Award points for the database total, never the client-side one.
-      // A points failure must not destroy a paid order, so it is best-effort.
-      const pointsToAward = Math.floor(orderCart.total / 100) * 10;
-      let awarded = 0;
-
-      if (pointsToAward > 0) {
-        const pointsResult = await addPoints(sessionUser.id, pointsToAward, 'shop_purchase', order.id);
-        if (pointsResult.success) {
-          awarded = pointsToAward;
-        } else {
-          console.warn('Order placed but points were not awarded:', pointsResult.error);
-        }
-      }
-
+      // Points are granted by the database when the order is delivered
+      // (supabase-points-on-delivery.sql), never here at checkout.
       await saveDetailsToProfile(sessionUser.id);
       setPlacedOrders([{ id: order.id, total: orderCart.total }]);
       setPlacedPayment(formData.paymentMethod);
       setVerifiedCart(orderCart);
-      setAwardedPoints(awarded);
+      setAwardedPoints(Math.floor(orderCart.total / 100) * 10);
       setStep(3);
     } catch (submitError) {
       console.error('Error creating order:', submitError);
@@ -1140,7 +1127,7 @@ export default function CheckoutModal({
               <p className="break-words">{formData.fullName} · {formData.phone}</p>
               <p className="break-words whitespace-pre-line">{formData.address}</p>
               {summaryPoints > 0 && (
-                <p className="mt-2 text-xs text-yellow-800">You will earn about {summaryPoints} reward points with this order.</p>
+                <p className="mt-2 text-xs text-yellow-800">You will earn about {summaryPoints} reward points once this order is delivered.</p>
               )}
             </div>
 
@@ -1220,7 +1207,8 @@ export default function CheckoutModal({
             {awardedPoints > 0 && (
               <div className="bg-blue-50 rounded-xl p-4 mb-6">
                 <p className="text-sm text-gray-600">
-                  You&apos;ve earned <span className="font-bold text-blue-600">{awardedPoints} points</span> for this purchase!
+                  You&apos;ll earn <span className="font-bold text-blue-600">{awardedPoints} points</span> once your order
+                  arrives. Tap <strong>Order Received</strong> in My Orders when you get it.
                 </p>
               </div>
             )}

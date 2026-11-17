@@ -354,7 +354,12 @@ export default function SellerDashboard() {
   const fetchDashboardStats = async () => {
     try {
       const { orders: orderRows, products: myProducts } = await loadSellerOrders();
-      const commissionRate = Number(seller?.commission_rate) || 15;
+      // `|| 15` would turn a deliberate 0% commission into 15%.
+      const storedRate = Number(seller?.commission_rate);
+      const commissionRate =
+        seller?.commission_rate !== null && seller?.commission_rate !== undefined && Number.isFinite(storedRate)
+          ? storedRate
+          : 15;
 
       // Cancelled orders are refunds and unpaid online orders are not money
       // received; the admin dashboard uses the same rule.

@@ -30,6 +30,14 @@ import {
   sanitizePhone,
 } from '@/lib/fieldRules';
 
+// The shop has accepted the order, so the customer can confirm it arrived.
+// Matches confirm_order_received() in supabase-points-on-delivery.sql.
+const CAN_CONFIRM_RECEIVED = ['confirmed', 'processing', 'shipped'];
+
+/** 10 points per full ₱100 of goods; the delivery fee does not count. */
+const orderPoints = (order) =>
+  Math.floor(Math.max((Number(order?.total_amount) || 0) - (Number(order?.shipping_fee) || 0), 0) / 100) * 10;
+
 // What each row of the points history was earned for
 const REWARD_SOURCES = {
   shop_purchase: 'Purchase from a shop',
@@ -491,7 +499,7 @@ export default function BuyerDashboard() {
     const confirmed = await showConfirm({
       tone: 'question',
       title: 'Did your order arrive?',
-      message: `Confirm that order ${formatOrderNumber(order.id)} was delivered. You can rate the items afterwards.`,
+      message: `Confirm that order ${formatOrderNumber(order.id)} reached you. Your reward points are added right away, and you can rate the items afterwards.`,
       confirmLabel: 'Yes, it arrived',
       cancelLabel: 'Not yet',
     });
@@ -501,7 +509,27 @@ export default function BuyerDashboard() {
     try {
       await confirmOrderReceived(order.id);
       setOrders((prev) => prev.map((row) => (row.id === order.id ? { ...row, status: 'delivered' } : row)));
-      showToast('Thank you! You can now rate the items in My Reviews.', 'success');
+
+      // The points are granted the moment the order becomes delivered, so
+      // refresh the balance and the Rewards history.
+      const [{ data: freshProfile }, { data: freshHistory }] = await Promise.all([
+        supabase.from('profiles').select('*').eq('id', user.id).maybeSingle(),
+        supabase
+          .from('reward_history')
+          .select('id, subsystem_source, points_earned, created_at')
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false }),
+      ]);
+      if (freshProfile) setProfile(freshProfile);
+      if (freshHistory) setPointsHistory(freshHistory);
+
+      const earned = orderPoints(order);
+      showToast(
+        earned > 0
+          ? `Thank you! ${earned} reward points were added. You can now rate the items.`
+          : 'Thank you! You can now rate the items in My Reviews.',
+        'success'
+      );
     } catch (error) {
       console.error('Error confirming the order:', error);
       showAlert(error.message || 'Could not confirm this order.');
@@ -1130,10 +1158,17 @@ export default function BuyerDashboard() {
 
                           <OrderTracking status={order.status} />
 
-                          {order.status === 'shipped' && (
+                          {CAN_CONFIRM_RECEIVED.includes(order.status) && (
                             <p className="mt-3 rounded-lg bg-green-50 px-3 py-2 text-xs text-green-800">
-                              Parcel on the way. Tap <strong>Order Received</strong> once it arrives so the shop is paid
-                              and you can rate what you bought.
+                              {order.status === 'shipped' ? 'Parcel on the way. ' : 'The shop accepted your order. '}
+                              Tap <strong>Order Received</strong> once it arrives so the shop is paid
+                              {orderPoints(order) > 0 ? <>, you get your <strong>{orderPoints(order)} reward points</strong>,</> : ''}
+                              {' '}and you can rate what you bought.
+                            </p>
+                          )}
+                          {order.status === 'pending' && orderPoints(order) > 0 && (
+                            <p className="mt-3 rounded-lg bg-yellow-50 px-3 py-2 text-xs text-yellow-800">
+                              You will earn <strong>{orderPoints(order)} reward points</strong> once this order is delivered.
                             </p>
                           )}
 
@@ -1208,7 +1243,7 @@ export default function BuyerDashboard() {
                                   {cancellingOrderId === order.id ? 'Cancelling...' : 'Cancel order'}
                                 </button>
                               )}
-                              {order.status === 'shipped' && (
+                              {CAN_CONFIRM_RECEIVED.includes(order.status) && (
                                 <button
                                   type="button"
                                   onClick={() => handleConfirmReceived(order)}
@@ -1720,7 +1755,7 @@ export default function BuyerDashboard() {
                   <p className="text-sm font-semibold uppercase tracking-wide text-yellow-50">Your reward points</p>
                   <p className="mt-1 text-5xl font-bold">{points}</p>
                   <p className="mt-2 text-sm text-yellow-50">
-                    You earn 10 points for every ₱100 of goods. Points are returned if an order is cancelled.
+                    You earn 10 points for every ₱100 of goods, added when you confirm the order arrived.
                   </p>
                 </div>
 
