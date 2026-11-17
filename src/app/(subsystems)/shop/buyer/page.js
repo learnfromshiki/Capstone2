@@ -1040,7 +1040,7 @@ export default function BuyerDashboard() {
                 {/* Order Status */}
                 <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
                   <h3 className="text-lg font-bold text-gray-900 mb-4">My Order Status</h3>
-                  <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+                  <div className="stagger-children grid grid-cols-2 gap-4 sm:grid-cols-4">
                     <div className="text-center">
                       <div className="w-16 h-16 mx-auto mb-2 bg-yellow-100 rounded-full flex items-center justify-center">
                         <svg className="w-8 h-8 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">

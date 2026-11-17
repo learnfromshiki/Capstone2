@@ -66,7 +66,7 @@ export default function Cart({ cart, isOpen, onClose, onUpdateQuantity, onRemove
     <>
       {/* Overlay */}
       <div
-        className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 transition-opacity"
+        className="modal-backdrop fixed inset-0 bg-black/60 backdrop-blur-sm z-50 transition-opacity"
         onClick={onClose}
       />
 

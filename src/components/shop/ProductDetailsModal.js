@@ -175,7 +175,7 @@ export default function ProductDetailsModal({
 
   return (
     <div
-      className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[70] flex items-center justify-center p-4"
+      className="modal-backdrop fixed inset-0 bg-black/60 backdrop-blur-sm z-[70] flex items-center justify-center p-4"
       onClick={onClose}
     >
       <div

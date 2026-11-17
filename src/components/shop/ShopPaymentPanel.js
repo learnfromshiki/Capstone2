@@ -154,7 +154,7 @@ export default function ShopPaymentPanel({ method, groups, receipts, onChange })
       {/* The QR code, large enough to scan from another phone */}
       {zoomed && (
         <div
-          className="fixed inset-0 z-[90] flex items-center justify-center bg-black/70 p-4"
+          className="modal-backdrop fixed inset-0 z-[90] flex items-center justify-center bg-black/70 p-4"
           onClick={() => setZoomed('')}
           role="presentation"
         >

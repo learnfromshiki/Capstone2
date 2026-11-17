@@ -41,7 +41,7 @@ export default function PaymentProof({ url, reference, paidAt, className = '' })
 
       {zoomed && (
         <div
-          className="fixed inset-0 z-[90] flex items-center justify-center bg-black/70 p-4"
+          className="modal-backdrop fixed inset-0 z-[90] flex items-center justify-center bg-black/70 p-4"
           onClick={() => setZoomed(false)}
           role="presentation"
         >

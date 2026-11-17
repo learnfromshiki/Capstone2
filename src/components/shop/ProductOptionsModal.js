@@ -66,7 +66,7 @@ export default function ProductOptionsModal({ product, intent = 'cart', onClose,
   const summary = describeSelection(selected);
 
   return (
-    <div className="fixed inset-0 z-[80] flex items-end justify-center bg-black/60 p-0 backdrop-blur-sm sm:items-center sm:p-4">
+    <div className="modal-backdrop fixed inset-0 z-[80] flex items-end justify-center bg-black/60 p-0 backdrop-blur-sm sm:items-center sm:p-4">
       <div
         role="dialog"
         aria-modal="true"

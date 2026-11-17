@@ -60,11 +60,16 @@ export default function ShopPage() {
     const productId = params.get('product');
     if (productId) setPendingProductId(productId);
 
+    // ?category=<value> comes from the category tiles on the landing page.
+    const category = params.get('category');
+    if (category) setFilter(category);
+
     // Tidy the address bar so a refresh does not reopen the cart or the
     // product window again.
-    if (params.has('cart') || params.has('product')) {
+    if (params.has('cart') || params.has('product') || params.has('category')) {
       params.delete('cart');
       params.delete('product');
+      params.delete('category');
       const query = params.toString();
       window.history.replaceState({}, '', window.location.pathname + (query ? `?${query}` : ''));
     }
@@ -963,16 +968,18 @@ export default function ShopPage() {
       {/* Products Grid */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-12">
         {loading ? (
-          <div className="flex flex-col justify-center items-center h-96">
-            <div className="relative">
-              <div className="animate-spin rounded-full h-16 w-16 border-b-4 border-blue-600"></div>
-              <div className="absolute inset-0 flex items-center justify-center">
-                <svg className="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
-                </svg>
+          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4" aria-busy="true" aria-label="Loading products">
+            {Array.from({ length: 8 }).map((_, i) => (
+              <div key={i} className="overflow-hidden rounded-xl border border-gray-200 bg-white">
+                <div className="skeleton aspect-[4/3] max-h-44 w-full" />
+                <div className="space-y-3 p-4">
+                  <div className="skeleton h-4 w-3/4 rounded" />
+                  <div className="skeleton h-3 w-1/2 rounded" />
+                  <div className="skeleton h-3 w-full rounded" />
+                  <div className="skeleton mt-4 h-10 w-full rounded-lg" />
+                </div>
               </div>
-            </div>
-            <p className="mt-4 text-gray-600 font-medium">Loading products...</p>
+            ))}
           </div>
         ) : filteredProducts.length === 0 ? (
           <div className="text-center py-16 bg-white rounded-2xl shadow-sm">
@@ -1002,7 +1009,7 @@ export default function ShopPage() {
             )}
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+          <div className="stagger-children grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
             {filteredProducts.map((product) => (
               <ProductCard
                 key={product.id}

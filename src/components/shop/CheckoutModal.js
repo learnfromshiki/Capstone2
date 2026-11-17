@@ -817,7 +817,7 @@ export default function CheckoutModal({
         {children}
       </div>
     ) : (
-      <div className="fixed inset-0 bg-black bg-opacity-50 z-[60] flex items-center justify-center p-4">
+      <div className="modal-backdrop fixed inset-0 bg-black bg-opacity-50 z-[60] flex items-center justify-center p-4">
         <div
           ref={topRef}
           role="dialog"
