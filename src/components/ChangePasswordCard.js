@@ -226,7 +226,7 @@ export default function ChangePasswordCard({ email, title = 'Change Password', d
               }
               placeholder="Code from the email"
               aria-label="Code from the email"
-              className={`${inputClass} tracking-[0.3em]`}
+              className={`${inputClass} tracking-[0.3em] placeholder:tracking-normal`}
             />
 
             <div>

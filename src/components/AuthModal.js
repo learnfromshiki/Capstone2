@@ -575,7 +575,7 @@ export default function AuthModal({ isOpen, onClose, mode: initialMode = 'login'
                 maxLength={CODE_MAX_LENGTH}
                 value={code}
                 onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, CODE_MAX_LENGTH))}
-                className="w-full min-h-[52px] rounded-2xl border-2 border-gray-200 bg-gray-50 px-4 text-center text-2xl font-bold tracking-[0.3em] text-gray-900 focus:border-transparent focus:ring-2 focus:ring-blue-600"
+                className="w-full min-h-[52px] rounded-2xl border-2 border-gray-200 bg-gray-50 px-4 text-center text-2xl font-bold tracking-[0.3em] text-gray-900 focus:border-transparent focus:ring-2 focus:ring-blue-600 placeholder:text-base placeholder:font-medium placeholder:tracking-normal placeholder:text-gray-400"
                 placeholder="Enter the code"
                 required
               />

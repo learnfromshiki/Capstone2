@@ -174,7 +174,7 @@ export function DialogProvider({ children }) {
       )}
 
       {/* Toasts stack down the corner so a second one does not hide the first */}
-      <div className="pointer-events-none fixed right-0 top-4 z-[210] flex flex-col items-end gap-2 px-4">
+      <div className="pointer-events-none fixed right-0 top-4 z-[210] flex flex-col items-end px-4">
         {toasts.map((item) => (
           <div key={item.id} className="pointer-events-auto">
             <Toast

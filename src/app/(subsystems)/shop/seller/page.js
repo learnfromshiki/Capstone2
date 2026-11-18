@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSellerAuth } from '@/contexts/SellerAuthContext';
 import { useAuth } from '@/contexts/AuthContext';
+import { goToShop, showSigningOut } from '@/lib/signOutScreen';
 import Link from 'next/link';
 import { describePasswordProblem, isPasswordValid } from '@/lib/passwordPolicy';
 import {
@@ -57,6 +58,14 @@ export default function SellerLoginPage() {
       router.push('/shop/seller/dashboard');
     }
   }, [user, seller, router, mode]);
+
+  // Logging out from the status panel goes straight to the shop. Signing out
+  // in place left this page showing the seller login form instead.
+  const logOutToShop = async () => {
+    showSigningOut();
+    await signOut();
+    goToShop();
+  };
 
   const awaitingApproval = Boolean(user && seller && !seller.is_approved && !seller.is_rejected);
   const wasRejected = Boolean(user && seller?.is_rejected);
@@ -342,7 +351,7 @@ export default function SellerLoginPage() {
             </Link>
             <button
               type="button"
-              onClick={() => signOut()}
+              onClick={logOutToShop}
               className="mt-2 min-h-[44px] w-full rounded-lg bg-gray-100 font-semibold text-gray-700 transition-colors hover:bg-gray-200"
             >
               Log Out
@@ -447,7 +456,7 @@ export default function SellerLoginPage() {
                   maxLength={CODE_MAX_LENGTH}
                   value={code}
                   onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, CODE_MAX_LENGTH))}
-                  className="w-full rounded-xl border-2 border-gray-200 px-4 py-4 text-center text-2xl font-bold tracking-[0.3em] focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+                  className="w-full rounded-xl border-2 border-gray-200 px-4 py-4 text-center text-2xl font-bold tracking-[0.3em] focus:border-blue-500 focus:ring-2 focus:ring-blue-500 placeholder:text-base placeholder:font-medium placeholder:tracking-normal placeholder:text-gray-400"
                   placeholder="Enter the code"
                   required
                 />
