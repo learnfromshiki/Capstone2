@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabaseClient';
 import Link from 'next/link';
-import { cancelMyOrder, confirmOrderReceived, formatOrderNumber, PAYMENT_LABELS } from '@/lib/orders';
+import { cancelMyOrder, confirmOrderReceived, formatOrderNumber, isPickup, paymentLabel, statusLabel } from '@/lib/orders';
 import { fetchShopSettings } from '@/lib/shopSettings';
 import { startPaymongoCheckout } from '@/lib/paymongo';
 import PaymongoStatus from '@/components/shop/PaymongoStatus';
@@ -22,6 +22,7 @@ import AvatarUpload from '@/components/ui/AvatarUpload';
 import NotificationCenter from '@/components/ui/NotificationCenter';
 import { uploadPhotos } from '@/lib/attachments';
 import { storeSelection } from '@/lib/checkoutSelection';
+import { flushCart, loadCart, readLocalCart, saveCart } from '@/lib/cart';
 import {
   PHONE_HINT,
   describeNameProblem,
@@ -41,6 +42,7 @@ const orderPoints = (order) =>
 // What each row of the points history was earned for
 const REWARD_SOURCES = {
   shop_purchase: 'Purchase from a shop',
+  shop_redemption: 'Points used at checkout',
   shop_order: 'Purchase from a shop',
   event_attendance: 'Event attendance',
   signup_bonus: 'Welcome bonus',
@@ -58,16 +60,26 @@ const ORDER_STEPS = [
   { key: 'delivered', label: 'Delivered' },
 ];
 
-function OrderTracking({ status }) {
+// A pickup order is never shipped: it becomes ready for pickup, then picked up.
+const PICKUP_STEPS = [
+  { key: 'pending', label: 'Placed' },
+  { key: 'confirmed', label: 'Confirmed' },
+  { key: 'processing', label: 'Preparing' },
+  { key: 'shipped', label: 'Ready for pickup' },
+  { key: 'delivered', label: 'Picked up' },
+];
+
+function OrderTracking({ status, pickup = false }) {
   if (status === 'cancelled') {
     return <p className="text-sm text-red-600 mt-3">This order was cancelled.</p>;
   }
 
-  const currentIndex = ORDER_STEPS.findIndex((step) => step.key === status);
+  const steps = pickup ? PICKUP_STEPS : ORDER_STEPS;
+  const currentIndex = steps.findIndex((step) => step.key === status);
 
   return (
     <div className="flex items-center gap-1 mt-3">
-      {ORDER_STEPS.map((step, index) => (
+      {steps.map((step, index) => (
         <div key={step.key} className="flex-1">
           <div className={`h-1.5 rounded-full ${index <= currentIndex ? 'bg-blue-600' : 'bg-gray-200'}`} />
           <p className={`text-[10px] mt-1 ${index <= currentIndex ? 'text-blue-700 font-semibold' : 'text-gray-400'}`}>
@@ -324,52 +336,43 @@ export default function BuyerDashboard() {
 
   const cartKey = user ? `shop_cart:${user.id}` : null;
 
-  // The cart lives in this browser under the signed-in customer's own key, so
-  // the dashboard can show and edit it without sending anyone back to the shop.
-  const readCart = useCallback(() => {
-    if (!cartKey) return [];
-    try {
-      const stored = localStorage.getItem(cartKey);
-      const parsed = stored ? JSON.parse(stored) : [];
-
-      // Carts saved before product options existed have no line id.
-      return (Array.isArray(parsed) ? parsed : []).map((item) => ({
-        ...item,
-        productId: item.productId || item.id,
-        selectedOptions: item.selectedOptions || {},
-        lineId: item.lineId || cartLineId(item.productId || item.id, item.selectedOptions),
-      }));
-    } catch (error) {
-      console.error('Error reading the cart:', error);
-      return [];
-    }
-  }, [cartKey]);
+  // The cart is saved in the database (shop_cart_items) under the signed-in
+  // customer, so the dashboard shows the same cart as every other device.
+  const cartUserId = user?.id || null;
 
   const writeCart = (next) => {
     setCart(next);
-    if (!cartKey) return;
-    try {
-      if (next.length > 0) {
-        localStorage.setItem(cartKey, JSON.stringify(next));
-      } else {
-        localStorage.removeItem(cartKey);
-      }
-    } catch (error) {
-      console.error('Error saving the cart:', error);
-    }
+    if (cartUserId) saveCart(cartUserId, next);
   };
 
-  // Show the cart at once, then replace the saved prices and stock with the
-  // live ones: what was stored when the item was added may be out of date.
+  // Send a change made just before leaving the page.
   useEffect(() => {
-    const stored = readCart();
-    setCart(stored);
+    if (!cartUserId) return undefined;
+    return () => {
+      flushCart(cartUserId);
+    };
+  }, [cartUserId]);
 
-    const ids = [...new Set(stored.map((item) => item.productId || item.id).filter(Boolean))];
-    if (ids.length === 0) return undefined;
+  // Show this browser's copy at once, then the saved cart, then replace the
+  // saved prices and stock with the live ones: what was stored when the item
+  // was added may be out of date.
+  useEffect(() => {
+    if (!cartKey || !cartUserId) {
+      setCart([]);
+      return undefined;
+    }
+
+    setCart(readLocalCart(cartUserId));
 
     let cancelled = false;
     (async () => {
+      const stored = await loadCart(cartUserId);
+      if (cancelled) return;
+      setCart(stored);
+
+      const ids = [...new Set(stored.map((item) => item.productId || item.id).filter(Boolean))];
+      if (ids.length === 0) return;
+
       const { data, error } = await supabase
         .from('shop_products')
         .select('id, name, price, stock, image_url, available, seller_id')
@@ -400,15 +403,16 @@ export default function BuyerDashboard() {
         };
       });
 
-      writeCart(refreshed);
+      // Only save when something actually changed.
+      if (JSON.stringify(refreshed) !== JSON.stringify(stored)) writeCart(refreshed);
     })();
 
     return () => {
       cancelled = true;
     };
-    // writeCart only touches state and localStorage
+    // writeCart only touches state and the saved cart
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [readCart]);
+  }, [cartKey, cartUserId]);
 
   const cartCount = cart.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0);
 
@@ -745,7 +749,7 @@ export default function BuyerDashboard() {
     const confirmed = await showConfirm({
       tone: 'warning',
       title: `Cancel order ${formatOrderNumber(order.id)}?`,
-      message: 'The items go back on sale and any reward points from this order are removed.',
+      message: 'The items go back on sale, and any reward points you used on this order are returned to you.',
       confirmLabel: 'Cancel my order',
       cancelLabel: 'Keep it',
     });
@@ -1114,7 +1118,7 @@ export default function BuyerDashboard() {
               <div className="bg-white rounded-xl shadow-sm border border-gray-100">
                 <div className="p-6 border-b">
                   <h2 className="text-2xl font-bold text-gray-900">My Orders</h2>
-                  <p className="text-sm text-gray-600 mt-1">Track each delivery from order placed to delivered.</p>
+                  <p className="text-sm text-gray-600 mt-1">Track each order from placed to delivered or picked up.</p>
                 </div>
                 <div className="p-6">
                   {orders.length === 0 ? (
@@ -1152,23 +1156,33 @@ export default function BuyerDashboard() {
                               </p>
                             </div>
                             <span className={`self-start px-3 py-1 text-xs font-semibold rounded-full ${getStatusColor(order.status)}`}>
-                              {order.status.charAt(0).toUpperCase() + order.status.slice(1)}
+                              {statusLabel(order.status, order)}
                             </span>
                           </div>
 
-                          <OrderTracking status={order.status} />
+                          {isPickup(order) && (
+                            <span className="inline-flex rounded-full bg-indigo-100 px-3 py-1 text-xs font-semibold text-indigo-800">
+                              Store pickup
+                            </span>
+                          )}
+
+                          <OrderTracking status={order.status} pickup={isPickup(order)} />
 
                           {CAN_CONFIRM_RECEIVED.includes(order.status) && (
                             <p className="mt-3 rounded-lg bg-green-50 px-3 py-2 text-xs text-green-800">
-                              {order.status === 'shipped' ? 'Parcel on the way. ' : 'The shop accepted your order. '}
-                              Tap <strong>Order Received</strong> once it arrives so the shop is paid
+                              {order.status === 'shipped'
+                                ? isPickup(order)
+                                  ? 'Your order is ready for pickup at the shop. '
+                                  : 'Parcel on the way. '
+                                : 'The shop accepted your order. '}
+                              Tap <strong>Order Received</strong> once {isPickup(order) ? 'you have picked it up' : 'it arrives'} so the shop is paid
                               {orderPoints(order) > 0 ? <>, you get your <strong>{orderPoints(order)} reward points</strong>,</> : ''}
                               {' '}and you can rate what you bought.
                             </p>
                           )}
                           {order.status === 'pending' && orderPoints(order) > 0 && (
                             <p className="mt-3 rounded-lg bg-yellow-50 px-3 py-2 text-xs text-yellow-800">
-                              You will earn <strong>{orderPoints(order)} reward points</strong> once this order is delivered.
+                              You will earn <strong>{orderPoints(order)} reward points</strong> once this order is {isPickup(order) ? 'picked up' : 'delivered'}.
                             </p>
                           )}
 
@@ -1191,25 +1205,30 @@ export default function BuyerDashboard() {
 
                           {order.delivery_address && (
                             <div className="border-t mt-4 pt-4 text-sm text-gray-600">
-                              <p className="font-semibold text-gray-900 mb-1">Deliver to</p>
+                              <p className="font-semibold text-gray-900 mb-1">{isPickup(order) ? 'Pick up at' : 'Deliver to'}</p>
                               <p className="break-words">{order.customer_name}{order.customer_phone ? ` · ${order.customer_phone}` : ''}</p>
-                              <p className="break-words whitespace-pre-line">{order.delivery_address}</p>
+                              <p className="break-words whitespace-pre-line">
+                                {isPickup(order) ? order.delivery_address.replace(/^STORE PICKUP - /, '') : order.delivery_address}
+                              </p>
                             </div>
                           )}
 
                           <div className="border-t mt-4 pt-4 flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-center">
                             <div>
-                              {Number(order.shipping_fee) > 0 && (
+                              {(Number(order.shipping_fee) > 0 || Number(order.points_discount) > 0) && (
                                 <p className="text-xs text-gray-500">
-                                  Items ₱{(Number(order.total_amount) - Number(order.shipping_fee)).toFixed(2)} +
-                                  delivery ₱{Number(order.shipping_fee).toFixed(2)}
+                                  Items ₱{(Number(order.total_amount) - Number(order.shipping_fee) + (Number(order.points_discount) || 0)).toFixed(2)}
+                                  {Number(order.shipping_fee) > 0 && <> + delivery ₱{Number(order.shipping_fee).toFixed(2)}</>}
+                                  {Number(order.points_discount) > 0 && (
+                                    <> − {Number(order.points_redeemed).toLocaleString()} points (₱{Number(order.points_discount).toFixed(2)})</>
+                                  )}
                                 </p>
                               )}
                               <p className="text-sm text-gray-600">Total Amount</p>
                               <p className="text-2xl font-bold text-blue-600">₱{Number(order.total_amount).toFixed(2)}</p>
                             </div>
                             <div className="flex flex-col gap-2 text-sm text-gray-600 sm:items-end">
-                              <p>Payment: <span className="font-semibold">{PAYMENT_LABELS[order.payment_method] || order.payment_method}</span></p>
+                              <p>Payment: <span className="font-semibold">{paymentLabel(order.payment_method, order)}</span></p>
                               <PaymongoStatus order={order} />
                               {order.payment_method === 'paymongo' &&
                                 order.payment_status !== 'paid' &&
@@ -1788,8 +1807,12 @@ export default function BuyerDashboard() {
                                 })}
                               </p>
                             </div>
-                            <span className="flex-shrink-0 rounded-full bg-yellow-100 px-3 py-1 text-sm font-bold text-yellow-700">
-                              +{entry.points_earned}
+                            <span
+                              className={`flex-shrink-0 rounded-full px-3 py-1 text-sm font-bold ${
+                                entry.points_earned < 0 ? 'bg-gray-100 text-gray-700' : 'bg-yellow-100 text-yellow-700'
+                              }`}
+                            >
+                              {entry.points_earned < 0 ? '' : '+'}{entry.points_earned}
                             </span>
                           </li>
                         ))}

@@ -3,7 +3,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import { useAuth } from '@/contexts/AuthContext';
-import { estimateRewardPoints, formatOrderNumber, isMissingFunction, PAYMENT_LABELS } from '@/lib/orders';
+import {
+  allocateRedemption,
+  estimateRewardPoints,
+  formatOrderNumber,
+  isMissingFunction,
+  MAX_REDEEM_SHARE,
+  PAYMENT_LABELS,
+  POINT_VALUE,
+} from '@/lib/orders';
 import { fetchShopSettings } from '@/lib/shopSettings';
 import PaymentInstructions from './PaymentInstructions';
 import { describeSelection } from '@/lib/productOptions';
@@ -16,28 +24,6 @@ import { acceptsMethod, attachPaymentProof, fetchSellerPayments } from '@/lib/se
 import { fetchPaymongoEnabled, startPaymongoCheckout } from '@/lib/paymongo';
 
 const MAX_QUANTITY = 9999;
-
-const restoreReservedStock = async ({ productId, quantity }) => {
-  for (let attempt = 0; attempt < 3; attempt += 1) {
-    const { data: product } = await supabase
-      .from('shop_products')
-      .select('stock')
-      .eq('id', productId)
-      .maybeSingle();
-
-    if (!product) return;
-
-    const currentStock = Number(product.stock) || 0;
-    const { data: updated } = await supabase
-      .from('shop_products')
-      .update({ stock: currentStock + quantity })
-      .eq('id', productId)
-      .eq('stock', currentStock)
-      .select('id');
-
-    if (updated && updated.length > 0) return;
-  }
-};
 
 export default function CheckoutModal({
   cart,
@@ -80,6 +66,14 @@ export default function CheckoutModal({
   const [placedCheckoutId, setPlacedCheckoutId] = useState(null);
   const [paymentStartError, setPaymentStartError] = useState('');
   const [startingPayment, setStartingPayment] = useState(false);
+  // Delivered to an address, or picked up at the shop (no delivery fee)
+  const [fulfillment, setFulfillment] = useState('delivery');
+  const isPickupOrder = fulfillment === 'pickup';
+  // CONNECT-Daet reward points the customer has, and whether to spend them
+  const [pointsBalance, setPointsBalance] = useState(0);
+  const [usePoints, setUsePoints] = useState(false);
+  // What the database actually charged, once the order is placed
+  const [placedRedeemed, setPlacedRedeemed] = useState(0);
   const topRef = useRef(null);
 
   /**
@@ -124,12 +118,13 @@ export default function CheckoutModal({
     (async () => {
       const { data, error: profileError } = await supabase
         .from('profiles')
-        .select('full_name, phone, address')
+        .select('full_name, phone, address, points')
         .eq('id', user.id)
         .maybeSingle();
 
       if (cancelled || profileError || !data) return;
 
+      setPointsBalance(Math.max(0, Math.floor(Number(data.points) || 0)));
       setSavedProfile({ phone: data.phone || '', address: data.address || '' });
       if (data.address) {
         const parsed = parseAddress(data.address);
@@ -168,7 +163,8 @@ export default function CheckoutModal({
     let cancelled = false;
     const groups = JSON.parse(groupSubtotalsKey);
 
-    if (!addressParts.province || groups.length === 0) {
+    // Picking up at the shop costs nothing to deliver.
+    if (isPickupOrder || !addressParts.province || groups.length === 0) {
       setShippingFees({});
       return undefined;
     }
@@ -186,7 +182,7 @@ export default function CheckoutModal({
     return () => {
       cancelled = true;
     };
-  }, [addressParts.province, addressParts.city, groupSubtotalsKey]);
+  }, [addressParts.province, addressParts.city, groupSubtotalsKey, isPickupOrder]);
 
   // GCash / bank details the admin saved in Admin -> Settings
   useEffect(() => {
@@ -221,7 +217,7 @@ export default function CheckoutModal({
     setPaymentStartError('');
     try {
       const url = await startPaymongoCheckout(checkoutId);
-      if (onSuccess) onSuccess();
+      if (onSuccess) await onSuccess();
       window.location.assign(url || `/shop/checkout/paymongo?status=success&checkout=${checkoutId}`);
     } catch (paymentError) {
       setPaymentStartError(paymentError.message || 'Could not start the online payment.');
@@ -297,6 +293,9 @@ export default function CheckoutModal({
       reportError(phoneProblem);
       return false;
     }
+
+    // A pickup order needs no delivery address.
+    if (isPickupOrder) return true;
 
     if (!addressParts.barangay.trim()) {
       reportError('Please choose your barangay.');
@@ -485,7 +484,8 @@ export default function CheckoutModal({
   const saveDetailsToProfile = async (userId) => {
     if (!saveDetails) return;
     const phone = formData.phone.trim();
-    const address = formData.address.trim();
+    // A pickup order has no delivery address to remember.
+    const address = isPickupOrder ? savedProfile.address : formData.address.trim();
     if (phone === savedProfile.phone && address === savedProfile.address) return;
 
     const { error: saveError } = await supabase
@@ -499,13 +499,14 @@ export default function CheckoutModal({
   };
 
   /**
-   * Preferred checkout: place_order() in the database validates the cart
-   * against live prices and stock, locks the products, creates one order per
-   * shop, reduces stock and awards points in one transaction.
-   * Returns null when that function is not installed yet.
+   * The only way an order is placed: place_order() in the database validates
+   * the cart against live prices and stock, locks the products, creates one
+   * order per shop with its items, reduces stock and spends any redeemed
+   * points in ONE transaction. Either all of it happens or none of it does.
+   * Reward points are earned later, when the order is delivered / picked up.
    */
   const placeOrderOnServer = async () => {
-    const { data, error: rpcError } = await supabase.rpc('place_order', {
+    const args = {
       p_items: cart.map((item) => ({
         product_id: item.productId || item.id,
         quantity: Number(item.quantity),
@@ -518,15 +519,31 @@ export default function CheckoutModal({
       p_customer_name: formData.fullName.trim(),
       p_customer_email: formData.email.trim(),
       p_customer_phone: formData.phone.trim(),
-      p_delivery_address: formData.address.trim(),
+      p_delivery_address: isPickupOrder ? null : formData.address.trim(),
       p_payment_method: formData.paymentMethod,
       p_notes: formData.notes.trim() || null,
-      p_province: addressParts.province || null,
-      p_city: addressParts.city || null,
-    });
+      p_province: isPickupOrder ? null : addressParts.province || null,
+      p_city: isPickupOrder ? null : addressParts.city || null,
+    };
+
+    // Sent only when used, so an ordinary delivery order still works on a
+    // database that has not run supabase-cart-pickup-redemption.sql.
+    const needsNewCheckout = isPickupOrder || redemption.total > 0;
+    if (needsNewCheckout) {
+      args.p_fulfillment = fulfillment;
+      args.p_redeem_points = redemption.total;
+    }
+
+    const { data, error: rpcError } = await supabase.rpc('place_order', args);
 
     if (rpcError) {
-      if (isMissingFunction(rpcError)) return null;
+      if (isMissingFunction(rpcError)) {
+        throw new Error(
+          needsNewCheckout
+            ? 'Store pickup and paying with points are not switched on yet. Choose delivery without points, or ask the admin to run supabase-cart-pickup-redemption.sql.'
+            : 'Checkout is not set up yet. Ask the admin to run supabase-checkout-security.sql in Supabase.'
+        );
+      }
       throw new Error(rpcError.message || 'Could not place your order. Please try again.');
     }
 
@@ -537,15 +554,12 @@ export default function CheckoutModal({
     if (loading) return;
     setLoading(true);
     setError('');
-    let createdOrderId = null;
-    const reservedStock = [];
 
     try {
       await ensureAccountIsActive();
 
       // Own the order with the authenticated session, not the React user state.
-      // The context can lag behind after another tab signs in, and an order whose
-      // user_id differs from auth.uid() is rejected by the RLS policy.
+      // The context can lag behind after another tab signs in.
       const { data: { user: sessionUser }, error: sessionError } = await supabase.auth.getUser();
 
       if (sessionError || !sessionUser) {
@@ -553,29 +567,32 @@ export default function CheckoutModal({
       }
 
       const serverResult = await placeOrderOnServer();
+      const orders = Array.isArray(serverResult?.orders) ? serverResult.orders : [];
 
-      if (!serverResult && formData.paymentMethod === 'paymongo') {
-        throw new Error('Online payment is not available yet. Please choose another payment method.');
+      await saveDetailsToProfile(sessionUser.id);
+
+      setPlacedOrders(orders.map((order) => ({ id: order.id, total: Number(order.total) || 0 })));
+      setPlacedPayment(formData.paymentMethod);
+      setPlacedRedeemed(Number(serverResult?.points_redeemed) || 0);
+      if (Number(serverResult?.points_redeemed) > 0) {
+        setPointsBalance((balance) => Math.max(0, balance - Number(serverResult.points_redeemed)));
       }
+      setVerifiedCart((previous) => ({
+        items: previous?.items || cart,
+        total: previous?.total || 0,
+        // What the customer is charged, delivery included and points taken off
+        charged: Number(serverResult?.total) || 0,
+      }));
+      setAwardedPoints(Number(serverResult?.points) || 0);
 
-      if (serverResult && formData.paymentMethod === 'paymongo') {
-        const orders = Array.isArray(serverResult.orders) ? serverResult.orders : [];
-        await saveDetailsToProfile(sessionUser.id);
-
-        setPlacedOrders(orders.map((order) => ({ id: order.id, total: Number(order.total) || 0 })));
-        setPlacedPayment('paymongo');
+      if (formData.paymentMethod === 'paymongo') {
         setPlacedCheckoutId(serverResult.checkout_id);
-        setVerifiedCart((previous) => ({
-          items: previous?.items || cart,
-          total: Number(serverResult.total) || previous?.total || 0,
-        }));
-        setAwardedPoints(Number(serverResult.points) || 0);
 
         // The order is placed. If PayMongo cannot be reached, the customer
         // lands on the success step with a "Pay now" button instead.
         try {
           const url = await startPaymongoCheckout(serverResult.checkout_id);
-          if (onSuccess) onSuccess();
+          if (onSuccess) await onSuccess();
           window.location.assign(
             url || `/shop/checkout/paymongo?status=success&checkout=${serverResult.checkout_id}`
           );
@@ -587,146 +604,19 @@ export default function CheckoutModal({
         }
       }
 
-      if (serverResult) {
-        const orders = Array.isArray(serverResult.orders) ? serverResult.orders : [];
-        await saveDetailsToProfile(sessionUser.id);
-
-        // Put each receipt on the order for the shop it was paid to. The order
-        // itself is already placed, so a failure here is worth a warning in the
-        // console, never losing the order.
-        for (const order of orders) {
-          const receipt = receipts[order.seller_id || 'platform'];
-          if (receipt?.url) {
-            await attachPaymentProof(order.id, receipt.url, receipt.reference || null);
-          }
-        }
-
-        setPlacedOrders(orders.map((order) => ({ id: order.id, total: Number(order.total) || 0 })));
-        setPlacedPayment(formData.paymentMethod);
-        setVerifiedCart((previous) => ({
-          items: previous?.items || cart,
-          total: Number(serverResult.total) || previous?.total || 0,
-        }));
-        setAwardedPoints(Number(serverResult.points) || 0);
-        setStep(3);
-        return;
-      }
-
-      // ---------------------------------------------------------------------
-      // Legacy browser-side checkout, used only until
-      // supabase-checkout-security.sql has been run in Supabase.
-      // ---------------------------------------------------------------------
-      // Re-verify at the last moment: prices or stock may have changed while
-      // the customer was typing their details.
-      const orderCart = await verifyCart();
-      setVerifiedCart(orderCart);
-
-      // Reserve stock first. If any reservation fails, everything already
-      // reserved is put back before the error reaches the customer.
-      for (const item of orderCart.items) {
-        let reserved = false;
-
-        for (let attempt = 0; attempt < 3 && !reserved; attempt += 1) {
-          const { data: currentProduct, error: fetchError } = await supabase
-            .from('shop_products')
-            .select('stock')
-            .eq('id', item.id)
-            .single();
-
-          if (fetchError) throw fetchError;
-
-          const currentStock = Number(currentProduct.stock) || 0;
-
-          if (currentStock < item.quantity) {
-            throw new Error(`${item.name} has insufficient stock. Available: ${currentStock}, requested: ${item.quantity}.`);
-          }
-
-          const { data: updated, error: stockError } = await supabase
-            .from('shop_products')
-            .update({ stock: currentStock - item.quantity })
-            .eq('id', item.id)
-            .eq('stock', currentStock) // optimistic locking
-            .select('id');
-
-          if (stockError) throw stockError;
-
-          if (updated && updated.length > 0) {
-            reservedStock.push({ productId: item.id, quantity: item.quantity });
-            reserved = true;
-          }
-        }
-
-        if (!reserved) {
-          throw new Error(`${item.name} was just sold out. Please review your cart and try again.`);
+      // Put each receipt on the order for the shop it was paid to. The order
+      // itself is already placed, so a failure here is worth a warning in the
+      // console, never losing the order.
+      for (const order of orders) {
+        const receipt = receipts[order.seller_id || 'platform'];
+        if (receipt?.url) {
+          await attachPaymentProof(order.id, receipt.url, receipt.reference || null);
         }
       }
 
-      const { data: order, error: orderError } = await supabase
-        .from('shop_orders')
-        .insert({
-          user_id: sessionUser.id,
-          customer_name: formData.fullName.trim(),
-          customer_email: formData.email.trim(),
-          customer_phone: formData.phone.trim(),
-          delivery_address: formData.address.trim(),
-          payment_method: formData.paymentMethod,
-          total_amount: orderCart.total,
-          status: 'pending',
-          notes: formData.notes.trim(),
-        })
-        .select()
-        .single();
-
-      if (orderError) throw orderError;
-
-      createdOrderId = order.id;
-
-      const { error: itemsError } = await supabase
-        .from('shop_order_items')
-        .insert(orderCart.items.map((item) => ({
-          order_id: order.id,
-          product_id: item.id,
-          product_name: item.name,
-          quantity: item.quantity,
-          price: item.price,
-        })));
-
-      if (itemsError) throw itemsError;
-
-      // Points are granted by the database when the order is delivered
-      // (supabase-points-on-delivery.sql), never here at checkout.
-      await saveDetailsToProfile(sessionUser.id);
-      setPlacedOrders([{ id: order.id, total: orderCart.total }]);
-      setPlacedPayment(formData.paymentMethod);
-      setVerifiedCart(orderCart);
-      setAwardedPoints(Math.floor(orderCart.total / 100) * 10);
       setStep(3);
     } catch (submitError) {
       console.error('Error creating order:', submitError);
-
-      // Roll back the half-created order so nobody sees an empty order.
-      if (createdOrderId) {
-        const { error: cleanupError } = await supabase
-          .from('shop_order_items')
-          .delete()
-          .eq('order_id', createdOrderId);
-
-        if (!cleanupError) {
-          await supabase.from('shop_orders').delete().eq('id', createdOrderId);
-        } else {
-          // Deleting is blocked: keep the order but mark it cancelled so it is
-          // not fulfilled without the stock that was just released.
-          await supabase
-            .from('shop_orders')
-            .update({ status: 'cancelled', updated_at: new Date().toISOString() })
-            .eq('id', createdOrderId);
-        }
-      }
-
-      for (const reservation of reservedStock.reverse()) {
-        await restoreReservedStock(reservation);
-      }
-
       reportError(submitError.message || 'Please try again.');
     } finally {
       setLoading(false);
@@ -735,7 +625,23 @@ export default function CheckoutModal({
 
   const summaryItems = verifiedCart?.items || cart;
   const summaryTotal = verifiedCart?.total ?? (Number(total) || 0);
-  const summaryPoints = estimateRewardPoints(summaryItems);
+
+  // Goods subtotal per shop, the unit place_order() splits orders by.
+  const subtotalsBySeller = summaryItems.reduce((groups, item) => {
+    const key = item.seller_id || 'platform';
+    groups[key] = (groups[key] || 0) + (Number(item.price) || 0) * (Number(item.quantity) || 0);
+    return groups;
+  }, {});
+
+  // Reward points spent on this checkout: as many as the customer has, up to
+  // half of each shop's goods (the same rule place_order() applies).
+  const redemption = allocateRedemption(subtotalsBySeller, usePoints ? pointsBalance : 0);
+  const redeemableNow = allocateRedemption(subtotalsBySeller, pointsBalance).total;
+  const pointsDiscount = redemption.total * POINT_VALUE;
+  const amountDue = Math.max(0, summaryTotal + shippingFee - pointsDiscount);
+  const summaryPoints = estimateRewardPoints(summaryItems, redemption.bySeller);
+  // After the order is placed: exactly what the database charged.
+  const chargedTotal = Number(verifiedCart?.charged) || amountDue;
   const orderNumbers = placedOrders.map((order) => formatOrderNumber(order.id));
 
   // One group per shop: what is owed to it, and how it wants to be paid. Each
@@ -759,7 +665,13 @@ export default function CheckoutModal({
       groups[key].amount += line;
       return groups;
     }, {})
-  ).map((group) => ({ ...group, amount: group.amount + (Number(shippingFees[group.key]) || 0) }));
+  ).map((group) => ({
+    ...group,
+    amount:
+      group.amount +
+      (Number(shippingFees[group.key]) || 0) -
+      (Number(redemption.bySeller[group.key]) || 0) * POINT_VALUE,
+  }));
 
   /**
    * A shop that has not saved its GCash number cannot be paid by GCash, so
@@ -915,22 +827,60 @@ export default function CheckoutModal({
                 <p className="mt-1 text-xs text-gray-500">{PHONE_HINT}</p>
               </div>
 
-              <div>
-                <p className="mb-3 text-sm font-semibold text-gray-900">Delivery Address *</p>
-                <AddressFields
-                  value={addressParts}
-                  onChange={(next) => {
-                    setAddressParts(next);
-                    // Keep the single stored line in step with the parts
-                    setFormData((prev) => ({ ...prev, address: formatAddress(next) }));
-                  }}
-                />
-                {formData.address && (
-                  <p className="mt-2 rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-600">
-                    Delivering to: <span className="font-medium text-gray-800">{formData.address}</span>
-                  </p>
-                )}
-              </div>
+              <fieldset>
+                <legend className="mb-2 text-sm font-semibold text-gray-900">How do you want to get your order? *</legend>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  {[
+                    { value: 'delivery', title: 'Delivery', detail: 'Brought to your address. Delivery fee per shop.' },
+                    { value: 'pickup', title: 'Store pickup', detail: 'Collect it at the shop. No delivery fee.' },
+                  ].map((option) => (
+                    <label
+                      key={option.value}
+                      className={`flex min-h-[44px] cursor-pointer items-start gap-3 rounded-xl border-2 p-4 transition-colors ${
+                        fulfillment === option.value ? 'border-blue-600 bg-blue-50' : 'border-gray-200 hover:bg-gray-50'
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="fulfillment"
+                        value={option.value}
+                        checked={fulfillment === option.value}
+                        onChange={() => setFulfillment(option.value)}
+                        className="mt-0.5 h-5 w-5 text-blue-600"
+                      />
+                      <span>
+                        <span className="block font-medium text-gray-900">{option.title}</span>
+                        <span className="block text-xs text-gray-500">{option.detail}</span>
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
+
+              {isPickupOrder ? (
+                <p className="rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-900">
+                  Each shop prepares its part of your order for pickup. You will be notified when it is
+                  <strong> ready for pickup</strong>, and the shop&apos;s address is shown on the order. Bring your
+                  order number.
+                </p>
+              ) : (
+                <div>
+                  <p className="mb-3 text-sm font-semibold text-gray-900">Delivery Address *</p>
+                  <AddressFields
+                    value={addressParts}
+                    onChange={(next) => {
+                      setAddressParts(next);
+                      // Keep the single stored line in step with the parts
+                      setFormData((prev) => ({ ...prev, address: formatAddress(next) }));
+                    }}
+                  />
+                  {formData.address && (
+                    <p className="mt-2 rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-600">
+                      Delivering to: <span className="font-medium text-gray-800">{formData.address}</span>
+                    </p>
+                  )}
+                </div>
+              )}
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -955,7 +905,11 @@ export default function CheckoutModal({
                     onChange={(event) => setSaveDetails(event.target.checked)}
                     className="mt-0.5 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                   />
-                  <span>Save this phone number and address to my profile for faster checkout next time</span>
+                  <span>
+                    {isPickupOrder
+                      ? 'Save this phone number to my profile for faster checkout next time'
+                      : 'Save this phone number and address to my profile for faster checkout next time'}
+                  </span>
                 </label>
               )}
             </div>
@@ -1011,20 +965,54 @@ export default function CheckoutModal({
                 <span>₱{summaryTotal.toFixed(2)}</span>
               </div>
               <div className="flex justify-between text-sm">
-                <span className="text-gray-600">Delivery</span>
+                <span className="text-gray-600">{isPickupOrder ? 'Store pickup' : 'Delivery'}</span>
                 <span className={shippingFee === 0 ? 'font-semibold text-green-600' : ''}>
                   {shippingFee === 0 ? 'FREE' : `₱${shippingFee.toFixed(2)}`}
                 </span>
               </div>
+              {pointsDiscount > 0 && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600">Reward points ({redemption.total.toLocaleString()} pts)</span>
+                  <span className="font-semibold text-green-600">−₱{pointsDiscount.toFixed(2)}</span>
+                </div>
+              )}
               <div className="mt-2 flex justify-between border-t pt-2 font-bold">
                 <span>Total</span>
-                <span className="text-blue-600">₱{(summaryTotal + shippingFee).toFixed(2)}</span>
+                <span className="text-blue-600">₱{amountDue.toFixed(2)}</span>
               </div>
               {summaryItems.some((item) => item.seller_id) && shippingFee > 0 && (
                 <p className="mt-2 text-xs text-gray-500">
                   Each shop delivers separately, so the fee applies once per shop.
                 </p>
               )}
+            </div>
+
+            {/* CONNECT-Daet reward points: spend them on this order */}
+            <div className="mb-6 rounded-xl border-2 border-yellow-200 bg-yellow-50 p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="font-semibold text-gray-900">CONNECT-Daet reward points</p>
+                  <p className="text-sm text-gray-700">
+                    You have <strong>{pointsBalance.toLocaleString()}</strong> points
+                    {pointsBalance > 0 && <> (worth up to ₱{(pointsBalance * POINT_VALUE).toLocaleString()})</>}.
+                  </p>
+                </div>
+                <label className="flex min-h-[44px] flex-shrink-0 cursor-pointer items-center gap-2 text-sm font-medium text-gray-900">
+                  <input
+                    type="checkbox"
+                    checked={usePoints && redeemableNow > 0}
+                    disabled={redeemableNow === 0}
+                    onChange={(event) => setUsePoints(event.target.checked)}
+                    className="h-5 w-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500 disabled:opacity-50"
+                  />
+                  Use points
+                </label>
+              </div>
+              <p className="mt-2 text-xs text-gray-600">
+                {redeemableNow > 0
+                  ? `1 point = ₱${POINT_VALUE}. Points can pay for up to ${Math.round(MAX_REDEEM_SHARE * 100)}% of each shop's items (not the delivery fee); you can use ${redeemableNow.toLocaleString()} on this order. Points are returned if the order is cancelled.`
+                  : 'Earn 10 points for every ₱100 you spend. Points are added when your order is delivered or picked up.'}
+              </p>
             </div>
 
             {/* Payment Options. A method no shop in this basket accepts is
@@ -1072,7 +1060,7 @@ export default function CheckoutModal({
                   onChange={handleInputChange}
                   className="w-5 h-5 text-blue-600"
                 />
-                <span className="ml-3 font-medium">Cash on Delivery</span>
+                <span className="ml-3 font-medium">{isPickupOrder ? 'Cash on Pickup' : 'Cash on Delivery'}</span>
               </label>
 
               {bankAvailable && (
@@ -1123,11 +1111,13 @@ export default function CheckoutModal({
             )}
 
             <div className="mb-6 rounded-xl border border-gray-200 p-4 text-sm text-gray-700">
-              <p className="font-semibold text-gray-900 mb-1">Deliver to</p>
+              <p className="font-semibold text-gray-900 mb-1">{isPickupOrder ? 'Store pickup for' : 'Deliver to'}</p>
               <p className="break-words">{formData.fullName} · {formData.phone}</p>
-              <p className="break-words whitespace-pre-line">{formData.address}</p>
+              <p className="break-words whitespace-pre-line">
+                {isPickupOrder ? 'Collect at each shop. The pickup address is shown on your order.' : formData.address}
+              </p>
               {summaryPoints > 0 && (
-                <p className="mt-2 text-xs text-yellow-800">You will earn about {summaryPoints} reward points once this order is delivered.</p>
+                <p className="mt-2 text-xs text-yellow-800">You will earn about {summaryPoints} reward points once this order is {isPickupOrder ? 'picked up' : 'delivered'}.</p>
               )}
             </div>
 
@@ -1174,8 +1164,9 @@ export default function CheckoutModal({
                   <span className="font-mono font-semibold text-gray-900">{orderNumbers.join(', ')}</span>
                 </p>
                 <p className="mt-1">
-                  Total: <span className="font-semibold">₱{summaryTotal.toFixed(2)}</span> · Payment:{' '}
-                  <span className="font-semibold">{PAYMENT_LABELS[placedPayment] || placedPayment}</span>
+                  Total: <span className="font-semibold">₱{chargedTotal.toFixed(2)}</span>
+                  {placedRedeemed > 0 && <> (after {placedRedeemed.toLocaleString()} points)</>} · Payment:{' '}
+                  <span className="font-semibold">{placedPayment === 'cod' && isPickupOrder ? 'Cash on Pickup' : PAYMENT_LABELS[placedPayment] || placedPayment}</span>
                 </p>
               </div>
             )}
@@ -1199,7 +1190,7 @@ export default function CheckoutModal({
                 <PaymentInstructions
                   method={placedPayment}
                   settings={shopSettings}
-                  amount={summaryTotal}
+                  amount={chargedTotal}
                   orderNumbers={orderNumbers}
                 />
               </div>
@@ -1208,7 +1199,7 @@ export default function CheckoutModal({
               <div className="bg-blue-50 rounded-xl p-4 mb-6">
                 <p className="text-sm text-gray-600">
                   You&apos;ll earn <span className="font-bold text-blue-600">{awardedPoints} points</span> once your order
-                  arrives. Tap <strong>Order Received</strong> in My Orders when you get it.
+                  {isPickupOrder ? ' is picked up' : ' arrives'}. Tap <strong>Order Received</strong> in My Orders when you get it.
                 </p>
               </div>
             )}

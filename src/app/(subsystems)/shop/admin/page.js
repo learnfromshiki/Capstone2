@@ -6,7 +6,7 @@ import { useState, useEffect } from 'react';
 import { supabase, startAdminSession } from '@/lib/supabaseClient';
 import { uploadProductImage } from '@/lib/imageUpload';
 import { getAccountRole } from '@/lib/roles';
-import { formatOrderNumber, getAllowedStatuses, isCountedSale, isMissingFunction, PAYMENT_LABELS, STATUS_LABELS, transitionOrderStatus } from '@/lib/orders';
+import { formatOrderNumber, getAllowedStatuses, isCountedSale, isMissingFunction, isPickup, paymentLabel, statusLabel, STATUS_LABELS, transitionOrderStatus } from '@/lib/orders';
 import PaymongoStatus from '@/components/shop/PaymongoStatus';
 import { describePriceProblem, sanitizePrice } from '@/lib/fieldRules';
 import { DEFAULT_SHOP_SETTINGS, fetchShopSettings } from '@/lib/shopSettings';
@@ -32,7 +32,8 @@ const REPORT_CONFIG = {
       { key: 'orders', label: 'Orders' },
       { key: 'items', label: 'Items (PHP)' },
       { key: 'delivery', label: 'Delivery (PHP)' },
-      { key: 'revenue', label: 'Total (PHP)' }
+      { key: 'points', label: 'Paid with Points (PHP)' },
+      { key: 'revenue', label: 'Collected (PHP)' }
     ]
   },
   products: {
@@ -1103,10 +1104,13 @@ export default function ShopAdminPage() {
           const day = new Date(order.created_at).toLocaleDateString('en-CA');
           const total = Number(order.total_amount) || 0;
           const delivery = Number(order.shipping_fee) || 0;
-          byDay[day] = byDay[day] || { date: day, orders: 0, items: 0, delivery: 0, revenue: 0 };
+          // Reward points the customer spent; the platform covers them.
+          const points = Number(order.points_discount) || 0;
+          byDay[day] = byDay[day] || { date: day, orders: 0, items: 0, delivery: 0, points: 0, revenue: 0 };
           byDay[day].orders += 1;
-          byDay[day].items += total - delivery;
+          byDay[day].items += total - delivery + points;
           byDay[day].delivery += delivery;
+          byDay[day].points += points;
           byDay[day].revenue += total;
         });
 
@@ -1116,6 +1120,7 @@ export default function ShopAdminPage() {
             ...row,
             items: row.items.toFixed(2),
             delivery: row.delivery.toFixed(2),
+            points: row.points.toFixed(2),
             revenue: row.revenue.toFixed(2)
           }));
       } else if (type === 'products') {
@@ -2120,7 +2125,7 @@ export default function ShopAdminPage() {
                             order.status === 'pending' ? 'bg-yellow-100 text-yellow-700' :
                             'bg-blue-100 text-blue-700'
                           }`}>
-                            {STATUS_LABELS[order.status] || order.status || 'Unknown'}
+                            {statusLabel(order.status, order)}
                           </span>
                         </td>
                         <td className="px-6 py-4 text-sm text-gray-600">
@@ -2464,6 +2469,11 @@ export default function ShopAdminPage() {
                       <h3 className="font-bold text-lg break-words">{order.customer_name}</h3>
                       <p className="text-sm text-gray-600 break-all">{order.customer_email}</p>
                       <p className="text-sm text-gray-600">{order.customer_phone}</p>
+                      {isPickup(order) && (
+                        <span className="mt-1 inline-flex rounded-full bg-indigo-100 px-2 py-0.5 text-xs font-semibold text-indigo-800">
+                          Store pickup
+                        </span>
+                      )}
                       <p className="text-sm text-gray-600 break-words whitespace-pre-line">{order.delivery_address}</p>
                       {order.notes && (
                         <p className="mt-2 rounded-lg bg-yellow-50 px-3 py-2 text-sm text-yellow-900 break-words">
@@ -2476,6 +2486,11 @@ export default function ShopAdminPage() {
                       {Number(order.shipping_fee) > 0 && (
                         <div className="text-xs text-gray-500">
                           includes {peso(order.shipping_fee)} delivery
+                        </div>
+                      )}
+                      {Number(order.points_discount) > 0 && (
+                        <div className="text-xs text-gray-500">
+                          after {Number(order.points_redeemed).toLocaleString()} reward points ({peso(order.points_discount)})
                         </div>
                       )}
                       <div className="text-sm text-gray-500">
@@ -2508,12 +2523,12 @@ export default function ShopAdminPage() {
                     >
                       {getAllowedStatuses(order.status).map((status) => (
                         <option key={status} value={status}>
-                          {STATUS_LABELS[status] || status}
+                          {statusLabel(status, order)}
                         </option>
                       ))}
                     </select>
                     <span className="text-sm text-gray-600">
-                      Payment: {PAYMENT_LABELS[order.payment_method] || order.payment_method || 'Unknown'}
+                      Payment: {paymentLabel(order.payment_method, order) || 'Unknown'}
                     </span>
                     <PaymongoStatus order={order} />
                   </div>
@@ -2753,7 +2768,7 @@ export default function ShopAdminPage() {
                             order.status === 'pending' ? 'bg-yellow-100 text-yellow-700' :
                             'bg-blue-100 text-blue-700'
                           }`}>
-                            {STATUS_LABELS[order.status] || order.status || 'Unknown'}
+                            {statusLabel(order.status, order)}
                           </span>
                         </td>
                         <td className="px-6 py-4 text-sm text-gray-600">

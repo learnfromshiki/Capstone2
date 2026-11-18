@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabaseClient';
 import { useAuth } from '@/contexts/AuthContext';
@@ -18,6 +18,7 @@ import { cartLineId, describeSelection, hasOptions } from '@/lib/productOptions'
 import { countUnread, openConversation } from '@/lib/messages';
 import { storeBuyNow } from '@/lib/buyNow';
 import ShopFooter from '@/components/shop/ShopFooter';
+import { flushCart, loadCart, readLocalCart, saveCart } from '@/lib/cart';
 
 export default function ShopPage() {
   const [products, setProducts] = useState([]);
@@ -81,6 +82,9 @@ export default function ShopPage() {
   const { user, profile, role, isSuspended, loading: authLoading, signOut } = useAuth();
   const cartKey = user ? `shop_cart:${user.id}` : null;
   const [cartOwner, setCartOwner] = useState(undefined);
+  // The cart as last loaded from / sent to the database, so it is not re-sent.
+  const lastSavedCartRef = useRef('[]');
+  const activeCartKeyRef = useRef(null);
 
   // Old builds shared one "shop_cart" key between every account on the device.
   // Remove it so one customer's cart can never appear in another's session.
@@ -98,6 +102,7 @@ export default function ShopPage() {
     if (authLoading) return;
 
     if (!user || !cartKey) {
+      activeCartKeyRef.current = null;
       setCart([]);
       setCartOwner(null);
       return;
@@ -105,43 +110,47 @@ export default function ShopPage() {
 
     if (cartOwner === cartKey) return;
 
-    try {
-      const savedCart = localStorage.getItem(cartKey);
-      const parsed = savedCart ? JSON.parse(savedCart) : [];
-
-      // Carts saved before product options existed have no line id; give them
-      // one so the rest of the cart code can rely on it.
-      setCart(
-        (Array.isArray(parsed) ? parsed : []).map((item) => ({
-          ...item,
-          productId: item.productId || item.id,
-          selectedOptions: item.selectedOptions || {},
-          lineId: item.lineId || cartLineId(item.productId || item.id, item.selectedOptions),
-        }))
-      );
-    } catch (error) {
-      console.error('Error loading cart:', error);
-      setCart([]);
-    }
-
+    // Show this browser's copy at once, then replace it with the cart saved
+    // in the database, which is the same on every device.
+    const local = readLocalCart(user.id);
+    lastSavedCartRef.current = JSON.stringify(local);
+    setCart(local);
     setCartOwner(cartKey);
+
+    const loadingFor = cartKey;
+    activeCartKeyRef.current = cartKey;
+    loadCart(user.id).then((saved) => {
+      // Another account signed in meanwhile: this cart is not theirs.
+      if (activeCartKeyRef.current !== loadingFor) return;
+      lastSavedCartRef.current = JSON.stringify(saved);
+      setCart(saved);
+    });
   }, [user, authLoading, cartKey, cartOwner]);
 
   // Save only after the matching cart has been loaded, so a cart from the
-  // previous account cannot overwrite the new account's cart.
+  // previous account cannot overwrite the new account's cart. What was just
+  // loaded is not sent back.
   useEffect(() => {
     if (!user || !cartKey || cartOwner !== cartKey) return;
 
-    try {
-      if (cart.length > 0) {
-        localStorage.setItem(cartKey, JSON.stringify(cart));
-      } else {
-        localStorage.removeItem(cartKey);
-      }
-    } catch (error) {
-      console.error('Error saving cart:', error);
-    }
+    const serialized = JSON.stringify(cart);
+    if (serialized === lastSavedCartRef.current) return;
+    lastSavedCartRef.current = serialized;
+    saveCart(user.id, cart);
   }, [cart, user, cartKey, cartOwner]);
+
+  // A change made just before leaving the page is still sent.
+  useEffect(() => {
+    if (!user) return undefined;
+    const flush = () => {
+      flushCart(user.id);
+    };
+    window.addEventListener('pagehide', flush);
+    return () => {
+      window.removeEventListener('pagehide', flush);
+      flush();
+    };
+  }, [user]);
 
   useEffect(() => {
     fetchProducts();

@@ -71,15 +71,24 @@ export const paymongoRequest = async (path, { method = 'GET', body } = {}) => {
 };
 
 /** Load every order of one checkout that belongs to this customer. */
+const CHECKOUT_COLUMNS =
+  'id, user_id, seller_id, checkout_id, status, payment_method, payment_status, paymongo_session_id, total_amount, shipping_fee, customer_name, customer_email, customer_phone, shop_order_items(product_name, quantity, price), shop_sellers(business_name)';
+
 export const loadCheckoutOrders = async (admin, checkoutId, userId) => {
-  const { data, error } = await admin
-    .from('shop_orders')
-    .select(
-      'id, user_id, seller_id, checkout_id, status, payment_method, payment_status, paymongo_session_id, total_amount, shipping_fee, customer_name, customer_email, customer_phone, shop_order_items(product_name, quantity, price), shop_sellers(business_name)'
-    )
-    .eq('checkout_id', checkoutId)
-    .eq('user_id', userId)
-    .order('created_at', { ascending: true });
+  const read = (columns) =>
+    admin
+      .from('shop_orders')
+      .select(columns)
+      .eq('checkout_id', checkoutId)
+      .eq('user_id', userId)
+      .order('created_at', { ascending: true });
+
+  // Reward points spent on the order arrive with
+  // supabase-cart-pickup-redemption.sql; an older database has none.
+  let { data, error } = await read(`${CHECKOUT_COLUMNS}, points_redeemed, points_discount`);
+  if (error && /points_(redeemed|discount)|column/i.test(error.message || '')) {
+    ({ data, error } = await read(CHECKOUT_COLUMNS));
+  }
 
   if (error) throw new Error(error.message);
   return data || [];

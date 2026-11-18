@@ -273,7 +273,7 @@ export const PAYMENT_LABELS = {
 };
 
 /** 10 reward points for every full ₱100, counted per shop order. */
-export const estimateRewardPoints = (items) => {
+export const estimateRewardPoints = (items, redeemedBySeller = {}) => {
   const totalsBySeller = new Map();
 
   (items || []).forEach((item) => {
@@ -283,9 +283,80 @@ export const estimateRewardPoints = (items) => {
   });
 
   let points = 0;
-  totalsBySeller.forEach((amount) => {
-    points += Math.floor(amount / 100) * 10;
+  totalsBySeller.forEach((amount, key) => {
+    // Points are earned on what is paid for the goods, after any points spent.
+    const paid = Math.max(0, amount - (Number(redeemedBySeller[key]) || 0));
+    points += Math.floor(paid / 100) * 10;
   });
 
   return points;
+};
+
+// ---------------------------------------------------------------------------
+// Delivery or store pickup
+// ---------------------------------------------------------------------------
+export const FULFILLMENT_LABELS = {
+  delivery: 'Delivery',
+  pickup: 'Store pickup',
+};
+
+export const isPickup = (order) => order?.fulfillment_method === 'pickup';
+
+/**
+ * The status as the customer should read it. A pickup order is never
+ * "shipped": it is ready for pickup, and "delivered" means picked up.
+ */
+export const statusLabel = (status, order) => {
+  if (isPickup(order)) {
+    if (status === 'shipped') return 'Ready for pickup';
+    if (status === 'delivered') return 'Picked up';
+  }
+  return STATUS_LABELS[status] || status || 'Unknown';
+};
+
+/** "Cash on Delivery" reads as "Pay at pickup" on a pickup order. */
+export const paymentLabel = (method, order) => {
+  if (method === 'cod' && isPickup(order)) return 'Cash on Pickup';
+  return PAYMENT_LABELS[method] || method;
+};
+
+// ---------------------------------------------------------------------------
+// Reward points redemption. Must match place_order() in
+// supabase-cart-pickup-redemption.sql.
+// ---------------------------------------------------------------------------
+/** ₱ value of one reward point. */
+export const POINT_VALUE = 1;
+/** Points may pay for at most this share of each shop's goods. */
+export const MAX_REDEEM_SHARE = 0.5;
+
+/**
+ * How many of `points` are spent on each shop's order. Shops are taken in the
+ * same order the database uses (by seller id, the platform last), and each
+ * takes up to half of its goods.
+ *
+ * @param {Record<string, number>} subtotals  goods subtotal per seller key
+ * @returns {{ bySeller: Record<string, number>, total: number, max: number }}
+ */
+export const allocateRedemption = (subtotals, points) => {
+  const keys = Object.keys(subtotals).sort((a, b) => {
+    if (a === 'platform') return 1;
+    if (b === 'platform') return -1;
+    // Plain code-point order, as uuids compare in Postgres.
+    return a < b ? -1 : a > b ? 1 : 0;
+  });
+
+  let left = Math.max(0, Math.floor(Number(points) || 0));
+  let max = 0;
+  const bySeller = {};
+
+  keys.forEach((key) => {
+    const cap = Math.floor((Number(subtotals[key]) || 0) * MAX_REDEEM_SHARE);
+    max += cap;
+    const used = Math.min(left, cap);
+    bySeller[key] = used;
+    left -= used;
+  });
+
+  const total = Object.values(bySeller).reduce((sum, value) => sum + value, 0);
+  return { bySeller, total, max };
 };

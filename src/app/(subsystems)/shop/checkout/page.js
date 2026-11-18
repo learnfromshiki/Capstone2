@@ -1,11 +1,11 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import CheckoutModal from '@/components/shop/CheckoutModal';
-import { cartLineId } from '@/lib/productOptions';
+import { loadCart, readLocalCart, saveCart } from '@/lib/cart';
 import { clearBuyNow, readBuyNow } from '@/lib/buyNow';
 import { clearSelection, readSelection } from '@/lib/checkoutSelection';
 
@@ -50,30 +50,32 @@ export default function CheckoutPage() {
       return;
     }
 
-    try {
-      const stored = localStorage.getItem(cartKey);
-      const parsed = stored ? JSON.parse(stored) : [];
+    let cancelled = false;
 
-      const lines = (Array.isArray(parsed) ? parsed : []).map((item) => ({
-        ...item,
-        productId: item.productId || item.id,
-        selectedOptions: item.selectedOptions || {},
-        lineId: item.lineId || cartLineId(item.productId || item.id, item.selectedOptions),
-      }));
+    // The cart saved in the database (the same on every device).
+    loadCart(user.id)
+      .then((lines) => {
+        if (cancelled) return;
 
-      // Only what the customer ticked in the cart. A selection that no longer
-      // matches anything (the cart changed in another tab) falls back to the
-      // whole cart rather than an empty checkout.
-      const chosen = readSelection(user.id);
-      const picked = chosen ? lines.filter((line) => chosen.includes(line.lineId)) : lines;
+        // Only what the customer ticked in the cart. A selection that no
+        // longer matches anything (the cart changed in another tab) falls back
+        // to the whole cart rather than an empty checkout.
+        const chosen = readSelection(user.id);
+        const picked = chosen ? lines.filter((line) => chosen.includes(line.lineId)) : lines;
 
-      setItems(picked.length > 0 ? picked : lines);
-    } catch (error) {
-      console.error('Could not read your cart:', error);
-      setItems([]);
-    }
+        setItems(picked.length > 0 ? picked : lines);
+      })
+      .catch((error) => {
+        console.error('Could not read your cart:', error);
+        if (!cancelled) setItems([]);
+      })
+      .finally(() => {
+        if (!cancelled) setReady(true);
+      });
 
-    setReady(true);
+    return () => {
+      cancelled = true;
+    };
   }, [authLoading, user, router, cartKey]);
 
   const total = useMemo(
@@ -82,31 +84,29 @@ export default function CheckoutPage() {
     [items]
   );
 
+  // Called more than once (order placed, then "Continue Shopping"); the cart
+  // is only updated the first time.
+  const cartClearedRef = useRef(null);
+
   const handleSuccess = () => {
-    if (!user) return;
+    if (!user) return Promise.resolve();
 
     if (mode === 'buynow') {
       clearBuyNow(user.id);
-      return;
+      return Promise.resolve();
     }
+
+    if (cartClearedRef.current) return cartClearedRef.current;
 
     // Take out only what was just bought; anything left unticked stays in the
     // cart for next time.
-    try {
-      const bought = new Set(items.map((item) => item.lineId));
-      const stored = localStorage.getItem(cartKey);
-      const parsed = stored ? JSON.parse(stored) : [];
-      const remaining = (Array.isArray(parsed) ? parsed : []).filter(
-        (item) => !bought.has(item.lineId || cartLineId(item.productId || item.id, item.selectedOptions))
-      );
-
-      if (remaining.length > 0) localStorage.setItem(cartKey, JSON.stringify(remaining));
-      else localStorage.removeItem(cartKey);
-    } catch (error) {
-      console.error('Could not update your cart:', error);
-    }
+    const bought = new Set(items.map((item) => item.lineId));
+    const remaining = readLocalCart(user.id).filter((item) => !bought.has(item.lineId));
+    // Saved straight away: the next step may be a redirect to PayMongo.
+    cartClearedRef.current = saveCart(user.id, remaining, { immediate: true });
 
     clearSelection(user.id);
+    return cartClearedRef.current;
   };
 
   if (authLoading || !ready) {

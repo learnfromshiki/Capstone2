@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useSellerAuth } from '@/contexts/SellerAuthContext';
 import { supabase } from '@/lib/supabaseClient';
 import { uploadProductImage } from '@/lib/imageUpload';
-import { formatOrderNumber, getAllowedStatuses, isCountedSale, PAYMENT_LABELS, STATUS_LABELS, transitionOrderStatus } from '@/lib/orders';
+import { formatOrderNumber, getAllowedStatuses, isCountedSale, isPickup, paymentLabel, statusLabel, STATUS_LABELS, transitionOrderStatus } from '@/lib/orders';
 import PaymongoStatus from '@/components/shop/PaymongoStatus';
 import ChangePasswordCard from '@/components/ChangePasswordCard';
 import {
@@ -299,9 +299,15 @@ export default function SellerDashboard() {
 
     // The payment receipt arrives with supabase-notifications-payments.sql;
     // fall back so an older database still lists its orders.
+    // Pickup and points arrive with supabase-cart-pickup-redemption.sql.
+    const PAYMENT_COLUMNS = 'payment_proof_url, payment_reference, payment_proof_at, payment_status, paid_at';
     let { data: orderRows, error: ordersError } = await readOrders(
-      `${ORDER_COLUMNS}, payment_proof_url, payment_reference, payment_proof_at, payment_status, paid_at`
+      `${ORDER_COLUMNS}, ${PAYMENT_COLUMNS}, fulfillment_method, points_redeemed, points_discount`
     );
+
+    if (ordersError && /column/i.test(ordersError.message || '')) {
+      ({ data: orderRows, error: ordersError } = await readOrders(`${ORDER_COLUMNS}, ${PAYMENT_COLUMNS}`));
+    }
 
     if (ordersError && /payment_proof|payment_reference|column/i.test(ordersError.message || '')) {
       ({ data: orderRows, error: ordersError } = await readOrders(ORDER_COLUMNS));
@@ -1942,7 +1948,14 @@ export default function SellerDashboard() {
                       <h3 className="font-bold text-lg break-words">{order.customer_name}</h3>
                       <p className="text-sm text-gray-600 break-words">{order.customer_email}</p>
                       <p className="text-sm text-gray-600">{order.customer_phone}</p>
-                      {order.delivery_address && (
+                      {isPickup(order) ? (
+                        <p className="mt-1 text-sm text-gray-600 break-words">
+                          <span className="mr-2 inline-flex rounded-full bg-indigo-100 px-2 py-0.5 text-xs font-semibold text-indigo-800">
+                            Store pickup
+                          </span>
+                          The customer collects this at your shop. Mark it <strong>Ready for pickup</strong> when it is packed.
+                        </p>
+                      ) : order.delivery_address && (
                         <p className="text-sm text-gray-600 break-words whitespace-pre-line">
                           <span className="font-semibold text-gray-700">Deliver to:</span> {order.delivery_address}
                         </p>
@@ -1959,6 +1972,12 @@ export default function SellerDashboard() {
                       {Number(order.shipping_fee) > 0 && (
                         <p className="text-xs text-gray-500">
                           + ₱{Number(order.shipping_fee).toFixed(2)} delivery collected
+                        </p>
+                      )}
+                      {Number(order.points_discount) > 0 && (
+                        <p className="text-xs text-gray-500">
+                          Customer paid ₱{Number(order.points_discount).toFixed(2)} with CONNECT-Daet points
+                          (covered by the platform: collect ₱{(order.my_total + (Number(order.shipping_fee) || 0) - Number(order.points_discount)).toFixed(2)})
                         </p>
                       )}
                       <div className="text-sm text-gray-500">
@@ -1993,13 +2012,13 @@ export default function SellerDashboard() {
                       >
                         {allowedStatuses.map((status) => (
                           <option key={status} value={status}>
-                            {STATUS_LABELS[status] || status}
+                            {statusLabel(status, order)}
                           </option>
                         ))}
                       </select>
                     </label>
                     <span className="text-sm text-gray-600">
-                      Payment: {PAYMENT_LABELS[order.payment_method] || order.payment_method}
+                      Payment: {paymentLabel(order.payment_method, order)}
                     </span>
                     <PaymongoStatus order={order} />
                     {order.user_id && (

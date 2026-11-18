@@ -79,6 +79,20 @@ export async function POST(request) {
     const lineItems = [];
     orders.forEach((order) => {
       const shop = order.shop_sellers?.business_name;
+
+      // PayMongo has no negative line items, so an order partly paid with
+      // reward points is charged as one line for what is left to pay.
+      if (Number(order.points_discount) > 0) {
+        const number = `#${String(order.id).slice(0, 8).toUpperCase()}`;
+        lineItems.push({
+          name: `Order ${number}${shop ? ` (${shop})` : ''}, less ${Number(order.points_redeemed) || 0} reward points`.slice(0, 255),
+          quantity: 1,
+          amount: toCentavos(order.total_amount),
+          currency: 'PHP',
+        });
+        return;
+      }
+
       (order.shop_order_items || []).forEach((item) => {
         lineItems.push({
           name: (shop ? `${item.product_name} (${shop})` : item.product_name).slice(0, 255),
