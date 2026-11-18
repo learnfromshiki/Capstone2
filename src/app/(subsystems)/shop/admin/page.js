@@ -3,12 +3,11 @@
 import { useState, useEffect } from 'react';
 // Shares the storefront client: sessions are per tab, so signing in as an admin
 // from the shop carries into this page instead of asking for the password again.
-import { supabase, startAdminSession } from '@/lib/supabaseClient';
-import { uploadProductImage } from '@/lib/imageUpload';
+import { supabase, clearStoredSession, startAdminSession } from '@/lib/supabaseClient';
+import { goToShop, showSigningOut } from '@/lib/signOutScreen';
 import { getAccountRole } from '@/lib/roles';
 import { formatOrderNumber, getAllowedStatuses, isCountedSale, isMissingFunction, isPickup, paymentLabel, statusLabel, STATUS_LABELS, transitionOrderStatus } from '@/lib/orders';
 import PaymongoStatus from '@/components/shop/PaymongoStatus';
-import { describePriceProblem, sanitizePrice } from '@/lib/fieldRules';
 import { DEFAULT_SHOP_SETTINGS, fetchShopSettings } from '@/lib/shopSettings';
 import PasswordRequirements from '@/components/PasswordRequirements';
 import { describePasswordProblem, isPasswordValid } from '@/lib/passwordPolicy';
@@ -22,6 +21,21 @@ import NotificationCenter from '@/components/ui/NotificationCenter';
 import PaymentProof from '@/components/shop/PaymentProof';
 import { describeSelection } from '@/lib/productOptions';
 import { describeArea, listShippingRates } from '@/lib/shipping';
+
+/**
+ * Row action buttons. Soft tinted fills instead of solid saturated colours, so
+ * a long table of actions is easy on the eyes; the colour still says what the
+ * button does (green approves, red removes, amber pauses).
+ */
+const ACTION_BASE =
+  'inline-flex min-h-[36px] items-center justify-center rounded-lg px-3 py-1.5 text-sm font-medium ring-1 ring-inset transition-colors focus:outline-none focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-40';
+const ACTION_STYLES = {
+  approve: `${ACTION_BASE} bg-emerald-50 text-emerald-700 ring-emerald-200 hover:bg-emerald-100 focus-visible:ring-emerald-400`,
+  reject: `${ACTION_BASE} bg-white text-gray-700 ring-gray-300 hover:bg-gray-50 focus-visible:ring-gray-400`,
+  danger: `${ACTION_BASE} bg-white text-rose-600 ring-rose-200 hover:bg-rose-50 focus-visible:ring-rose-300`,
+  pause: `${ACTION_BASE} bg-amber-50 text-amber-800 ring-amber-200 hover:bg-amber-100 focus-visible:ring-amber-400`,
+  resume: `${ACTION_BASE} bg-sky-50 text-sky-700 ring-sky-200 hover:bg-sky-100 focus-visible:ring-sky-400`,
+};
 
 const REPORT_CONFIG = {
   sales: {
@@ -118,8 +132,6 @@ export default function ShopAdminPage() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [salesDaily, setSalesDaily] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [showAddProduct, setShowAddProduct] = useState(false);
-  const [showAddCategory, setShowAddCategory] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [checkingAuth, setCheckingAuth] = useState(true);
@@ -137,8 +149,6 @@ export default function ShopAdminPage() {
     next: '',
     confirm: ''
   });
-  const [uploadingImage, setUploadingImage] = useState(false);
-  const [imagePreview, setImagePreview] = useState('');
   const [adminUserId, setAdminUserId] = useState(null);
   const [adminAvatarUrl, setAdminAvatarUrl] = useState('');
   const [notices, setNotices] = useState({
@@ -159,25 +169,6 @@ export default function ShopAdminPage() {
   // confirmed, a corner toast for routine successes.
   const { showAlert, showConfirm, showToast } = useDialog();
   
-  // Product form state
-  const [newProduct, setNewProduct] = useState({
-    name: '',
-    description: '',
-    price: '',
-    stock: '',
-    category: 'handicrafts',
-    image_url: '',
-    artisan_name: '',
-    imageFile: null
-  });
-
-  // Category form state
-  const [newCategory, setNewCategory] = useState({
-    name: '',
-    icon: '📦',
-    description: ''
-  });
-
   // Verify admin access: a real Supabase account with the admin role.
   useEffect(() => {
     const verifyAdminAccess = async () => {
@@ -447,7 +438,9 @@ export default function ShopAdminPage() {
     });
     if (!confirmed) return;
 
-    setIsAuthenticated(false);
+    // Cover the panel first: clearing the session would otherwise flash the
+    // admin login form on the way to the shop.
+    showSigningOut();
 
     try {
       await supabase.auth.signOut();
@@ -455,81 +448,9 @@ export default function ShopAdminPage() {
       console.error('Error signing out:', error);
     }
 
-    window.location.href = '/shop';
-  };
-
-  const handleImageUpload = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-
-    setUploadingImage(true);
-    try {
-      const { url, error } = await uploadProductImage(file);
-      
-      if (error) throw error;
-      
-      setNewProduct({ ...newProduct, image_url: url, imageFile: file });
-      setImagePreview(URL.createObjectURL(file));
-      
-    } catch (error) {
-      console.error('Error uploading image:', error);
-      showAlert('Failed to upload image: ' + error.message);
-    } finally {
-      setUploadingImage(false);
-    }
-  };
-
-  const handleAddCategory = async (e) => {
-    e.preventDefault();
-    setLoading(true);
-
-    try {
-      const name = newCategory.name.trim();
-      const icon = newCategory.icon.trim() || '📦';
-      const slug = name
-        .toLowerCase()
-        .normalize('NFKD')
-        .replace(/[^\w\s-]/g, '')
-        .trim()
-        .replace(/[\s_-]+/g, '-')
-        .replace(/^-+|-+$/g, '');
-
-      if (!name || !slug) {
-        showAlert('Please enter a category name with letters or numbers.');
-        return;
-      }
-
-      const duplicate = categories.some(
-        (category) => category.slug === slug || (category.name || '').toLowerCase() === name.toLowerCase()
-      );
-
-      if (duplicate) {
-        showAlert(`The category "${name}" already exists.`);
-        return;
-      }
-
-      const { error } = await supabase
-        .from('shop_categories')
-        .insert([{
-          name,
-          slug,
-          icon,
-          description: newCategory.description.trim() || null,
-          display_order: categories.length
-        }]);
-
-      if (error) throw error;
-
-      setNewCategory({ name: '', icon: '📦', description: '' });
-      setShowAddCategory(false);
-      fetchCategories();
-      showToast('Category added successfully.', 'success');
-    } catch (error) {
-      console.error('Error adding category:', error);
-      showToast('Failed to add category: ' + (error.message || 'unknown error'), 'error');
-    } finally {
-      setLoading(false);
-    }
+    // Also ends this tab's admin mode, so the next login here is a normal one.
+    clearStoredSession();
+    goToShop();
   };
 
   const fetchData = async () => {
@@ -640,72 +561,6 @@ export default function ShopAdminPage() {
       }
     } catch (error) {
       console.error('Error fetching data:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleAddProduct = async (e) => {
-    e.preventDefault();
-    setLoading(true);
-    
-    try {
-      const name = newProduct.name.trim();
-      const description = newProduct.description.trim();
-      const price = Number(newProduct.price);
-      const stock = Number(newProduct.stock);
-
-      if (!name || !description) {
-        showAlert('Product name and description are required.');
-        return;
-      }
-
-      const priceProblem = describePriceProblem(newProduct.price);
-      if (priceProblem) {
-        showAlert(priceProblem);
-        return;
-      }
-
-      if (!Number.isInteger(stock) || stock < 0) {
-        showAlert('Stock must be a whole number of 0 or more.');
-        return;
-      }
-
-      // Use uploaded image URL if available, otherwise use entered URL
-      const imageUrl = newProduct.image_url || null;
-      
-      const { error } = await supabase
-        .from('shop_products')
-        .insert([{
-          name,
-          description,
-          price,
-          stock,
-          category: newProduct.category,
-          image_url: imageUrl,
-          artisan_name: newProduct.artisan_name.trim() || null,
-          available: true
-        }]);
-
-      if (error) throw error;
-
-      setNewProduct({
-        name: '',
-        description: '',
-        price: '',
-        stock: '',
-        category: 'handicrafts',
-        image_url: '',
-        artisan_name: '',
-        imageFile: null
-      });
-      setImagePreview('');
-      setShowAddProduct(false);
-      fetchData();
-      showToast('Product added successfully!', 'success');
-    } catch (error) {
-      console.error('Error adding product:', error);
-      showAlert('Failed to add product: ' + error.message);
     } finally {
       setLoading(false);
     }
@@ -2184,30 +2039,33 @@ export default function ShopAdminPage() {
                         </span>
                       </td>
                       <td className="px-6 py-4">
-                        <div className="flex gap-2">
+                        <div className="flex flex-wrap items-center gap-2">
                           {!seller.is_approved ? (
                             <button
                               onClick={() => approveSeller(seller)}
-                              className="px-4 py-2 text-sm font-medium rounded-lg bg-green-600 text-white hover:bg-green-700 transition-colors shadow-sm"
+                              className={ACTION_STYLES.approve}
                             >
                               Approve
                             </button>
                           ) : (
-                            <span className="px-4 py-2 text-sm font-medium text-gray-400 cursor-not-allowed">
-                              Approved ✓
+                            <span className="inline-flex min-h-[36px] items-center gap-1 px-2 text-sm font-medium text-emerald-700">
+                              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                              </svg>
+                              Approved
                             </span>
                           )}
                           {!seller.is_approved && !seller.is_rejected && (
                             <button
                               onClick={() => rejectSeller(seller)}
-                              className="px-4 py-2 text-sm font-medium rounded-lg bg-red-600 text-white hover:bg-red-700 transition-colors shadow-sm"
+                              className={ACTION_STYLES.reject}
                             >
                               Reject
                             </button>
                           )}
                           <button
                             onClick={() => deleteSeller(seller)}
-                            className="px-4 py-2 text-sm font-medium rounded-lg bg-red-600 text-white hover:bg-red-700 transition-colors shadow-sm"
+                            className={ACTION_STYLES.danger}
                           >
                             Delete
                           </button>
@@ -2245,11 +2103,7 @@ export default function ShopAdminPage() {
                                 showToast('Failed to update seller status', 'error');
                               }
                             }}
-                            className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors shadow-sm ${
-                              seller.is_active
-                                ? 'bg-orange-600 text-white hover:bg-orange-700'
-                                : 'bg-gray-600 text-white hover:bg-gray-700'
-                            }`}
+                            className={seller.is_active ? ACTION_STYLES.pause : ACTION_STYLES.resume}
                           >
                             {seller.is_active ? 'Suspend' : 'Activate'}
                           </button>
@@ -2302,17 +2156,13 @@ export default function ShopAdminPage() {
                         <div className="flex gap-2">
                           <button
                             onClick={() => toggleCustomerStatus(customer)}
-                            className={`text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors ${
-                              customer.is_suspended
-                                ? 'bg-green-50 text-green-700 hover:bg-green-100'
-                                : 'bg-red-50 text-red-700 hover:bg-red-100'
-                            }`}
+                            className={customer.is_suspended ? ACTION_STYLES.resume : ACTION_STYLES.pause}
                           >
                             {customer.is_suspended ? 'Reactivate' : 'Suspend'}
                           </button>
                           <button
                             onClick={() => deleteCustomer(customer)}
-                            className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-red-600 text-white hover:bg-red-700 transition-colors"
+                            className={ACTION_STYLES.danger}
                           >
                             Delete
                           </button>
@@ -2336,15 +2186,6 @@ export default function ShopAdminPage() {
                   className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                 />
               </div>
-              <button
-                onClick={() => setShowAddProduct(true)}
-                className="ml-4 flex items-center gap-2 bg-gradient-to-r from-blue-600 to-blue-700 text-white px-6 py-2.5 rounded-lg font-semibold hover:from-blue-700 hover:to-blue-800 transition-all shadow-md hover:shadow-lg"
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                </svg>
-                Add Product
-              </button>
             </div>
 
             <div className="bg-white rounded-xl shadow-sm overflow-x-auto border border-gray-100">
@@ -2413,13 +2254,13 @@ export default function ShopAdminPage() {
                         <div className="flex gap-2">
                           <button
                             onClick={() => toggleProductAvailability(product.id, product.available)}
-                            className="px-3 py-1.5 text-xs font-medium rounded-lg bg-blue-100 text-blue-700 hover:bg-blue-200"
+                            className={product.available ? ACTION_STYLES.pause : ACTION_STYLES.resume}
                           >
                             {product.available ? 'Deactivate' : 'Activate'}
                           </button>
                           <button
                             onClick={() => deleteProduct(product.id)}
-                            className="px-3 py-1.5 text-xs font-medium rounded-lg bg-red-100 text-red-700 hover:bg-red-200"
+                            className={ACTION_STYLES.danger}
                           >
                             Delete
                           </button>
@@ -2548,15 +2389,6 @@ export default function ShopAdminPage() {
           <div>
             <div className="flex justify-between items-center mb-6">
               <h3 className="text-xl font-bold">Manage Categories</h3>
-              <button
-                onClick={() => setShowAddCategory(true)}
-                className="flex items-center gap-2 bg-gradient-to-r from-blue-600 to-blue-700 text-white px-6 py-2.5 rounded-lg font-semibold hover:from-blue-700 hover:to-blue-800 transition-all shadow-md hover:shadow-lg"
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                </svg>
-                Add Category
-              </button>
             </div>
 
             <div className="bg-white rounded-xl shadow-sm overflow-x-auto border border-gray-100">
@@ -2591,11 +2423,7 @@ export default function ShopAdminPage() {
                         <div className="flex gap-2">
                           <button
                             onClick={() => toggleCategoryActive(category)}
-                            className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors ${
-                              category.is_active
-                                ? 'bg-red-50 text-red-700 hover:bg-red-100'
-                                : 'bg-green-50 text-green-700 hover:bg-green-100'
-                            }`}
+                            className={category.is_active ? ACTION_STYLES.pause : ACTION_STYLES.resume}
                           >
                             {category.is_active ? 'Deactivate' : 'Activate'}
                           </button>
@@ -2603,7 +2431,7 @@ export default function ShopAdminPage() {
                             onClick={() => deleteCategory(category)}
                             disabled={category.slug === 'all'}
                             title={category.slug === 'all' ? 'The storefront fallback tab cannot be deleted' : `Delete ${category.name}`}
-                            className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-red-600 text-white hover:bg-red-700 transition-colors disabled:cursor-not-allowed disabled:opacity-40"
+                            className={ACTION_STYLES.danger}
                           >
                             Delete
                           </button>
@@ -3372,282 +3200,6 @@ export default function ShopAdminPage() {
         </main>
       </div>
 
-      {/* Add Product Modal */}
-      {showAddProduct && (
-        <div className="modal-backdrop fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="p-6 border-b">
-              <div className="flex justify-between items-center">
-                <h2 className="text-2xl font-bold">Add New Product</h2>
-                <button onClick={() => setShowAddProduct(false)} className="text-gray-400 hover:text-gray-600">
-                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              </div>
-            </div>
-
-            <form onSubmit={handleAddProduct} className="p-6 space-y-4">
-              <div>
-                <label className="block text-sm font-semibold mb-2">Product Name *</label>
-                <input
-                  type="text"
-                  value={newProduct.name}
-                  onChange={(e) => setNewProduct({ ...newProduct, name: e.target.value })}
-                  className="w-full px-4 py-3 border-2 rounded-xl focus:ring-2 focus:ring-blue-500"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold mb-2">Description *</label>
-                <textarea
-                  value={newProduct.description}
-                  onChange={(e) => setNewProduct({ ...newProduct, description: e.target.value })}
-                  rows="3"
-                  className="w-full px-4 py-3 border-2 rounded-xl focus:ring-2 focus:ring-blue-500"
-                  required
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label htmlFor="adminProductPrice" className="block text-sm font-semibold mb-2">Price (₱) *</label>
-                  <input
-                    id="adminProductPrice"
-                    type="text"
-                    inputMode="decimal"
-                    placeholder="1.50"
-                    maxLength={10}
-                    value={newProduct.price}
-                    onChange={(e) => setNewProduct({ ...newProduct, price: sanitizePrice(e.target.value) })}
-                    className="w-full min-h-[44px] px-4 py-3 border-2 rounded-xl focus:ring-2 focus:ring-blue-500"
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-semibold mb-2">Stock *</label>
-                  <input
-                    type="number"
-                    min="0"
-                    value={newProduct.stock}
-                    onChange={(e) => setNewProduct({ ...newProduct, stock: e.target.value })}
-                    className="w-full px-4 py-3 border-2 rounded-xl focus:ring-2 focus:ring-blue-500"
-                    required
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold mb-2">Category *</label>
-                <div className="flex gap-2">
-                  <select
-                    value={newProduct.category}
-                    onChange={(e) => setNewProduct({ ...newProduct, category: e.target.value })}
-                    className="flex-1 px-4 py-3 border-2 rounded-xl focus:ring-2 focus:ring-blue-500"
-                    required
-                  >
-                    {categories.length > 0 ? (
-                      categories.filter(c => c.slug !== 'all').map((cat) => (
-                        <option key={cat.id} value={cat.slug}>
-                          {cat.icon} {cat.name}
-                        </option>
-                      ))
-                    ) : (
-                      <>
-                        <option value="handicrafts">🧺 Handicrafts</option>
-                        <option value="food">🍽️ Food</option>
-                        <option value="souvenirs">🎁 Souvenirs</option>
-                        <option value="weavings">🧵 Weavings</option>
-                        <option value="art">🎨 Art</option>
-                      </>
-                    )}
-                  </select>
-                  <button
-                    type="button"
-                    onClick={() => setShowAddCategory(true)}
-                    className="px-4 py-2 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 transition-colors"
-                    title="Add New Category"
-                  >
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                    </svg>
-                  </button>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold mb-2">Artisan Name</label>
-                <input
-                  type="text"
-                  value={newProduct.artisan_name}
-                  onChange={(e) => setNewProduct({ ...newProduct, artisan_name: e.target.value })}
-                  className="w-full px-4 py-3 border-2 rounded-xl focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold mb-2">Product Image</label>
-                
-                {/* Image Upload */}
-                <div className="space-y-4">
-                  <div className="border-2 border-dashed border-gray-300 rounded-xl p-6 text-center hover:border-blue-500 transition-colors">
-                    <input
-                      type="file"
-                      id="imageUpload"
-                      accept="image/jpeg,image/jpg,image/png,image/gif,image/webp"
-                      onChange={handleImageUpload}
-                      className="hidden"
-                    />
-                    <label htmlFor="imageUpload" className="cursor-pointer">
-                      {uploadingImage ? (
-                        <div className="flex flex-col items-center">
-                          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div>
-                          <p className="text-gray-600">Uploading image...</p>
-                        </div>
-                      ) : (
-                        <div>
-                          <svg className="w-12 h-12 text-gray-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                          </svg>
-                          <p className="text-gray-600 font-medium mb-2">Click to upload or drag and drop</p>
-                          <p className="text-sm text-gray-500">JPG, PNG, GIF, WebP (Max 5MB)</p>
-                        </div>
-                      )}
-                    </label>
-                  </div>
-
-                  {/* OR Divider */}
-                  <div className="relative">
-                    <div className="absolute inset-0 flex items-center">
-                      <div className="w-full border-t border-gray-300"></div>
-                    </div>
-                    <div className="relative flex justify-center text-sm">
-                      <span className="px-2 bg-white text-gray-500">OR</span>
-                    </div>
-                  </div>
-
-                  {/* Image URL Input */}
-                  <input
-                    type="url"
-                    value={newProduct.image_url}
-                    onChange={(e) => setNewProduct({ ...newProduct, image_url: e.target.value })}
-                    placeholder="https://example.com/image.jpg"
-                    className="w-full px-4 py-3 border-2 rounded-xl focus:ring-2 focus:ring-blue-500"
-                  />
-
-                  {/* Image Preview */}
-                  {(imagePreview || newProduct.image_url) && (
-                    <div className="mt-4">
-                      <p className="text-sm font-semibold mb-2">Preview:</p>
-                      <img
-                        src={imagePreview || newProduct.image_url}
-                        alt="Preview"
-                        className="w-full h-48 object-cover rounded-lg"
-                        onError={(e) => {
-                          e.target.style.display = 'none';
-                        }}
-                      />
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <div className="flex gap-3 pt-4">
-                <button
-                  type="button"
-                  onClick={() => setShowAddProduct(false)}
-                  className="flex-1 px-6 py-3 border-2 rounded-xl font-semibold hover:bg-gray-50"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="flex-1 px-6 py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-xl font-semibold hover:from-blue-700 hover:to-blue-800 disabled:opacity-50"
-                >
-                  {loading ? 'Adding...' : 'Add Product'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Add Category Modal */}
-      {showAddCategory && (
-        <div className="modal-backdrop fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full">
-            <div className="p-6 border-b">
-              <div className="flex justify-between items-center">
-                <h2 className="text-2xl font-bold">Add New Category</h2>
-                <button onClick={() => setShowAddCategory(false)} className="text-gray-400 hover:text-gray-600">
-                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              </div>
-            </div>
-
-            <form onSubmit={handleAddCategory} className="p-6 space-y-4">
-              <div>
-                <label className="block text-sm font-semibold mb-2">Category Name *</label>
-                <input
-                  type="text"
-                  value={newCategory.name}
-                  onChange={(e) => setNewCategory({ ...newCategory, name: e.target.value })}
-                  className="w-full px-4 py-3 border-2 rounded-xl focus:ring-2 focus:ring-blue-500"
-                  placeholder="e.g., Electronics"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold mb-2">Icon (Emoji) *</label>
-                <input
-                  type="text"
-                  value={newCategory.icon}
-                  onChange={(e) => setNewCategory({ ...newCategory, icon: e.target.value })}
-                  className="w-full px-4 py-3 border-2 rounded-xl focus:ring-2 focus:ring-blue-500 text-2xl"
-                  placeholder="📦"
-                  required
-                  maxLength={2}
-                />
-                <p className="text-xs text-gray-500 mt-1">Choose any emoji (🎯 📱 👕 🍕 etc.)</p>
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold mb-2">Description</label>
-                <textarea
-                  value={newCategory.description}
-                  onChange={(e) => setNewCategory({ ...newCategory, description: e.target.value })}
-                  rows="3"
-                  className="w-full px-4 py-3 border-2 rounded-xl focus:ring-2 focus:ring-blue-500"
-                  placeholder="Optional category description"
-                />
-              </div>
-
-              <div className="flex gap-3 pt-4">
-                <button
-                  type="button"
-                  onClick={() => setShowAddCategory(false)}
-                  className="flex-1 px-6 py-3 border-2 rounded-xl font-semibold hover:bg-gray-50"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="flex-1 px-6 py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-xl font-semibold hover:from-blue-700 hover:to-blue-800 disabled:opacity-50"
-                >
-                  {loading ? 'Adding...' : 'Add Category'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

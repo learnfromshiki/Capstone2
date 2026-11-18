@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSellerAuth } from '@/contexts/SellerAuthContext';
 import { supabase } from '@/lib/supabaseClient';
+import { goToShop, showSigningOut } from '@/lib/signOutScreen';
 import { uploadProductImage } from '@/lib/imageUpload';
 import { formatOrderNumber, getAllowedStatuses, isCountedSale, isPickup, paymentLabel, statusLabel, STATUS_LABELS, transitionOrderStatus } from '@/lib/orders';
 import PaymongoStatus from '@/components/shop/PaymongoStatus';
@@ -1029,8 +1030,11 @@ export default function SellerDashboard() {
     if (!confirmed) return;
 
     loggingOut = true;
+    // Cover the dashboard first so the seller login is never flashed on the
+    // way to the shop.
+    showSigningOut();
     await signOut();
-    window.location.href = '/shop';
+    goToShop();
   };
 
   const searchTerm = searchQuery.trim().toLowerCase();
@@ -1243,9 +1247,12 @@ export default function SellerDashboard() {
   const ratingLabel = rating.count ? `${rating.average} ★ (${rating.count} reviews)` : 'No reviews yet';
 
   return (
-    <div className="min-h-screen bg-gray-50 lg:flex lg:h-screen">
+    // On desktop the dashboard is pinned to the window: the sidebar stays put
+    // and only the content pane scrolls, so the page itself can never scroll
+    // past the end of the dashboard into empty space.
+    <div className="min-h-screen bg-gray-50 lg:fixed lg:inset-0 lg:flex lg:min-h-0 lg:overflow-hidden">
       {/* LEFT SIDEBAR */}
-      <aside className="hidden w-64 flex-col bg-gradient-to-b from-slate-800 to-slate-900 text-white shadow-xl lg:flex">
+      <aside className="hidden w-64 flex-shrink-0 flex-col bg-gradient-to-b from-slate-800 to-slate-900 text-white shadow-xl lg:flex">
         {/* Logo */}
         <div className="p-6 border-b border-slate-700">
           <div className="flex items-center gap-3">
@@ -1466,7 +1473,7 @@ export default function SellerDashboard() {
         </nav>
 
         {/* Scrollable Content */}
-        <main className="flex-1 p-4 sm:p-6 lg:overflow-y-auto lg:p-8">
+        <main className="relative flex-1 p-4 sm:p-6 lg:min-h-0 lg:overflow-y-auto lg:p-8">
           {/* Date Display */}
           <div className="flex justify-end mb-4">
             <div className="flex items-center gap-2 text-sm text-gray-600">

@@ -814,10 +814,7 @@ export default function BuyerDashboard() {
             This account has been suspended by an administrator. Please contact CONNECT-Daet support if you believe this is a mistake.
           </p>
           <button
-            onClick={async () => {
-              await supabase.auth.signOut();
-              window.location.href = '/shop';
-            }}
+            onClick={() => signOut({ redirectTo: '/shop' })}
             className="w-full bg-blue-600 text-white py-3 rounded-lg font-semibold hover:bg-blue-700"
           >
             Back to Shop

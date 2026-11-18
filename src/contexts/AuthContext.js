@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { supabase, clearStoredSession, startAdminSession } from '@/lib/supabaseClient';
+import { showSigningOut } from '@/lib/signOutScreen';
 import { resolveAccount } from '@/lib/roles';
 import { ensureProfileRow, joinName } from '@/lib/profile';
 
@@ -269,6 +270,12 @@ export const AuthProvider = ({ children }) => {
    * has already expired is treated as a completed sign-out instead of an error.
    */
   const signOut = async ({ redirectTo = '/shop' } = {}) => {
+    const leaving = Boolean(redirectTo) && typeof window !== 'undefined';
+
+    // Leaving the page: cover it first, so the signed-out version of the page
+    // (a "please sign in" screen) is never flashed on the way out.
+    if (leaving) showSigningOut();
+
     setUser(null);
     setProfile(null);
     setSeller(null);
@@ -289,9 +296,10 @@ export const AuthProvider = ({ children }) => {
     // Drop anything left in this browser so a reload cannot restore the session.
     clearStoredSession();
 
-    if (redirectTo && typeof window !== 'undefined') {
-      // A full navigation, so no page keeps stale signed-in data in memory.
-      window.location.href = redirectTo;
+    if (leaving) {
+      // A full navigation, so no page keeps stale signed-in data in memory,
+      // and a replace, so Back does not return to the signed-out page.
+      window.location.replace(redirectTo);
     }
   };
 
