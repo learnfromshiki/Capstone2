@@ -720,7 +720,7 @@ export default function ShopAdminPage() {
       tone: 'error',
       title: `Delete "${name}" permanently?`,
       message:
-        'Their login, profile and reward history are removed. Past orders stay in Transactions so sales records are not lost. This cannot be undone.',
+        'Their account is removed from Supabase: login, profile, reward points, cart and messages. Orders they had not received yet are cancelled. Past orders stay in Transactions so sales records are not lost. This cannot be undone.',
       confirmLabel: 'Delete customer',
     });
     if (!confirmed) return;
@@ -732,13 +732,13 @@ export default function ShopAdminPage() {
 
       if (error) {
         if (isMissingFunction(error)) {
-          showToast('Deleting customers needs supabase-deep-scan-fixes.sql. Run it in Supabase first.', 'error');
+          showToast('Deleting customers needs supabase-admin-delete-accounts.sql. Run it in Supabase first.', 'error');
           return;
         }
         throw error;
       }
 
-      showToast(`${name} deleted.`, 'success');
+      showToast(`${name} was deleted from the system.`, 'success');
       fetchData();
     } catch (error) {
       console.error('Error deleting customer:', error);
@@ -753,7 +753,7 @@ export default function ShopAdminPage() {
       tone: 'error',
       title: `Delete "${name}" permanently?`,
       message:
-        'This removes the shop and their login. Products that were never ordered are deleted; products in past orders are hidden so sales records stay intact. This cannot be undone.',
+        'The shop and the owner account are removed from Supabase, including their login. Orders the shop had not shipped yet are cancelled and the customers get their stock and points back. Products that were never ordered are deleted; products in past orders are hidden so sales records stay intact. This cannot be undone.',
       confirmLabel: 'Delete seller',
     });
     if (!confirmed) return;
@@ -767,13 +767,13 @@ export default function ShopAdminPage() {
 
       if (error) {
         if (isMissingFunction(error)) {
-          showToast('Deleting sellers needs supabase-deep-scan-fixes.sql. Run it in Supabase first.', 'error');
+          showToast('Deleting sellers needs supabase-admin-delete-accounts.sql. Run it in Supabase first.', 'error');
           return;
         }
         throw error;
       }
 
-      showToast(`Seller "${name}" deleted.`, 'success');
+      showToast(`Seller "${name}" was deleted from the system.`, 'success');
       fetchData();
     } catch (error) {
       console.error('Error deleting seller:', error);
