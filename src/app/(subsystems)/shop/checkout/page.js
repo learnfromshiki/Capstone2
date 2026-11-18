@@ -102,7 +102,7 @@ export default function CheckoutPage() {
     // cart for next time.
     const bought = new Set(items.map((item) => item.lineId));
     const remaining = readLocalCart(user.id).filter((item) => !bought.has(item.lineId));
-    // Saved straight away: the next step may be a redirect to PayMongo.
+    // Saved straight away: the next step may be a redirect to Xendit.
     cartClearedRef.current = saveCart(user.id, remaining, { immediate: true });
 
     clearSelection(user.id);

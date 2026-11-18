@@ -8,8 +8,8 @@ import { goToShop, showSigningOut } from '@/lib/signOutScreen';
 import NavBadge from '@/components/ui/NavBadge';
 import useLiveBadges from '@/lib/useLiveBadges';
 import { uploadProductImage } from '@/lib/imageUpload';
-import { formatOrderNumber, getAllowedStatuses, isCountedSale, isPickup, paymentLabel, statusLabel, STATUS_LABELS, transitionOrderStatus } from '@/lib/orders';
-import PaymongoStatus from '@/components/shop/PaymongoStatus';
+import { allowedStatusesFor, formatOrderNumber, isCountedSale, isPickup, paymentLabel, statusLabel, STATUS_LABELS, transitionOrderStatus } from '@/lib/orders';
+import OnlinePaymentStatus from '@/components/shop/OnlinePaymentStatus';
 import ChangePasswordCard from '@/components/ChangePasswordCard';
 import {
   PHONE_HINT,
@@ -1972,7 +1972,7 @@ export default function SellerDashboard() {
                 </div>
               )}
               {filteredOrders.map((order) => {
-                const allowedStatuses = getAllowedStatuses(order.status);
+                const allowedStatuses = allowedStatusesFor(order);
                 const isFinal = ['delivered', 'cancelled'].includes(order.status);
 
                 return (
@@ -2055,7 +2055,7 @@ export default function SellerDashboard() {
                     <span className="text-sm text-gray-600">
                       Payment: {paymentLabel(order.payment_method, order)}
                     </span>
-                    <PaymongoStatus order={order} />
+                    <OnlinePaymentStatus order={order} />
                     {order.user_id && (
                       <button
                         type="button"
@@ -2084,7 +2084,7 @@ export default function SellerDashboard() {
                       reference={order.payment_reference}
                       paidAt={order.payment_proof_at}
                     />
-                    {!order.payment_proof_url && !['cod', 'paymongo'].includes(order.payment_method) && (
+                    {!order.payment_proof_url && !['cod', 'xendit'].includes(order.payment_method) && (
                       <p className="text-xs text-yellow-700">
                         No payment receipt was attached to this order yet.
                       </p>

@@ -12,7 +12,7 @@ const FEATURES = [
   },
   {
     title: 'Secure Payment',
-    text: 'Pay online through PayMongo, by GCash or bank transfer, or cash on delivery.',
+    text: 'Pay online through Xendit (GCash, Maya, QR Ph, cards), by bank transfer, or cash on delivery.',
     color: 'from-emerald-500 to-teal-600',
     glow: 'group-hover:shadow-emerald-500/30',
     icon: 'M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z',

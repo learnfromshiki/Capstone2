@@ -6,8 +6,8 @@ import { useState, useEffect } from 'react';
 import { supabase, clearStoredSession, startAdminSession } from '@/lib/supabaseClient';
 import { goToShop, showSigningOut } from '@/lib/signOutScreen';
 import { getAccountRole } from '@/lib/roles';
-import { formatOrderNumber, getAllowedStatuses, isCountedSale, isMissingFunction, isPickup, paymentLabel, statusLabel, STATUS_LABELS, transitionOrderStatus } from '@/lib/orders';
-import PaymongoStatus from '@/components/shop/PaymongoStatus';
+import { allowedStatusesFor, formatOrderNumber, isCountedSale, isMissingFunction, isPickup, paymentLabel, statusLabel, STATUS_LABELS, transitionOrderStatus } from '@/lib/orders';
+import OnlinePaymentStatus from '@/components/shop/OnlinePaymentStatus';
 import { DEFAULT_SHOP_SETTINGS, fetchShopSettings } from '@/lib/shopSettings';
 import PasswordRequirements from '@/components/PasswordRequirements';
 import { describePasswordProblem, isPasswordValid } from '@/lib/passwordPolicy';
@@ -951,12 +951,12 @@ export default function ShopAdminPage() {
         if (order.payment_method === 'cod') acc.cod += amount;
         if (order.payment_method === 'gcash') acc.gcash += amount;
         if (order.payment_method === 'bank') acc.bank += amount;
-        if (order.payment_method === 'paymongo' && order.payment_status === 'paid') acc.paymongo += amount;
+        if (order.payment_method === 'xendit' && order.payment_status === 'paid') acc.online += amount;
       }
 
       return acc;
     },
-    { completed: 0, pending: 0, refunded: 0, cod: 0, gcash: 0, bank: 0, paymongo: 0 }
+    { completed: 0, pending: 0, refunded: 0, cod: 0, gcash: 0, bank: 0, online: 0 }
   );
 
   const generateReport = async (type) => {
@@ -1115,7 +1115,7 @@ export default function ShopAdminPage() {
           { key: 'gcash', label: 'GCash' },
           { key: 'cod', label: 'Cash on Delivery' },
           { key: 'bank', label: 'Bank Transfer' },
-          { key: 'paymongo', label: 'Online (PayMongo)' }
+          { key: 'xendit', label: 'Online (Xendit)' }
         ];
 
         rows = methods.map((method) => {
@@ -2445,7 +2445,7 @@ export default function ShopAdminPage() {
                       disabled={['cancelled', 'delivered'].includes(order.status)}
                       className="min-h-[44px] px-4 py-2 border rounded-lg disabled:bg-gray-100 disabled:text-gray-500"
                     >
-                      {getAllowedStatuses(order.status).map((status) => (
+                      {allowedStatusesFor(order).map((status) => (
                         <option key={status} value={status}>
                           {statusLabel(status, order)}
                         </option>
@@ -2454,7 +2454,7 @@ export default function ShopAdminPage() {
                     <span className="text-sm text-gray-600">
                       Payment: {paymentLabel(order.payment_method, order) || 'Unknown'}
                     </span>
-                    <PaymongoStatus order={order} />
+                    <OnlinePaymentStatus order={order} />
                   </div>
 
                   {/* What the customer sent, for a GCash or bank order */}
@@ -2633,9 +2633,9 @@ export default function ShopAdminPage() {
                     </svg>
                   </div>
                   <div>
-                    <p className="text-xs text-gray-600 font-medium">Paid online (PayMongo)</p>
+                    <p className="text-xs text-gray-600 font-medium">Paid online (Xendit)</p>
                     <p className="text-xl font-bold text-gray-900">
-                      ₱{orderTotals.paymongo.toLocaleString()}
+                      ₱{orderTotals.online.toLocaleString()}
                     </p>
                   </div>
                 </div>

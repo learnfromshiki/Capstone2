@@ -49,8 +49,11 @@ export default function TermsPage() {
             <h2 className="text-lg font-bold text-gray-900">3. Orders and payment</h2>
             <p className="mt-2">
               Placing an order is an offer to buy. The seller confirms it, prepares it and ships it. Prices are in
-              Philippine pesos. Payment is by GCash, bank transfer or cash on delivery, as shown at checkout. For
-              GCash and bank transfers, your order is confirmed once the seller receives the payment.
+              Philippine pesos. Payment is online through Xendit (GCash, Maya, QR Ph, cards and other channels), by
+              GCash or bank transfer with a receipt, or cash on delivery, as shown at checkout. For GCash and bank
+              transfers, your order is confirmed once the seller receives the payment. An order paid online is
+              prepared only after the payment arrives, and one that is not paid within 24 hours is cancelled
+              automatically.
             </p>
             <p className="mt-2">
               You can cancel an order yourself while it is still Pending. After the seller starts preparing it,
@@ -112,8 +115,9 @@ export default function TermsPage() {
             <h2 className="text-lg font-bold text-gray-900">What we collect</h2>
             <p className="mt-2">
               Your name, email address, phone number and delivery address; your orders, reviews and reward points;
-              and a profile picture if you upload one. Sellers also give their shop details. Payments through GCash
-              or a bank happen outside this website, so card and account numbers are never stored here.
+              and a profile picture if you upload one. Sellers also give their shop details. Online payments are
+              handled on Xendit&apos;s own secure page, and GCash or bank payments happen outside this website, so
+              card, e-wallet and account numbers are never stored here.
             </p>
           </section>
 

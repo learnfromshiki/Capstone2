@@ -1,5 +1,6 @@
 import { supabase } from './supabaseClient';
 import { requestBadgeRefresh } from './badges';
+import { releaseOnlinePayment } from './xendit';
 
 export const ORDER_STATUSES = [
   'pending',
@@ -41,6 +42,19 @@ export const getAllowedStatuses = (status) => {
     default:
       return ORDER_STATUSES;
   }
+};
+
+/**
+ * The statuses this particular order can be given. An online (Xendit) order
+ * that has not been paid can only stay pending or be cancelled: nothing is
+ * prepared before the money arrives (the database enforces the same rule).
+ */
+export const allowedStatusesFor = (order) => {
+  const allowed = getAllowedStatuses(order?.status);
+  if (order?.payment_method === 'xendit' && order?.payment_status !== 'paid') {
+    return allowed.filter((status) => status === order.status || status === 'cancelled');
+  }
+  return allowed;
 };
 
 export const canTransition = (from, to) =>
@@ -149,6 +163,8 @@ export const transitionOrderStatus = async (orderId, newStatus) => {
 
   if (!rpcError) {
     requestBadgeRefresh();
+    // A cancelled online order must not stay payable.
+    if (newStatus === 'cancelled') releaseOnlinePayment(orderId);
     return {
       status: rpcResult?.status || newStatus,
       restoredItems: Number(rpcResult?.restored_items) || 0,
@@ -228,6 +244,7 @@ export const cancelMyOrder = async (orderId) => {
   }
 
   requestBadgeRefresh();
+  releaseOnlinePayment(orderId);
   return {
     status: data?.status || 'cancelled',
     restoredItems: Number(data?.restored_items) || 0,
@@ -257,20 +274,23 @@ export const confirmOrderReceived = async (orderId) => {
 
 /**
  * Does this order count as a sale in totals and reports? Cancelled orders are
- * refunds, and an online (PayMongo) order that was never paid is not money
+ * refunds, and an online (Xendit) order that was never paid is not money
  * received. Every dashboard uses this one rule so their figures agree.
  */
+/** Payment methods settled online, through Xendit. */
+export const ONLINE_PAYMENT_METHODS = ['xendit'];
+
 export const isCountedSale = (order) =>
   Boolean(order) &&
   order.status !== 'cancelled' &&
-  !(order.payment_method === 'paymongo' && order.payment_status !== 'paid');
+  !(ONLINE_PAYMENT_METHODS.includes(order.payment_method) && order.payment_status !== 'paid');
 
 /** Short, readable order number shown to buyers, sellers and admins. */
 export const formatOrderNumber = (orderId) =>
   orderId ? `#${String(orderId).slice(0, 8).toUpperCase()}` : '';
 
 export const PAYMENT_LABELS = {
-  paymongo: 'Online payment (PayMongo)',
+  xendit: 'Online payment (Xendit)',
   gcash: 'GCash',
   cod: 'Cash on Delivery',
   bank: 'Bank Transfer',

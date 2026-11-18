@@ -4,22 +4,22 @@ import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/contexts/AuthContext';
 import { formatOrderNumber } from '@/lib/orders';
-import { startPaymongoCheckout, verifyPaymongoCheckout } from '@/lib/paymongo';
+import { startOnlinePayment, verifyOnlinePayment } from '@/lib/xendit';
 
 /**
- * Where PayMongo sends the customer back to.
+ * Where Xendit sends the customer back to.
  *
  *   ?status=success&checkout=<id>    paid (or still being confirmed)
- *   ?status=cancelled&checkout=<id>  left the PayMongo page without paying
+ *   ?status=cancelled&checkout=<id>  left the Xendit page without paying
  *
  * The page never trusts the "status" in the address: it asks the server,
- * which asks PayMongo.
+ * which asks Xendit.
  */
-export default function PaymongoReturnPage() {
+export default function XenditReturnPage() {
   const { user, loading: authLoading } = useAuth();
   const [checkoutId, setCheckoutId] = useState('');
   const [returned, setReturned] = useState('success');
-  const [state, setState] = useState('checking'); // checking | paid | unpaid | error
+  const [state, setState] = useState('checking'); // checking | paid | unpaid | expired | error
   const [result, setResult] = useState(null);
   const [message, setMessage] = useState('');
   const [retrying, setRetrying] = useState(false);
@@ -33,10 +33,14 @@ export default function PaymongoReturnPage() {
   const check = useCallback(async (id, attempts) => {
     for (let attempt = 0; attempt < attempts; attempt += 1) {
       try {
-        const json = await verifyPaymongoCheckout(id);
+        const json = await verifyOnlinePayment(id);
         setResult(json);
         if (json.paid) {
           setState('paid');
+          return;
+        }
+        if (json.expired) {
+          setState('expired');
           return;
         }
       } catch (error) {
@@ -51,7 +55,12 @@ export default function PaymongoReturnPage() {
   }, []);
 
   useEffect(() => {
-    if (authLoading || !checkoutId) return;
+    if (authLoading) return;
+    if (!checkoutId) {
+      setState('error');
+      setMessage('This link is missing the order it belongs to.');
+      return;
+    }
     if (!user) {
       setState('error');
       setMessage('Please sign in to see this order.');
@@ -64,7 +73,7 @@ export default function PaymongoReturnPage() {
     setRetrying(true);
     setMessage('');
     try {
-      const url = await startPaymongoCheckout(checkoutId);
+      const url = await startOnlinePayment(checkoutId);
       if (url) window.location.assign(url);
       else check(checkoutId, 1);
     } catch (error) {
@@ -108,7 +117,7 @@ export default function PaymongoReturnPage() {
             </h1>
             <p className="mt-2 text-gray-600">
               {returned === 'cancelled'
-                ? 'Your order is saved, but it has not been paid yet.'
+                ? 'Your order is saved, but it has not been paid yet. Pay within 24 hours or it is cancelled.'
                 : 'We have not received the payment yet. If you already paid, it will show up in My Orders shortly.'}
             </p>
             <button
@@ -117,8 +126,18 @@ export default function PaymongoReturnPage() {
               disabled={retrying}
               className="mt-6 min-h-[44px] w-full rounded-full bg-blue-600 font-bold text-white hover:bg-blue-700 disabled:bg-gray-400"
             >
-              {retrying ? 'Opening PayMongo...' : 'Pay now'}
+              {retrying ? 'Opening Xendit...' : 'Pay now'}
             </button>
+          </>
+        )}
+
+        {state === 'expired' && (
+          <>
+            <h1 className="text-2xl font-bold text-gray-900">Payment link expired</h1>
+            <p className="mt-2 text-gray-600">
+              The order was not paid in time, so it was cancelled and its items went back on sale. Nothing was
+              charged. You are welcome to order again.
+            </p>
           </>
         )}
 
@@ -137,9 +156,11 @@ export default function PaymongoReturnPage() {
               {orderNumbers.length === 1 ? 'Order number' : 'Order numbers'}:{' '}
               <span className="font-mono font-semibold text-gray-900">{orderNumbers.join(', ')}</span>
             </p>
-            <p className="mt-1">
-              Total: <span className="font-semibold">₱{Number(result?.total || 0).toFixed(2)}</span>
-            </p>
+            {state !== 'expired' && (
+              <p className="mt-1">
+                Total: <span className="font-semibold">₱{Number(result?.total || 0).toFixed(2)}</span>
+              </p>
+            )}
           </div>
         )}
 

@@ -21,7 +21,7 @@ import { PHONE_HINT, describeNameProblem, describePhoneProblem, sanitizeName, sa
 import { fetchShippingFee } from '@/lib/shipping';
 import ShopPaymentPanel from './ShopPaymentPanel';
 import { acceptsMethod, attachPaymentProof, fetchSellerPayments } from '@/lib/sellerPayments';
-import { fetchPaymongoEnabled, startPaymongoCheckout } from '@/lib/paymongo';
+import { fetchOnlinePaymentEnabled, returnPagePath, startOnlinePayment } from '@/lib/xendit';
 
 const MAX_QUANTITY = 9999;
 
@@ -61,8 +61,8 @@ export default function CheckoutModal({
   // customer attaches for each of them: { [sellerId]: { url, reference } }
   const [sellerPayments, setSellerPayments] = useState({});
   const [receipts, setReceipts] = useState({});
-  // Online payment through PayMongo (GCash, Maya, cards, GrabPay)
-  const [paymongoEnabled, setPaymongoEnabled] = useState(false);
+  // Online payment through Xendit (GCash, Maya, cards, QR Ph, GrabPay...)
+  const [onlineEnabled, setOnlineEnabled] = useState(false);
   const [placedCheckoutId, setPlacedCheckoutId] = useState(null);
   const [paymentStartError, setPaymentStartError] = useState('');
   const [startingPayment, setStartingPayment] = useState(false);
@@ -195,15 +195,15 @@ export default function CheckoutModal({
     };
   }, []);
 
-  // Offer online payment only when the server has PayMongo keys, and make it
+  // Offer online payment only when the server has Xendit keys, and make it
   // the default choice when it is there.
   useEffect(() => {
     let cancelled = false;
-    fetchPaymongoEnabled().then((enabled) => {
+    fetchOnlinePaymentEnabled().then((enabled) => {
       if (cancelled) return;
-      setPaymongoEnabled(enabled);
+      setOnlineEnabled(enabled);
       if (enabled) {
-        setFormData((prev) => (prev.paymentMethod === 'gcash' ? { ...prev, paymentMethod: 'paymongo' } : prev));
+        setFormData((prev) => (prev.paymentMethod === 'gcash' ? { ...prev, paymentMethod: 'xendit' } : prev));
       }
     });
     return () => {
@@ -211,14 +211,14 @@ export default function CheckoutModal({
     };
   }, []);
 
-  /** Send the customer to PayMongo for an order that has been placed. */
-  const goToPaymongo = async (checkoutId) => {
+  /** Send the customer to Xendit for an order that has been placed. */
+  const goToOnlinePayment = async (checkoutId) => {
     setStartingPayment(true);
     setPaymentStartError('');
     try {
-      const url = await startPaymongoCheckout(checkoutId);
+      const url = await startOnlinePayment(checkoutId);
       if (onSuccess) await onSuccess();
-      window.location.assign(url || `/shop/checkout/paymongo?status=success&checkout=${checkoutId}`);
+      window.location.assign(url || returnPagePath(checkoutId));
     } catch (paymentError) {
       setPaymentStartError(paymentError.message || 'Could not start the online payment.');
       setStartingPayment(false);
@@ -585,16 +585,16 @@ export default function CheckoutModal({
       }));
       setAwardedPoints(Number(serverResult?.points) || 0);
 
-      if (formData.paymentMethod === 'paymongo') {
+      if (formData.paymentMethod === 'xendit') {
         setPlacedCheckoutId(serverResult.checkout_id);
 
-        // The order is placed. If PayMongo cannot be reached, the customer
+        // The order is placed. If Xendit cannot be reached, the customer
         // lands on the success step with a "Pay now" button instead.
         try {
-          const url = await startPaymongoCheckout(serverResult.checkout_id);
+          const url = await startOnlinePayment(serverResult.checkout_id);
           if (onSuccess) await onSuccess();
           window.location.assign(
-            url || `/shop/checkout/paymongo?status=success&checkout=${serverResult.checkout_id}`
+            url || returnPagePath(serverResult.checkout_id)
           );
           return;
         } catch (paymentError) {
@@ -1018,20 +1018,20 @@ export default function CheckoutModal({
             {/* Payment Options. A method no shop in this basket accepts is
                 simply not offered. */}
             <div className="space-y-3 mb-6">
-              {paymongoEnabled && (
+              {onlineEnabled && (
                 <label className="flex items-start p-4 border-2 rounded-xl cursor-pointer hover:bg-blue-50 transition-colors">
                   <input
                     type="radio"
                     name="paymentMethod"
-                    value="paymongo"
-                    checked={formData.paymentMethod === 'paymongo'}
+                    value="xendit"
+                    checked={formData.paymentMethod === 'xendit'}
                     onChange={handleInputChange}
                     className="mt-0.5 w-5 h-5 text-blue-600"
                   />
                   <span className="ml-3">
                     <span className="block font-medium">Pay online</span>
                     <span className="block text-xs text-gray-500">
-                      GCash, Maya, card or GrabPay through PayMongo. Paid instantly, no receipt to upload.
+                      GCash, Maya, QR Ph, card and more through Xendit. Paid instantly, no receipt to upload.
                     </span>
                   </span>
                 </label>
@@ -1137,7 +1137,7 @@ export default function CheckoutModal({
               >
                 {loading
                   ? 'Processing...'
-                  : formData.paymentMethod === 'paymongo'
+                  : formData.paymentMethod === 'xendit'
                     ? 'Place Order & Pay'
                     : 'Place Order'}
               </button>
@@ -1170,18 +1170,20 @@ export default function CheckoutModal({
                 </p>
               </div>
             )}
-            {placedPayment === 'paymongo' && placedCheckoutId && (
+            {placedPayment === 'xendit' && placedCheckoutId && (
               <div className="mb-4 rounded-xl border-2 border-amber-200 bg-amber-50 p-4 text-left text-sm text-amber-900">
                 <p className="font-semibold">Your order is waiting for payment.</p>
                 {paymentStartError && <p className="mt-1">{paymentStartError}</p>}
-                <p className="mt-1">You can pay now, or later from My Orders.</p>
+                <p className="mt-1">
+                  You can pay now, or later from My Orders. An order that is not paid within 24 hours is cancelled.
+                </p>
                 <button
                   type="button"
-                  onClick={() => goToPaymongo(placedCheckoutId)}
+                  onClick={() => goToOnlinePayment(placedCheckoutId)}
                   disabled={startingPayment}
                   className="mt-3 min-h-[44px] w-full rounded-full bg-blue-600 font-bold text-white hover:bg-blue-700 disabled:bg-gray-400"
                 >
-                  {startingPayment ? 'Opening PayMongo...' : 'Pay now'}
+                  {startingPayment ? 'Opening Xendit...' : 'Pay now'}
                 </button>
               </div>
             )}
