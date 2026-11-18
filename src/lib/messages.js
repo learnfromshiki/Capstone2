@@ -1,4 +1,5 @@
 import { supabase } from './supabaseClient';
+import { requestBadgeRefresh } from './badges';
 
 /**
  * Chat between a customer and a shop.
@@ -161,6 +162,7 @@ export const markConversationRead = async (conversationId, myRole) => {
   } catch (error) {
     console.warn('Could not mark the conversation as read:', error?.message || error);
   }
+  requestBadgeRefresh();
 };
 
 /** Total messages waiting for this person, for the notification bell. */

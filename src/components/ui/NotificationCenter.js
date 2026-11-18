@@ -9,6 +9,7 @@ import {
   markNotificationRead,
   timeAgo,
 } from '@/lib/notifications';
+import { BADGE_CHANGED_EVENT, BADGE_REFRESH_EVENT, requestBadgeRefresh } from '@/lib/badges';
 
 const POLL_MS = 20000;
 
@@ -62,7 +63,14 @@ export default function NotificationCenter({
   useEffect(() => {
     refresh();
     const timer = setInterval(refresh, POLL_MS);
-    return () => clearInterval(timer);
+    // A change reported by the database, or made on this page, shows at once.
+    window.addEventListener(BADGE_CHANGED_EVENT, refresh);
+    window.addEventListener(BADGE_REFRESH_EVENT, refresh);
+    return () => {
+      clearInterval(timer);
+      window.removeEventListener(BADGE_CHANGED_EVENT, refresh);
+      window.removeEventListener(BADGE_REFRESH_EVENT, refresh);
+    };
   }, [refresh]);
 
   // Clicking elsewhere, or Escape, closes the list

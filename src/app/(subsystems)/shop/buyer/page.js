@@ -17,6 +17,9 @@ import { useDialog } from '@/components/ui/Dialog';
 import { cartLineId, describeSelection } from '@/lib/productOptions';
 import ChatPanel from '@/components/shop/ChatPanel';
 import { countUnread } from '@/lib/messages';
+import NavBadge from '@/components/ui/NavBadge';
+import useLiveBadges from '@/lib/useLiveBadges';
+import { markKindRead } from '@/lib/notifications';
 import Avatar from '@/components/ui/Avatar';
 import AvatarUpload from '@/components/ui/AvatarUpload';
 import NotificationCenter from '@/components/ui/NotificationCenter';
@@ -131,6 +134,27 @@ export default function BuyerDashboard() {
   const [selectedLines, setSelectedLines] = useState([]);
   // Unread replies from shops, for the badge on the messages icon
   const [unreadMessages, setUnreadMessages] = useState(0);
+
+  // Live counts for the tab badges. A reply from a shop or a change to an
+  // order also reloads the orders list, so both agree.
+  const { counts: liveCounts } = useLiveBadges('customer', {
+    enabled: Boolean(user),
+    onChange: () => {
+      if (user) fetchData();
+    },
+  });
+
+  // The header's message icon uses the same live number.
+  useEffect(() => {
+    if (typeof liveCounts?.messages === 'number') setUnreadMessages(liveCounts.messages);
+  }, [liveCounts?.messages]);
+
+  // Opening My Orders counts as seeing the order updates, so its badge clears.
+  useEffect(() => {
+    if (user && activeTab === 'orders' && Number(liveCounts?.order_updates) > 0) {
+      markKindRead('customer', 'order');
+    }
+  }, [user, activeTab, liveCounts?.order_updates]);
   // What a notification pointed at: one conversation, or one order to scroll to
   const [openConversationId, setOpenConversationId] = useState(null);
   const [highlightOrderId, setHighlightOrderId] = useState(null);
@@ -974,10 +998,17 @@ export default function BuyerDashboard() {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
                   </svg>
                   My Orders
-                  {orders.length > 0 && (
-                    <span className="ml-auto px-2 py-1 bg-blue-100 text-blue-600 text-xs font-bold rounded-full">
-                      {orders.length}
-                    </span>
+                  {Number(liveCounts?.order_updates) > 0 ? (
+                    <NavBadge count={liveCounts.order_updates} label="order updates" />
+                  ) : (
+                    <NavBadge
+                      count={
+                        liveCounts?.orders_to_receive ??
+                        orders.filter((order) => ['confirmed', 'processing', 'shipped'].includes(order.status)).length
+                      }
+                      tone="blue"
+                      label="orders on the way"
+                    />
                   )}
                 </button>
 
@@ -1012,6 +1043,7 @@ export default function BuyerDashboard() {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
                   </svg>
                   My Reviews
+                  <NavBadge count={liveCounts?.to_review} tone="amber" label="items to review" />
                 </button>
 
                 <button

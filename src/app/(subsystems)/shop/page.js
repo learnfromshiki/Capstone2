@@ -16,6 +16,8 @@ import ShopProfileModal from '@/components/shop/ShopProfileModal';
 import ProductOptionsModal from '@/components/shop/ProductOptionsModal';
 import { cartLineId, describeSelection, hasOptions } from '@/lib/productOptions';
 import { countUnread, openConversation } from '@/lib/messages';
+import NavBadge from '@/components/ui/NavBadge';
+import useLiveBadges from '@/lib/useLiveBadges';
 import { storeBuyNow } from '@/lib/buyNow';
 import ShopFooter from '@/components/shop/ShopFooter';
 import { flushCart, loadCart, readLocalCart, saveCart } from '@/lib/cart';
@@ -411,6 +413,27 @@ export default function ShopPage() {
       showAlert(error.message || 'Could not open the chat.');
     }
   };
+
+  // Live counts while browsing: a shopper's unread replies, and for a seller
+  // or admin, what is waiting in their dashboard.
+  const badgeAudience = role === 'admin' ? 'admin' : role === 'seller' ? 'seller' : 'customer';
+  const { counts: liveCounts } = useLiveBadges(badgeAudience, { enabled: Boolean(user?.id) && !authLoading });
+
+  useEffect(() => {
+    if (badgeAudience === 'customer' && typeof liveCounts?.messages === 'number') {
+      setUnreadMessages(liveCounts.messages);
+    }
+  }, [badgeAudience, liveCounts?.messages]);
+
+  const accountBadge = !liveCounts
+    ? 0
+    : badgeAudience === 'admin'
+      ? (Number(liveCounts.pending_sellers) || 0) + (Number(liveCounts.orders_to_handle) || 0)
+      : badgeAudience === 'seller'
+        ? (Number(liveCounts.orders_new) || 0) + (Number(liveCounts.orders_to_ship) || 0) + (Number(liveCounts.messages) || 0)
+        : (Number(liveCounts.order_updates) || 0) + (Number(liveCounts.to_review) || 0);
+  const accountBadgeLabel =
+    badgeAudience === 'customer' ? 'order updates and items to review' : 'things waiting in your dashboard';
 
   // Keep the badge on the messages icon honest while the shopper browses.
   useEffect(() => {
@@ -821,8 +844,9 @@ export default function ShopPage() {
                     href={accountHref}
                     aria-label={accountLabel}
                     title={accountLabel}
-                    className="flex min-h-[44px] items-center gap-2 rounded-lg bg-blue-50 px-2 text-blue-700 transition-colors hover:bg-blue-100 sm:px-3"
+                    className="relative flex min-h-[44px] items-center gap-2 rounded-lg bg-blue-50 px-2 text-blue-700 transition-colors hover:bg-blue-100 sm:px-3"
                   >
+                    <NavBadge count={accountBadge} placement="corner" label={accountBadgeLabel}/>
                     <Avatar
                       src={profile?.avatar_url}
                       name={profile?.full_name}

@@ -1,4 +1,5 @@
 import { supabase } from './supabaseClient';
+import { requestBadgeRefresh } from './badges';
 
 /**
  * One notification inbox shared by customers, sellers and the admin.
@@ -83,6 +84,7 @@ export const markNotificationRead = async (id) => {
   } catch (error) {
     console.warn('Could not mark the notification as read:', error?.message || error);
   }
+  requestBadgeRefresh();
 };
 
 /** Mark everything in this inbox as read. */
@@ -104,6 +106,30 @@ export const markAllNotificationsRead = async (audience) => {
   } catch (error) {
     console.warn('Could not clear the notifications:', error?.message || error);
   }
+  requestBadgeRefresh();
+};
+
+/**
+ * Mark one kind of notification as seen, e.g. every order update once the
+ * customer opens My Orders, so that tab's badge clears.
+ */
+export const markKindRead = async (audience, kind) => {
+  try {
+    const { data: authData } = await supabase.auth.getUser();
+    const userId = authData?.user?.id;
+    if (!userId) return;
+
+    await supabase
+      .from('shop_notifications')
+      .update({ read_at: new Date().toISOString() })
+      .eq('user_id', userId)
+      .eq('audience', audience)
+      .eq('kind', kind)
+      .is('read_at', null);
+  } catch (error) {
+    console.warn('Could not mark the notifications as read:', error?.message || error);
+  }
+  requestBadgeRefresh();
 };
 
 /** How long ago, in words, for the dropdown. */

@@ -1,4 +1,5 @@
 import { supabase } from './supabaseClient';
+import { requestBadgeRefresh } from './badges';
 
 export const ORDER_STATUSES = [
   'pending',
@@ -147,6 +148,7 @@ export const transitionOrderStatus = async (orderId, newStatus) => {
   });
 
   if (!rpcError) {
+    requestBadgeRefresh();
     return {
       status: rpcResult?.status || newStatus,
       restoredItems: Number(rpcResult?.restored_items) || 0,
@@ -225,6 +227,7 @@ export const cancelMyOrder = async (orderId) => {
     throw new Error(error.message || 'Could not cancel the order.');
   }
 
+  requestBadgeRefresh();
   return {
     status: data?.status || 'cancelled',
     restoredItems: Number(data?.restored_items) || 0,
@@ -248,6 +251,7 @@ export const confirmOrderReceived = async (orderId) => {
     throw new Error(error.message || 'Could not confirm this order.');
   }
 
+  requestBadgeRefresh();
   return { status: data?.status || 'delivered' };
 };
 

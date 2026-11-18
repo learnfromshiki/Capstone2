@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation';
 import { useSellerAuth } from '@/contexts/SellerAuthContext';
 import { supabase } from '@/lib/supabaseClient';
 import { goToShop, showSigningOut } from '@/lib/signOutScreen';
+import NavBadge from '@/components/ui/NavBadge';
+import useLiveBadges from '@/lib/useLiveBadges';
 import { uploadProductImage } from '@/lib/imageUpload';
 import { formatOrderNumber, getAllowedStatuses, isCountedSale, isPickup, paymentLabel, statusLabel, STATUS_LABELS, transitionOrderStatus } from '@/lib/orders';
 import PaymongoStatus from '@/components/shop/PaymongoStatus';
@@ -115,6 +117,21 @@ export default function SellerDashboard() {
   const [avatarUrl, setAvatarUrl] = useState('');
   const [openConversationId, setOpenConversationId] = useState(null);
   const [unreadMessages, setUnreadMessages] = useState(0);
+
+  // Live counts for the sidebar badges. A new order, message or stock change
+  // also reloads the open tab, so the list and the badge never disagree.
+  const { counts: liveCounts } = useLiveBadges('seller', {
+    enabled: Boolean(seller?.id && seller?.is_approved),
+    sellerId: seller?.id || null,
+    onChange: () => {
+      if (seller?.id && seller?.is_approved) fetchData();
+    },
+  });
+
+  // The header's message icon and the bell use the same live number.
+  useEffect(() => {
+    if (typeof liveCounts?.messages === 'number') setUnreadMessages(liveCounts.messages);
+  }, [liveCounts?.messages]);
 
   /** Start (or continue) the chat with the customer behind an order. */
   const handleMessageCustomer = async (order) => {
@@ -1054,6 +1071,18 @@ export default function SellerDashboard() {
   const newOrders = orders.filter((order) => order.status === 'pending');
   const toShip = orders.filter((order) => ['confirmed', 'processing'].includes(order.status));
 
+  // Sidebar badges: what is waiting for this shop. Live counts when
+  // nav_badge_counts() is installed, the dashboard's own lists otherwise.
+  const badgeOrders = liveCounts
+    ? (Number(liveCounts.orders_new) || 0) + (Number(liveCounts.orders_to_ship) || 0)
+    : newOrders.length + toShip.length;
+  const badgeOutOfStock = liveCounts?.out_of_stock ?? outOfStock.length;
+  const tabBadges = {
+    products: { count: badgeOutOfStock, tone: 'amber', label: 'products out of stock' },
+    orders: { count: badgeOrders, tone: 'red', label: 'orders to handle' },
+    messages: { count: unreadMessages, tone: 'red', label: 'unread messages' },
+  };
+
   const sellerNotifications = [
     unreadMessages > 0 && {
       id: 'messages',
@@ -1296,6 +1325,7 @@ export default function SellerDashboard() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
             </svg>
             <span className="font-medium">My Products</span>
+            <NavBadge {...tabBadges.products} />
           </button>
 
           <button
@@ -1310,11 +1340,7 @@ export default function SellerDashboard() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
             </svg>
             <span className="font-medium">Orders</span>
-            {stats.totalOrders > 0 && (
-              <span className="ml-auto px-2 py-0.5 bg-blue-600 text-white text-xs font-bold rounded-full">
-                {stats.totalOrders}
-              </span>
-            )}
+            <NavBadge {...tabBadges.orders} />
           </button>
 
           <button
@@ -1329,6 +1355,7 @@ export default function SellerDashboard() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
             </svg>
             <span className="font-medium">Messages</span>
+            <NavBadge {...tabBadges.messages} />
           </button>
 
           <button
@@ -1452,13 +1479,14 @@ export default function SellerDashboard() {
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`min-h-[44px] whitespace-nowrap rounded-lg px-3 text-sm font-medium transition-colors ${
+              className={`inline-flex min-h-[44px] items-center gap-1.5 whitespace-nowrap rounded-lg px-3 text-sm font-medium transition-colors ${
                 activeTab === tab.id
                   ? 'bg-blue-600 text-white'
                   : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
               }`}
             >
               {tab.label}
+              {tabBadges[tab.id] && <NavBadge {...tabBadges[tab.id]} placement="plain" />}
             </button>
           ))}
 

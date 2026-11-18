@@ -18,6 +18,9 @@ import Link from 'next/link';
 import { useDialog } from '@/components/ui/Dialog';
 import AvatarUpload from '@/components/ui/AvatarUpload';
 import NotificationCenter from '@/components/ui/NotificationCenter';
+import NavBadge from '@/components/ui/NavBadge';
+import useLiveBadges from '@/lib/useLiveBadges';
+import { requestBadgeRefresh } from '@/lib/badges';
 import PaymentProof from '@/components/shop/PaymentProof';
 import { describeSelection } from '@/lib/productOptions';
 import { describeArea, listShippingRates } from '@/lib/shipping';
@@ -134,6 +137,10 @@ export default function ShopAdminPage() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  // "Reset marketplace data" in Settings
+  const [resetOptions, setResetOptions] = useState({ reviews: false, messages: false, notifications: true });
+  const [resetConfirm, setResetConfirm] = useState('');
+  const [resetting, setResetting] = useState(false);
   const [checkingAuth, setCheckingAuth] = useState(true);
   const [adminEmail, setAdminEmail] = useState('');
   const [adminName, setAdminName] = useState('Admin');
@@ -169,6 +176,16 @@ export default function ShopAdminPage() {
   // confirmed, a corner toast for routine successes.
   const { showAlert, showConfirm, showToast } = useDialog();
   
+  // Live counts for the sidebar badges. A new order, shop application or
+  // stock change also reloads the open tab and the bell's to-do list.
+  const { counts: liveCounts } = useLiveBadges('admin', {
+    enabled: isAuthenticated,
+    onChange: () => {
+      loadNotices();
+      fetchData();
+    },
+  });
+
   // Verify admin access: a real Supabase account with the admin role.
   useEffect(() => {
     const verifyAdminAccess = async () => {
@@ -1357,6 +1374,74 @@ export default function ShopAdminPage() {
   // Things happening across the marketplace that an admin should act on.
   // These counts are loaded on their own (see loadNotices) because the tables
   // above are only fetched for the tab being viewed.
+  // Sidebar badges: live counts when nav_badge_counts() is installed, the
+  // bell's own counts otherwise. Each one is something waiting for the admin,
+  // so it goes down as soon as it is handled.
+  const badgeOrders = liveCounts?.orders_to_handle ?? notices.pendingOrders + notices.preparingOrders;
+  const badgePendingSellers = liveCounts?.pending_sellers ?? notices.pendingSellers;
+  const badgeOutOfStock = liveCounts?.out_of_stock ?? notices.outOfStock;
+
+  /**
+   * Clear sales and statistics (and, if ticked, reviews, chats and
+   * notifications). Accounts, shops, products and settings stay.
+   */
+  const resetMarketplace = async () => {
+    if (resetConfirm.trim() !== 'RESET' || resetting) return;
+
+    const extras = [
+      resetOptions.reviews && 'reviews',
+      resetOptions.messages && 'chats',
+      resetOptions.notifications && 'notifications',
+    ].filter(Boolean);
+
+    const confirmed = await showConfirm({
+      tone: 'error',
+      title: 'Reset all marketplace data?',
+      message:
+        'Every order, sale, payment, seller earning and shop reward point is deleted' +
+        (extras.length ? `, together with all ${extras.join(', ')}` : '') +
+        '. Accounts, shops, products, categories and settings are kept. This cannot be undone.',
+      confirmLabel: 'Reset everything',
+      cancelLabel: 'Keep my data',
+    });
+    if (!confirmed) return;
+
+    setResetting(true);
+    try {
+      const { data, error } = await supabase.rpc('admin_reset_marketplace', {
+        p_confirm: 'RESET',
+        p_reviews: resetOptions.reviews,
+        p_messages: resetOptions.messages,
+        p_notifications: resetOptions.notifications,
+      });
+
+      if (error) {
+        if (isMissingFunction(error)) {
+          showAlert('Resetting needs supabase-live-badges-reset.sql. Run it in Supabase first.');
+          return;
+        }
+        throw error;
+      }
+
+      setResetConfirm('');
+      const removed = Number(data?.orders) || 0;
+      showToast(
+        removed > 0
+          ? `Marketplace reset: ${removed} ${removed === 1 ? 'order' : 'orders'} and all sales statistics cleared.`
+          : 'Marketplace reset. Sales and statistics now start from zero.',
+        'success'
+      );
+      requestBadgeRefresh();
+      loadNotices();
+      fetchData();
+    } catch (error) {
+      console.error('Error resetting the marketplace:', error);
+      showAlert('Could not reset the marketplace: ' + (error.message || 'unknown error'));
+    } finally {
+      setResetting(false);
+    }
+  };
+
   const adminNotifications = [
     notices.pendingSellers > 0 && {
       id: 'pending-sellers',
@@ -1553,11 +1638,7 @@ export default function ShopAdminPage() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
             </svg>
             <span className="font-medium">Orders</span>
-            {stats.totalOrders > 0 && (
-              <span className="ml-auto px-2 py-0.5 bg-blue-600 text-white text-xs font-bold rounded-full">
-                {stats.totalOrders}
-              </span>
-            )}
+            <NavBadge count={badgeOrders} label="orders to handle" />
           </button>
 
           <button
@@ -1572,6 +1653,7 @@ export default function ShopAdminPage() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
             </svg>
             <span className="font-medium">Products</span>
+            <NavBadge count={badgeOutOfStock} tone="amber" label="products out of stock" />
           </button>
 
           <button
@@ -1586,6 +1668,7 @@ export default function ShopAdminPage() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
             </svg>
             <span className="font-medium">Sellers</span>
+            <NavBadge count={badgePendingSellers} label="shops waiting for approval" />
           </button>
 
           <button
@@ -3191,6 +3274,66 @@ export default function ShopAdminPage() {
                     className="px-6 py-2.5 bg-red-600 hover:bg-red-700 text-white font-semibold rounded-lg transition-colors disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     Change Password
+                  </button>
+                </div>
+              </div>
+
+              {/* Danger zone */}
+              <div className="rounded-xl border-2 border-rose-200 bg-white p-6 shadow-sm">
+                <h4 className="mb-1 flex items-center gap-2 text-lg font-bold text-rose-700">
+                  <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                  Reset Marketplace Data
+                </h4>
+                <p className="mb-4 text-sm text-gray-600">
+                  Start the sales figures from zero, for example after testing or a demo. This deletes every order,
+                  sale, payment, seller earning and the reward points customers earned or spent in the shop, and puts
+                  stock held by undelivered orders back on sale. <strong>Accounts, shops, products, categories,
+                  delivery fees and settings are kept.</strong>
+                </p>
+
+                <fieldset className="mb-4 space-y-2">
+                  <legend className="mb-2 text-sm font-semibold text-gray-900">Also delete</legend>
+                  {[
+                    { key: 'reviews', label: 'All product reviews and ratings' },
+                    { key: 'messages', label: 'All chats between customers and shops' },
+                    { key: 'notifications', label: 'All notifications (the bell) for everyone' },
+                  ].map((option) => (
+                    <label key={option.key} className="flex min-h-[36px] cursor-pointer items-center gap-3 text-sm text-gray-700">
+                      <input
+                        type="checkbox"
+                        checked={resetOptions[option.key]}
+                        onChange={(event) =>
+                          setResetOptions((current) => ({ ...current, [option.key]: event.target.checked }))
+                        }
+                        className="h-4 w-4 rounded border-gray-300 text-rose-600 focus:ring-rose-500"
+                      />
+                      {option.label}
+                    </label>
+                  ))}
+                </fieldset>
+
+                <label htmlFor="resetConfirm" className="mb-1 block text-sm font-medium text-gray-700">
+                  Type <span className="font-mono font-bold text-rose-700">RESET</span> to confirm
+                </label>
+                <div className="flex flex-col gap-3 sm:flex-row">
+                  <input
+                    id="resetConfirm"
+                    type="text"
+                    autoComplete="off"
+                    value={resetConfirm}
+                    onChange={(event) => setResetConfirm(event.target.value.toUpperCase())}
+                    placeholder="RESET"
+                    className="w-full rounded-lg border-2 px-4 py-3 font-mono tracking-widest focus:border-rose-500 focus:ring-2 focus:ring-rose-500 sm:max-w-xs"
+                  />
+                  <button
+                    type="button"
+                    onClick={resetMarketplace}
+                    disabled={resetConfirm.trim() !== 'RESET' || resetting}
+                    className="min-h-[48px] rounded-lg bg-rose-600 px-6 font-semibold text-white transition-colors hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    {resetting ? 'Resetting...' : 'Reset Marketplace Data'}
                   </button>
                 </div>
               </div>
