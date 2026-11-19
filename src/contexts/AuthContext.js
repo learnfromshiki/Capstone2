@@ -178,7 +178,7 @@ export const AuthProvider = ({ children }) => {
 
   /**
    * Start a password reset. Supabase emails both a 6-digit code and a link
-   * (see EMAIL-VERIFICATION-SETUP.md for the template), so the person can
+   *, so the person can
    * either type the code here or open /reset-password from the email.
    */
   const sendPasswordResetEmail = async (email) => {

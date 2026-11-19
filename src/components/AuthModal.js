@@ -335,7 +335,7 @@ export default function AuthModal({ isOpen, onClose, mode: initialMode = 'login'
         lowerError.includes('rate limit')
           ? 'Please wait a few minutes before asking for another code.'
           : lowerError.includes('error sending') || lowerError.includes('confirmation email')
-          ? 'The email service could not send the code. Check Supabase: the free limit is a few emails per hour, and the Confirm signup template must be valid (see EMAIL-VERIFICATION-SETUP.md).'
+          ? 'The email service could not send the code. Check Supabase: the free limit is a few emails per hour, and the Confirm signup template must be valid.'
           : lowerError.includes('not found')
           ? 'No account is waiting for verification on this email. Please sign up again.'
           : err.message || 'Could not send a new code.'
