@@ -192,7 +192,7 @@ export default function ShopPage() {
     } else {
       showToast('That product is no longer available.', 'info');
     }
-  }, [pendingProductId, products]);
+  }, [pendingProductId, products, showToast]);
 
   const fetchProducts = async () => {
     try {

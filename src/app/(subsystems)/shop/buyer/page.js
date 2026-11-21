@@ -1218,19 +1218,37 @@ export default function BuyerDashboard() {
 
                           <div className="border-t pt-4 mt-4">
                             <h4 className="font-semibold mb-2 text-gray-900">Items:</h4>
-                            {order.shop_order_items?.map((item, idx) => (
-                              <div key={idx} className="flex justify-between text-sm text-gray-600 mb-1">
-                                <span>
-                                  {item.product_name} x{item.quantity}
-                                  {describeSelection(item.options) && (
-                                    <span className="block text-xs text-gray-500">
-                                      {describeSelection(item.options)}
-                                    </span>
-                                  )}
-                                </span>
-                                <span className="font-semibold">₱{(Number(item.price) * Number(item.quantity)).toFixed(2)}</span>
-                              </div>
-                            ))}
+                            <ul className="divide-y divide-gray-100">
+                              {order.shop_order_items?.map((item, idx) => {
+                                const photo = productImageById.get(item.product_id);
+                                const options = describeSelection(item.options);
+                                return (
+                                  <li key={idx} className="flex gap-3 py-3 first:pt-0 last:pb-0">
+                                    <div className="h-16 w-16 flex-shrink-0 overflow-hidden rounded-lg border border-gray-200 bg-gray-100">
+                                      {photo ? (
+                                        <Img src={photo} alt={item.product_name} width={128} className="h-full w-full object-cover" />
+                                      ) : (
+                                        <div className="flex h-full items-center justify-center text-[10px] text-gray-400">No image</div>
+                                      )}
+                                    </div>
+                                    <div className="flex min-w-0 flex-1 flex-col justify-between text-sm">
+                                      <div className="min-w-0">
+                                        <p className="line-clamp-2 break-words font-medium text-gray-900">{item.product_name}</p>
+                                        {options && <p className="mt-0.5 text-xs text-gray-500">{options}</p>}
+                                      </div>
+                                      <div className="mt-1 flex items-end justify-between gap-2">
+                                        <span className="text-gray-500">
+                                          ₱{(Number(item.price) || 0).toFixed(2)} × {item.quantity}
+                                        </span>
+                                        <span className="font-semibold text-gray-900">
+                                          ₱{(Number(item.price) * Number(item.quantity)).toFixed(2)}
+                                        </span>
+                                      </div>
+                                    </div>
+                                  </li>
+                                );
+                              })}
+                            </ul>
                           </div>
 
                           {order.delivery_address && (

@@ -73,9 +73,15 @@ export default function SellerPaymentSettings({ seller, onSaved }) {
   const bankFileRef = useRef(null);
   const { showAlert } = useDialog();
 
+  // Reload the form only when the saved payment details change (another shop,
+  // or a save), never on every new copy of the seller object, which would
+  // wipe what the seller is typing.
+  const latestSeller = useRef(seller);
+  latestSeller.current = seller;
+  const savedDetailsKey = [seller?.id, seller?.gcash_number, seller?.bank_account_number].join('|');
   useEffect(() => {
-    setForm(readPaymentDetails(seller));
-  }, [seller?.id, seller?.gcash_number, seller?.bank_account_number]);
+    setForm(readPaymentDetails(latestSeller.current));
+  }, [savedDetailsKey]);
 
   const inputClass =
     'w-full min-h-[44px] px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500';
