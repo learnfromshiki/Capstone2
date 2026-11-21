@@ -168,7 +168,7 @@ begin
       || 'CONNECT-Daet.ph admin and is now open to shoppers.</p>'
       || '<p>You can sign in to your seller dashboard to add products, set your GCash and bank details, '
       || 'and start taking orders.</p>'
-      || '<p style="margin:24px 0"><a href="' || v_site || '/shop/seller" '
+      || '<p style="margin:24px 0"><a href="' || v_site || '/shop?login=1" '
       || 'style="background:#2563eb;color:#ffffff;padding:12px 24px;border-radius:8px;'
       || 'text-decoration:none;font-weight:bold">Open my seller dashboard</a></p>'
       || '<p style="color:#6b7280;font-size:12px">Supporting local artisans of Daet, Camarines Norte.</p>'

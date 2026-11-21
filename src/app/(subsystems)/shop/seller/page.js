@@ -43,7 +43,7 @@ export default function SellerLoginPage() {
   const [code, setCode] = useState('');
   const [resendIn, setResendIn] = useState(0);
 
-  const { signIn, signUp, signOut, seller, user } = useSellerAuth();
+  const { signIn, signUp, signOut, seller, user, loading: authLoading } = useSellerAuth();
   const { verifyEmailCode, resendEmailCode } = useAuth();
   const router = useRouter();
 
@@ -67,6 +67,19 @@ export default function SellerLoginPage() {
     goToShop();
   };
 
+  // Shop owners sign in through the shop's own sign-in window, not a separate
+  // seller login. Someone who lands here signed out, and did not come to open
+  // a new shop (?mode=signup), is sent there.
+  useEffect(() => {
+    if (authLoading || user || mode !== 'login') return;
+    try {
+      if (new URLSearchParams(window.location.search).get('mode') === 'signup') return;
+    } catch (error) {
+      // Without the address, fall through to the shop sign-in.
+    }
+    router.replace('/shop?login=1');
+  }, [authLoading, user, mode, router]);
+
   const awaitingApproval = Boolean(user && seller && !seller.is_approved && !seller.is_rejected);
   const wasRejected = Boolean(user && seller?.is_rejected);
 
@@ -74,8 +87,16 @@ export default function SellerLoginPage() {
   // starts on the registration form instead of the login one.
   useEffect(() => {
     try {
-      const requested = new URLSearchParams(window.location.search).get('mode');
+      const params = new URLSearchParams(window.location.search);
+      const requested = params.get('mode');
       if (requested === 'signup' || requested === 'login') setMode(requested);
+      // Only the arrival counts: once on the form, choosing "Sign in" must
+      // reach the shop sign-in rather than be held here by the old address.
+      if (params.has('mode')) {
+        params.delete('mode');
+        const query = params.toString();
+        window.history.replaceState({}, '', window.location.pathname + (query ? `?${query}` : ''));
+      }
     } catch (error) {
       console.error('Could not read the requested mode:', error);
     }
@@ -360,7 +381,7 @@ export default function SellerLoginPage() {
         )}
 
         <div className={`bg-white rounded-2xl shadow-xl border border-gray-200 overflow-hidden ${
-          awaitingApproval || wasRejected ? 'hidden' : ''
+          awaitingApproval || wasRejected || (mode === 'login' && !user) ? 'hidden' : ''
         }`}>
           {/* Header */}
           <div className="bg-gradient-to-r from-blue-600 to-blue-700 p-8 text-white">

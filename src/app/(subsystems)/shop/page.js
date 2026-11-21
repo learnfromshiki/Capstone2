@@ -21,6 +21,7 @@ import useLiveBadges from '@/lib/useLiveBadges';
 import { storeBuyNow } from '@/lib/buyNow';
 import ShopFooter from '@/components/shop/ShopFooter';
 import { flushCart, loadCart, readLocalCart, saveCart } from '@/lib/cart';
+import { dashboardPathForRole } from '@/lib/roles';
 
 export default function ShopPage() {
   const [products, setProducts] = useState([]);
@@ -67,12 +68,17 @@ export default function ShopPage() {
     const category = params.get('category');
     if (category) setFilter(category);
 
+    // ?login=1 opens the shop's sign-in window. Emails and the old seller
+    // login page send shop owners here, so everyone signs in the same way.
+    if (params.get('login') === '1') setLoginRequested(true);
+
     // Tidy the address bar so a refresh does not reopen the cart or the
     // product window again.
-    if (params.has('cart') || params.has('product') || params.has('category')) {
+    if (params.has('cart') || params.has('product') || params.has('category') || params.has('login')) {
       params.delete('cart');
       params.delete('product');
       params.delete('category');
+      params.delete('login');
       const query = params.toString();
       window.history.replaceState({}, '', window.location.pathname + (query ? `?${query}` : ''));
     }
@@ -81,7 +87,20 @@ export default function ShopPage() {
   const [sortBy, setSortBy] = useState('newest');
   const [inStockOnly, setInStockOnly] = useState(false);
   const [showAuthModal, setShowAuthModal] = useState(false);
+  const [loginRequested, setLoginRequested] = useState(false);
   const { user, profile, role, isSuspended, loading: authLoading, signOut } = useAuth();
+
+  // Answer ?login=1 once we know who is here: someone already signed in as a
+  // shop or admin goes to their dashboard, anyone else gets the sign-in window.
+  useEffect(() => {
+    if (!loginRequested || authLoading) return;
+    setLoginRequested(false);
+    if (!user) {
+      setShowAuthModal(true);
+    } else if (role === 'seller' || role === 'admin') {
+      window.location.href = dashboardPathForRole(role);
+    }
+  }, [loginRequested, authLoading, user, role]);
   const cartKey = user ? `shop_cart:${user.id}` : null;
   const [cartOwner, setCartOwner] = useState(undefined);
   // The cart as last loaded from / sent to the database, so it is not re-sent.
