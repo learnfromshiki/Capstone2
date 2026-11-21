@@ -1,4 +1,5 @@
 import { supabase } from './supabaseClient';
+import { shrinkImage, uploadWithRetry } from './imageUpload';
 
 /**
  * Photos and short videos people attach: to a message, to a review, to a
@@ -35,8 +36,11 @@ export const kindOf = (file) => {
  * @param {{ allowVideo?: boolean }} [options]
  * @returns {Promise<{url: string, type: 'image'|'video'}>}
  */
-export const uploadAttachment = async (file, folder = 'misc', { allowVideo = true } = {}) => {
-  const type = kindOf(file);
+export const uploadAttachment = async (originalFile, folder = 'misc', { allowVideo = true } = {}) => {
+  const type = kindOf(originalFile);
+  // Photos are shrunk to at most 1600px first, so big phone pictures upload
+  // reliably (receipts stay readable at that size).
+  const file = type === 'image' ? await shrinkImage(originalFile) : originalFile;
 
   if (!type) {
     throw new Error(
@@ -67,11 +71,9 @@ export const uploadAttachment = async (file, folder = 'misc', { allowVideo = tru
   const extension = (file.name.split('.').pop() || (type === 'video' ? 'mp4' : 'jpg')).toLowerCase();
   const path = `${userId}/${safeFolder}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${extension}`;
 
-  const { error } = await supabase.storage
-    .from(BUCKET)
-    .upload(path, file, { cacheControl: '3600', upsert: false });
-
-  if (error) {
+  try {
+    await uploadWithRetry(BUCKET, path, file, { cacheControl: '3600', upsert: false });
+  } catch (error) {
     if (/bucket.*not found/i.test(error.message || '')) throw new Error(BUCKET_MISSING);
     throw new Error(error.message || 'Could not upload that file.');
   }

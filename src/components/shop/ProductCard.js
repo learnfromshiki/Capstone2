@@ -27,7 +27,7 @@ export default function ProductCard({
     <div className="group flex h-full flex-col overflow-hidden rounded-xl border border-gray-200 bg-white transition-all duration-300 hover:-translate-y-1 hover:border-blue-300 hover:shadow-2xl">
       {/* Product Image */}
       <div
-        className="relative aspect-[4/3] max-h-44 flex-shrink-0 cursor-pointer overflow-hidden bg-gradient-to-br from-gray-100 to-gray-200"
+        className="relative aspect-[4/3] w-full flex-shrink-0 cursor-pointer overflow-hidden bg-gradient-to-br from-gray-100 to-gray-200"
         onClick={() => onViewDetails && onViewDetails(product)}
         role="button"
         tabIndex={0}
@@ -43,7 +43,8 @@ export default function ProductCard({
           <Img
             src={product.image_url}
             alt={product.name}
-            className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
+            sizes="(min-width: 1024px) 25vw, (min-width: 640px) 50vw, 100vw"
+            className="absolute inset-0 h-full w-full object-cover transition-transform duration-300 group-hover:scale-110"
           />
         ) : (
           <div className="w-full h-full flex flex-col items-center justify-center text-gray-400">
