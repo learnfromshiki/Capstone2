@@ -454,34 +454,32 @@ export default function CheckoutModal({
     };
   };
 
-  const continueToPayment = async () => {
-    setError('');
-
-    if (!detailsAreValid()) return;
-
-    if (!user) {
-      reportError('Please sign in to place an order.');
-      return;
-    }
-
-    if (isSuspended) {
-      reportError('This account has been suspended. Please contact CONNECT-Daet support.');
-      return;
-    }
-
+  // Checkout is one page, so live prices and stock are read as soon as it
+  // opens: the totals shown are the totals charged. place_order() checks
+  // everything again when the order is placed.
+  const cartKey = JSON.stringify(
+    (cart || []).map((item) => [item.productId || item.id, item.lineId, Number(item.quantity)])
+  );
+  useEffect(() => {
+    if (step !== 1) return undefined;
+    let cancelled = false;
     setVerifying(true);
-
-    try {
-      await ensureAccountIsActive();
-      setVerifiedCart(await verifyCart());
-      setStep(2);
-    } catch (verificationError) {
-      console.error('Cart verification failed:', verificationError);
-      reportError(verificationError.message || 'Please review your cart and try again.');
-    } finally {
-      setVerifying(false);
-    }
-  };
+    verifyCart()
+      .then((verified) => {
+        if (!cancelled) setVerifiedCart(verified);
+      })
+      .catch((verificationError) => {
+        if (!cancelled) reportError(verificationError.message || 'Please review your cart and try again.');
+      })
+      .finally(() => {
+        if (!cancelled) setVerifying(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+    // verifyCart reads the cart, which cartKey stands for
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cartKey]);
 
   // Remember phone/address on the profile so the next checkout is pre-filled.
   // Best-effort: a failure here must never affect the order.
@@ -556,11 +554,34 @@ export default function CheckoutModal({
 
   const handleSubmitOrder = async () => {
     if (loading) return;
-    setLoading(true);
     setError('');
+
+    // Everything is on one page now, so the details are checked here.
+    if (!detailsAreValid()) return;
+
+    if (!user) {
+      reportError('Please sign in to place an order.');
+      return;
+    }
+
+    if (isSuspended) {
+      reportError('This account has been suspended. Please contact CONNECT-Daet support.');
+      return;
+    }
+
+    setLoading(true);
 
     try {
       await ensureAccountIsActive();
+
+      // Re-read prices and stock right before ordering; if anything changed
+      // since the page opened, show the new figures instead of ordering.
+      const fresh = await verifyCart();
+      const shownTotal = Number(verifiedCart?.total) || 0;
+      setVerifiedCart(fresh);
+      if (Math.abs(fresh.total - shownTotal) > 0.004) {
+        throw new Error('Some prices changed while you were checking out. Please review the new total and place your order again.');
+      }
 
       // Own the order with the authenticated session, not the React user state.
       // The context can lag behind after another tab signs in.
@@ -789,7 +810,7 @@ export default function CheckoutModal({
         {step === 1 && (
           <div className="p-6">
             <div className="flex justify-between items-center mb-6">
-              <h2 className="text-2xl font-bold text-gray-800">Contact Information</h2>
+              <h2 className="text-2xl font-bold text-gray-800">Checkout</h2>
               <button
                 onClick={onClose}
                 aria-label="Close checkout"
@@ -844,6 +865,7 @@ export default function CheckoutModal({
               {renderOrderItems()}
             </div>
 
+            <h3 className="mb-3 border-t border-gray-100 pt-6 text-lg font-bold text-gray-900">Contact &amp; delivery</h3>
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -982,69 +1004,8 @@ export default function CheckoutModal({
               )}
             </div>
 
-            <button
-              onClick={continueToPayment}
-              disabled={verifying || !user || isSuspended}
-              className="w-full mt-6 bg-blue-600 text-white py-4 rounded-full font-bold text-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
-            >
-              {verifying ? 'Checking prices and stock...' : 'Continue to Payment'}
-            </button>
-          </div>
-        )}
-
-        {/* Step 2: Payment Method */}
-        {step === 2 && (
-          <div className="p-6">
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-2xl font-bold text-gray-800">Payment Method</h2>
-              <button
-                onClick={onClose}
-                aria-label="Close checkout"
-                className="flex min-h-[44px] min-w-[44px] -m-2 items-center justify-center rounded-full text-gray-400 hover:bg-gray-100 hover:text-gray-600"
-              >
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-
-            {error && (
-              <div className="mb-4 rounded-xl border-2 border-red-200 bg-red-50 p-4 text-sm text-red-800">
-                {error}
-              </div>
-            )}
-
-            {/* Order Summary */}
-            <div className="bg-gray-50 rounded-xl p-4 mb-6">
-              <h3 className="font-semibold mb-2">Order Summary</h3>
-              <div className="bg-white rounded-xl">{renderOrderItems()}</div>
-              <div className="mt-3 flex justify-between border-t pt-2 text-sm">
-                <span className="text-gray-600">Items</span>
-                <span>₱{summaryTotal.toFixed(2)}</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-600">{isPickupOrder ? 'Store pickup' : 'Delivery'}</span>
-                <span className={shippingFee === 0 ? 'font-semibold text-green-600' : ''}>
-                  {shippingFee === 0 ? 'FREE' : `₱${shippingFee.toFixed(2)}`}
-                </span>
-              </div>
-              {pointsDiscount > 0 && (
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">Reward points ({redemption.total.toLocaleString()} pts)</span>
-                  <span className="font-semibold text-green-600">−₱{pointsDiscount.toFixed(2)}</span>
-                </div>
-              )}
-              <div className="mt-2 flex justify-between border-t pt-2 font-bold">
-                <span>Total</span>
-                <span className="text-blue-600">₱{amountDue.toFixed(2)}</span>
-              </div>
-              {summaryItems.some((item) => item.seller_id) && shippingFee > 0 && (
-                <p className="mt-2 text-xs text-gray-500">
-                  Each shop delivers separately, so the fee applies once per shop.
-                </p>
-              )}
-            </div>
-
+            <div className="mt-8 border-t border-gray-100 pt-6">
+              <h3 className="mb-3 text-lg font-bold text-gray-900">Payment</h3>
             {/* CONNECT-Daet reward points: spend them on this order */}
             <div className="mb-6 rounded-xl border-2 border-yellow-200 bg-yellow-50 p-4">
               <div className="flex items-start justify-between gap-3">
@@ -1169,38 +1130,58 @@ export default function CheckoutModal({
               </div>
             )}
 
-            <div className="mb-6 rounded-xl border border-gray-200 p-4 text-sm text-gray-700">
-              <p className="font-semibold text-gray-900 mb-1">{isPickupOrder ? 'Store pickup for' : 'Deliver to'}</p>
-              <p className="break-words">{formData.fullName} · {formData.phone}</p>
-              <p className="break-words whitespace-pre-line">
-                {isPickupOrder ? 'Collect at each shop. The pickup address is shown on your order.' : formData.address}
-              </p>
+            </div>
+
+            {/* Order total */}
+            <div className="mb-6 rounded-xl bg-gray-50 p-4">
+              <h3 className="mb-1 font-semibold">Order Summary</h3>
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-600">Items</span>
+                <span>₱{summaryTotal.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-600">{isPickupOrder ? 'Store pickup' : 'Delivery'}</span>
+                <span className={shippingFee === 0 ? 'font-semibold text-green-600' : ''}>
+                  {shippingFee === 0 ? 'FREE' : `₱${shippingFee.toFixed(2)}`}
+                </span>
+              </div>
+              {pointsDiscount > 0 && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600">Reward points ({redemption.total.toLocaleString()} pts)</span>
+                  <span className="font-semibold text-green-600">−₱{pointsDiscount.toFixed(2)}</span>
+                </div>
+              )}
+              <div className="mt-2 flex justify-between border-t pt-2 font-bold">
+                <span>Total</span>
+                <span className="text-blue-600">₱{amountDue.toFixed(2)}</span>
+              </div>
+              {summaryItems.some((item) => item.seller_id) && shippingFee > 0 && (
+                <p className="mt-2 text-xs text-gray-500">
+                  Each shop delivers separately, so the fee applies once per shop.
+                </p>
+              )}
               {summaryPoints > 0 && (
-                <p className="mt-2 text-xs text-yellow-800">You will earn about {summaryPoints} reward points once this order is {isPickupOrder ? 'picked up' : 'delivered'}.</p>
+                <p className="mt-2 text-xs text-yellow-800">
+                  You will earn about {summaryPoints} reward points once this order is {isPickupOrder ? 'picked up' : 'delivered'}.
+                </p>
               )}
             </div>
 
-            <div className="flex gap-3">
-              <button
-                onClick={() => setStep(1)}
-                disabled={loading}
-                className="flex-1 bg-gray-200 text-gray-700 py-4 rounded-full font-bold hover:bg-gray-300 transition-colors disabled:opacity-50"
-              >
-                Back
-              </button>
-              <button
-                onClick={handleSubmitOrder}
-                disabled={loading || !receiptsComplete}
-                title={receiptsComplete ? undefined : 'Attach your payment receipt first'}
-                className="flex-1 bg-blue-600 text-white py-4 rounded-full font-bold hover:bg-blue-700 disabled:bg-gray-400 transition-colors"
-              >
-                {loading
-                  ? 'Processing...'
-                  : formData.paymentMethod === 'xendit'
-                    ? 'Place Order & Pay'
-                    : 'Place Order'}
-              </button>
-            </div>
+            <button
+              onClick={handleSubmitOrder}
+              disabled={loading || verifying || !user || isSuspended || !receiptsComplete}
+              title={receiptsComplete ? undefined : 'Attach your payment receipt first'}
+              className="w-full rounded-full bg-blue-600 py-4 text-lg font-bold text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-300"
+            >
+              {loading
+                ? 'Placing your order...'
+                : formData.paymentMethod === 'xendit'
+                  ? `Place Order & Pay ₱${amountDue.toFixed(2)}`
+                  : `Place Order · ₱${amountDue.toFixed(2)}`}
+            </button>
+            {!receiptsComplete && (
+              <p className="mt-2 text-center text-xs text-gray-500">Attach your payment receipt above to place the order.</p>
+            )}
           </div>
         )}
 
