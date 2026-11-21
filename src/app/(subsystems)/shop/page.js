@@ -219,7 +219,7 @@ export default function ShopPage() {
         const baseQuery = () =>
           supabase
             .from('shop_sellers')
-            .select('id, business_name, description, created_at')
+            .select('id, business_name, description, created_at, logo_url')
             .eq('is_approved', true)
             .eq('is_active', true);
 
@@ -1121,6 +1121,7 @@ export default function ShopPage() {
         seller={selectedSellerId ? sellers[selectedSellerId] : null}
         products={selectedSellerId ? products.filter((item) => item.seller_id === selectedSellerId) : []}
         reviewSummaries={reviewSummaries}
+        categories={categories}
         onClose={() => setSelectedSellerId(null)}
         onViewProduct={(product) => {
           setSelectedSellerId(null);
