@@ -16,6 +16,7 @@ import { fetchShopSettings } from '@/lib/shopSettings';
 import PaymentInstructions from './PaymentInstructions';
 import { describeSelection } from '@/lib/productOptions';
 import AddressFields from './AddressFields';
+import Img from '@/components/ui/Img';
 import { DEFAULT_CITY, DEFAULT_PROVINCE, formatAddress, parseAddress } from '@/lib/philippineAddresses';
 import { PHONE_HINT, describeNameProblem, describePhoneProblem, sanitizeName, sanitizePhone } from '@/lib/fieldRules';
 import { fetchShippingFee } from '@/lib/shipping';
@@ -436,6 +437,9 @@ export default function CheckoutModal({
         lineId: item.lineId,
         selectedOptions: item.selectedOptions,
         name: product.name,
+        // Kept for the order summary photos
+        image_url: product.image_url || item.image_url || null,
+        sellerName: item.sellerName,
         seller_id: product.seller_id || null,
         price,
         stock,
@@ -708,6 +712,56 @@ export default function CheckoutModal({
     });
   }, [gcashAvailable, bankAvailable]);
 
+  /**
+   * What is being bought, shop by shop, with a photo of each product (the
+   * way Shopee and Lazada show it at checkout).
+   */
+  const renderOrderItems = () => (
+    <div className="space-y-3">
+      {paymentGroups.map((group) => (
+        <div key={group.key} className="overflow-hidden rounded-xl border border-gray-200">
+          <div className="flex items-center gap-2 border-b border-gray-100 bg-gray-50 px-4 py-2 text-sm font-semibold text-gray-800">
+            <svg className="h-4 w-4 flex-shrink-0 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9l1.5-5h15L21 9M3 9h18M3 9v11h18V9M9 20v-6h6v6" />
+            </svg>
+            <span className="truncate">{group.name}</span>
+          </div>
+          <ul className="divide-y divide-gray-100">
+            {summaryItems
+              .filter((item) => (item.seller_id || 'platform') === group.key)
+              .map((item) => {
+                const options = describeSelection(item.selectedOptions);
+                const lineTotal = (Number(item.price) || 0) * (Number(item.quantity) || 0);
+                return (
+                  <li key={item.lineId || item.id} className="flex gap-3 px-4 py-3">
+                    <div className="h-16 w-16 flex-shrink-0 overflow-hidden rounded-lg border border-gray-200 bg-gray-100">
+                      {item.image_url ? (
+                        <Img src={item.image_url} alt={item.name} width={128} className="h-full w-full object-cover" />
+                      ) : (
+                        <div className="flex h-full items-center justify-center text-[10px] text-gray-400">No image</div>
+                      )}
+                    </div>
+                    <div className="flex min-w-0 flex-1 flex-col justify-between">
+                      <div className="min-w-0">
+                        <p className="line-clamp-2 break-words text-sm font-medium text-gray-900">{item.name}</p>
+                        {options && <p className="mt-0.5 text-xs text-gray-500">{options}</p>}
+                      </div>
+                      <div className="mt-1 flex items-end justify-between gap-2 text-sm">
+                        <span className="text-gray-500">
+                          ₱{(Number(item.price) || 0).toFixed(2)} × {item.quantity}
+                        </span>
+                        <span className="font-semibold text-gray-900">₱{lineTotal.toFixed(2)}</span>
+                      </div>
+                    </div>
+                  </li>
+                );
+              })}
+          </ul>
+        </div>
+      ))}
+    </div>
+  );
+
   const shell = (children) =>
     isPage ? (
       // Checkout as a page of its own: no overlay, and the browser window does
@@ -775,6 +829,20 @@ export default function CheckoutModal({
                 {error}
               </div>
             )}
+
+            {/* What is being bought, before the delivery details */}
+            <div className="mb-6">
+              <div className="mb-2 flex items-baseline justify-between gap-3">
+                <h3 className="font-semibold text-gray-900">
+                  Your order ({summaryItems.reduce((count, item) => count + (Number(item.quantity) || 0), 0)}{' '}
+                  {summaryItems.reduce((count, item) => count + (Number(item.quantity) || 0), 0) === 1 ? 'item' : 'items'})
+                </h3>
+                <span className="text-sm text-gray-600">
+                  Subtotal <span className="font-bold text-blue-600">₱{summaryTotal.toFixed(2)}</span>
+                </span>
+              </div>
+              {renderOrderItems()}
+            </div>
 
             <div className="space-y-4">
               <div>
@@ -949,18 +1017,8 @@ export default function CheckoutModal({
             {/* Order Summary */}
             <div className="bg-gray-50 rounded-xl p-4 mb-6">
               <h3 className="font-semibold mb-2">Order Summary</h3>
-              {summaryItems.map((item) => (
-                <div key={item.lineId || item.id} className="flex justify-between gap-3 text-sm mb-1">
-                  <span className="min-w-0 break-words">
-                    {item.name} x{item.quantity}
-                    {describeSelection(item.selectedOptions) && (
-                      <span className="block text-xs text-gray-500">{describeSelection(item.selectedOptions)}</span>
-                    )}
-                  </span>
-                  <span className="flex-shrink-0">₱{(Number(item.price) * Number(item.quantity)).toFixed(2)}</span>
-                </div>
-              ))}
-              <div className="mt-2 flex justify-between border-t pt-2 text-sm">
+              <div className="bg-white rounded-xl">{renderOrderItems()}</div>
+              <div className="mt-3 flex justify-between border-t pt-2 text-sm">
                 <span className="text-gray-600">Items</span>
                 <span>₱{summaryTotal.toFixed(2)}</span>
               </div>
