@@ -1,6 +1,7 @@
 'use client';
 
 import StarRating from './StarRating';
+import Img from '@/components/ui/Img';
 
 export default function ProductCard({
   product,
@@ -39,7 +40,7 @@ export default function ProductCard({
         }}
       >
         {product.image_url ? (
-          <img
+          <Img
             src={product.image_url}
             alt={product.name}
             className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"

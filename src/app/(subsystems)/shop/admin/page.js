@@ -24,6 +24,7 @@ import { requestBadgeRefresh } from '@/lib/badges';
 import PaymentProof from '@/components/shop/PaymentProof';
 import { describeSelection } from '@/lib/productOptions';
 import { describeArea, listShippingRates } from '@/lib/shipping';
+import Img from '@/components/ui/Img';
 
 /**
  * Row action buttons. Soft tinted fills instead of solid saturated colours, so
@@ -1777,8 +1778,9 @@ export default function ShopAdminPage() {
             />
             <div className="flex items-center gap-2">
               {adminAvatarUrl ? (
-                <img
+                <Img
                   src={adminAvatarUrl}
+                  width={96}
                   alt={`${adminName}'s profile picture`}
                   className="h-10 w-10 flex-shrink-0 rounded-full object-cover"
                 />
@@ -2304,7 +2306,7 @@ export default function ShopAdminPage() {
                         <div className="flex items-center gap-4">
                           <div className="w-16 h-16 bg-gray-100 rounded-lg overflow-hidden">
                             {product.image_url ? (
-                              <img
+                              <Img
                                 src={product.image_url}
                                 alt={product.name}
                                 className="w-full h-full object-cover"

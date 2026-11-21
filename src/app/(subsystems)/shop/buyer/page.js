@@ -33,6 +33,7 @@ import {
   sanitizeName,
   sanitizePhone,
 } from '@/lib/fieldRules';
+import Img from '@/components/ui/Img';
 
 // The shop has accepted the order, so the customer can confirm it arrived.
 // Matches confirm_order_received() in supabase-points-on-delivery.sql.
@@ -1427,7 +1428,7 @@ export default function BuyerDashboard() {
 
                             <div className="h-20 w-20 flex-shrink-0 overflow-hidden rounded-lg bg-gray-100">
                               {item.image_url ? (
-                                <img src={item.image_url} alt={item.name} className="h-full w-full object-cover" />
+                                <Img src={item.image_url} alt={item.name} className="h-full w-full object-cover" />
                               ) : (
                                 <div className="flex h-full items-center justify-center text-xs text-gray-400">No image</div>
                               )}
@@ -1567,7 +1568,7 @@ export default function BuyerDashboard() {
                               <div className="mb-3 flex items-center gap-3">
                                 <div className="h-16 w-16 flex-shrink-0 overflow-hidden rounded-lg bg-gray-100">
                                   {productInfo?.image_url ? (
-                                    <img
+                                    <Img
                                       src={productInfo.image_url}
                                       alt={item.product_name}
                                       className="h-full w-full object-cover"
@@ -1621,7 +1622,7 @@ export default function BuyerDashboard() {
                               <div className="mt-2 flex flex-wrap items-center gap-2">
                                 {(draft.photos || []).map((photo, index) => (
                                   <div key={photo.preview} className="relative">
-                                    <img src={photo.preview} alt="" className="h-16 w-16 rounded-lg object-cover" />
+                                    <Img src={photo.preview} alt="" className="h-16 w-16 rounded-lg object-cover" />
                                     <button
                                       type="button"
                                       onClick={() => removeReviewPhoto(item.product_id, index)}
@@ -1722,7 +1723,7 @@ export default function BuyerDashboard() {
                             <div key={review.id} className="flex gap-4 rounded-lg border border-gray-100 p-4">
                               <div className="h-16 w-16 flex-shrink-0 overflow-hidden rounded-lg bg-gray-100">
                                 {image ? (
-                                  <img src={image} alt={purchase?.name || 'Product'} className="h-full w-full object-cover" />
+                                  <Img src={image} alt={purchase?.name || 'Product'} className="h-full w-full object-cover" />
                                 ) : (
                                   <div className="flex h-full items-center justify-center text-[10px] text-gray-400">
                                     No image
@@ -1767,7 +1768,7 @@ export default function BuyerDashboard() {
                                     {review.photos.map((url) => (
                                       <li key={url}>
                                         <a href={url} target="_blank" rel="noopener noreferrer">
-                                          <img
+                                          <Img
                                             src={url}
                                             alt="Your photo"
                                             className="h-14 w-14 rounded-lg border border-gray-200 object-cover transition-transform hover:scale-105"

@@ -76,8 +76,13 @@ export const SellerAuthProvider = ({ children }) => {
           return;
         }
 
+        // Look the shop up first and publish the user and the shop together.
+        // Publishing the user first showed a moment of "signed in, no shop",
+        // and pages treated a shop owner as a customer during it.
+        const sellerRow = await loadSellerRow(session.user.id);
         setUser(session.user);
-        await fetchSellerProfile(session.user.id);
+        setSeller(sellerRow);
+        setLoading(false);
       } else {
         setLoading(false);
       }
@@ -87,7 +92,8 @@ export const SellerAuthProvider = ({ children }) => {
     }
   };
 
-  const fetchSellerProfile = async (userId) => {
+  /** The account's shop row, without touching any state. */
+  const loadSellerRow = async (userId) => {
     try {
       const { data: { user: currentUser } } = await supabase.auth.getUser();
       const account = await resolveAccount(currentUser?.id === userId ? currentUser : { id: userId });
@@ -100,15 +106,18 @@ export const SellerAuthProvider = ({ children }) => {
         sellerRow = await ensureSellerProfile(currentUser);
       }
 
-      setSeller(sellerRow);
       return sellerRow;
     } catch (error) {
       console.error('Error fetching seller profile:', error);
-      setSeller(null);
       return null;
-    } finally {
-      setLoading(false);
     }
+  };
+
+  const fetchSellerProfile = async (userId) => {
+    const sellerRow = await loadSellerRow(userId);
+    setSeller(sellerRow);
+    setLoading(false);
+    return sellerRow;
   };
 
   const signUp = async (email, password, sellerData) => {

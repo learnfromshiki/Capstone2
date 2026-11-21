@@ -11,6 +11,7 @@ import {
   sendMessage,
   unreadCounts,
 } from '@/lib/messages';
+import Img from '@/components/ui/Img';
 
 const POLL_MS = 6000;
 
@@ -256,7 +257,7 @@ export default function ChatPanel({ role, sellerId, shopNameById = {}, activeCon
                                 className="max-h-56 w-full rounded-xl bg-black"
                               />
                             ) : (
-                              <img
+                              <Img
                                 src={message.attachment_url}
                                 alt="Attachment"
                                 className="max-h-56 w-full rounded-xl object-cover"
@@ -285,7 +286,7 @@ export default function ChatPanel({ role, sellerId, shopNameById = {}, activeCon
                   {pending.type === 'video' ? (
                     <video src={pending.preview} className="h-16 w-16 rounded-lg bg-black object-cover" />
                   ) : (
-                    <img src={pending.preview} alt="" className="h-16 w-16 rounded-lg object-cover" />
+                    <Img src={pending.preview} alt="" className="h-16 w-16 rounded-lg object-cover" />
                   )}
                   <p className="min-w-0 flex-1 truncate text-xs text-gray-600">
                     {pending.type === 'video' ? 'Video' : 'Photo'} ready to send

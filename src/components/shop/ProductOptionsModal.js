@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { describeSelection, missingChoices, readOptions } from '@/lib/productOptions';
+import Img from '@/components/ui/Img';
 
 /**
  * The sheet that opens on "Buy Now" (and on "Add to Cart" when a product has
@@ -87,7 +88,7 @@ export default function ProductOptionsModal({ product, intent = 'cart', onClose,
 
           <div className="h-24 w-24 flex-shrink-0 overflow-hidden rounded-xl bg-gray-100">
             {product.image_url ? (
-              <img src={product.image_url} alt={product.name} className="h-full w-full object-cover" />
+              <Img src={product.image_url} alt={product.name} className="h-full w-full object-cover" />
             ) : (
               <div className="flex h-full items-center justify-center text-xs text-gray-400">No image</div>
             )}

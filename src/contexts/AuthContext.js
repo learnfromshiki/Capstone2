@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { supabase, clearStoredSession, startAdminSession } from '@/lib/supabaseClient';
 import { showSigningOut } from '@/lib/signOutScreen';
 import { resolveAccount } from '@/lib/roles';
@@ -29,8 +29,21 @@ export const AuthProvider = ({ children }) => {
   const [role, setRole] = useState('customer');
   const [loading, setLoading] = useState(true);
 
+  // The account whose role is currently loaded. A session event for the same
+  // account (a token refresh) can update the user at once; a different
+  // account has to wait for its role, see applyAccount.
+  const resolvedUserIdRef = useRef(null);
+
+  /**
+   * Load the account's role and publish it together with the user, in one
+   * update. Publishing the user first left a moment where a shop owner who
+   * had just signed in still had the previous role ('customer'), and pages
+   * acted on that.
+   */
   const applyAccount = useCallback(async (sessionUser) => {
     if (!sessionUser) {
+      resolvedUserIdRef.current = null;
+      setUser(null);
       setProfile(null);
       setSeller(null);
       setRole('customer');
@@ -42,6 +55,8 @@ export const AuthProvider = ({ children }) => {
     // An admin session must not be left in this browser for the next visitor.
     if (account.role === 'admin') startAdminSession();
 
+    resolvedUserIdRef.current = sessionUser.id;
+    setUser(sessionUser);
     setProfile(account.profile);
     setSeller(account.seller);
     setRole(account.role);
@@ -54,9 +69,7 @@ export const AuthProvider = ({ children }) => {
     supabase.auth.getSession().then(async ({ data: { session } }) => {
       if (!active) return;
 
-      const sessionUser = session?.user ?? null;
-      setUser(sessionUser);
-      await applyAccount(sessionUser);
+      await applyAccount(session?.user ?? null);
     }).catch((error) => {
       console.error('Could not read the saved session:', error?.message || error);
     }).finally(() => {
@@ -68,12 +81,20 @@ export const AuthProvider = ({ children }) => {
       if (!active) return;
 
       const sessionUser = session?.user ?? null;
-      setUser(sessionUser);
 
       if (event === 'SIGNED_OUT' || !sessionUser) {
+        resolvedUserIdRef.current = null;
+        setUser(null);
         setProfile(null);
         setSeller(null);
         setRole('customer');
+        return;
+      }
+
+      // Same account as the role already loaded (a token refresh, a profile
+      // edit): keep the user object fresh, the role is still right.
+      if (sessionUser.id === resolvedUserIdRef.current) {
+        setUser(sessionUser);
         return;
       }
 
@@ -152,7 +173,7 @@ export const AuthProvider = ({ children }) => {
 
       if (data?.user) {
         await ensureProfileRow(data.user);
-        setUser(data.user);
+        // applyAccount publishes the user and the role together.
         await applyAccount(data.user);
       }
 
@@ -251,6 +272,7 @@ export const AuthProvider = ({ children }) => {
 
       if (account.role === 'admin') startAdminSession();
 
+      resolvedUserIdRef.current = data.user.id;
       setUser(data.user);
       setProfile(account.profile);
       setSeller(account.seller);
@@ -276,6 +298,7 @@ export const AuthProvider = ({ children }) => {
     // (a "please sign in" screen) is never flashed on the way out.
     if (leaving) showSigningOut();
 
+    resolvedUserIdRef.current = null;
     setUser(null);
     setProfile(null);
     setSeller(null);
@@ -305,9 +328,7 @@ export const AuthProvider = ({ children }) => {
 
   const refreshAccount = useCallback(async () => {
     const { data: { session } } = await supabase.auth.getSession();
-    const sessionUser = session?.user ?? null;
-    setUser(sessionUser);
-    return applyAccount(sessionUser);
+    return applyAccount(session?.user ?? null);
   }, [applyAccount]);
 
   const value = {

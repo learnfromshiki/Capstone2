@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import StarRating from './StarRating';
 import Avatar from '@/components/ui/Avatar';
+import Img from '@/components/ui/Img';
 
 const formatDate = (value) =>
   value ? new Date(value).toLocaleDateString('en-PH', { dateStyle: 'medium' }) : '';
@@ -89,7 +90,7 @@ export default function ProductReviewsModal({ product, onClose }) {
           <div className="flex min-w-0 gap-3">
             <div className="h-14 w-14 flex-shrink-0 overflow-hidden rounded-xl bg-gray-100">
               {product.image_url ? (
-                <img src={product.image_url} alt="" className="h-full w-full object-cover" />
+                <Img src={product.image_url} alt="" className="h-full w-full object-cover" />
               ) : (
                 <div className="flex h-full items-center justify-center text-[10px] text-gray-400">No image</div>
               )}
@@ -161,7 +162,7 @@ export default function ProductReviewsModal({ product, onClose }) {
                         {review.photos.map((url) => (
                           <li key={url}>
                             <a href={url} target="_blank" rel="noopener noreferrer">
-                              <img
+                              <Img
                                 src={url}
                                 alt="Customer photo"
                                 className="h-16 w-16 rounded-lg border border-gray-200 object-cover transition-transform hover:scale-105"

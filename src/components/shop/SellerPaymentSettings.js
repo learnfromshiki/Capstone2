@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { uploadAttachment } from '@/lib/attachments';
 import { useDialog } from '@/components/ui/Dialog';
 import { readPaymentDetails, savePaymentDetails } from '@/lib/sellerPayments';
+import Img from '@/components/ui/Img';
 
 /**
  * Where a shop says how it wants to be paid.
@@ -21,7 +22,7 @@ function QrField({ label, value, busy, fileRef, onChoose, onClear }) {
       <label className="mb-2 block text-sm font-semibold text-gray-700">{label}</label>
       <div className="flex items-center gap-4">
         {value ? (
-          <img src={value} alt={label} className="h-24 w-24 rounded-xl border border-gray-200 object-cover" />
+          <Img src={value} alt={label} className="h-24 w-24 rounded-xl border border-gray-200 object-cover" />
         ) : (
           <div className="flex h-24 w-24 items-center justify-center rounded-xl border-2 border-dashed border-gray-300 text-xs text-gray-400">
             No QR yet

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Img from '@/components/ui/Img';
 
 /**
  * The receipt a customer uploaded for a GCash or bank transfer, as the shop
@@ -16,7 +17,7 @@ export default function PaymentProof({ url, reference, paidAt, className = '' })
     <div className={`rounded-xl border-2 border-green-100 bg-green-50 p-3 ${className}`}>
       <div className="flex items-start gap-3">
         <button type="button" onClick={() => setZoomed(true)} title="Tap to enlarge">
-          <img
+          <Img
             src={url}
             alt="Payment receipt"
             className="h-20 w-20 rounded-lg border border-green-200 object-cover"
@@ -45,10 +46,13 @@ export default function PaymentProof({ url, reference, paidAt, className = '' })
           onClick={() => setZoomed(false)}
           role="presentation"
         >
-          <img
+          <Img
             src={url}
             alt="Payment receipt"
             className="max-h-[85vh] max-w-full rounded-xl bg-white p-2"
+            // Full size and full detail, so the receipt stays readable.
+            unoptimized
+            style={{ width: 'auto', height: 'auto' }}
             onClick={(event) => event.stopPropagation()}
           />
         </div>

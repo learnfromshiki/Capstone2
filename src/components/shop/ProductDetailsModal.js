@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import StarRating from './StarRating';
 import Avatar from '@/components/ui/Avatar';
+import Img from '@/components/ui/Img';
 
 const formatReviewDate = (value) => {
   if (!value) return '';
@@ -187,7 +188,7 @@ export default function ProductDetailsModal({
           <div className="relative bg-gray-100 min-h-[280px] md:min-h-full">
             {gallery.length > 0 ? (
               <div className="flex h-full flex-col">
-                <img
+                <Img
                   src={gallery[activeImage] || gallery[0]}
                   alt={`${product.name} photo ${activeImage + 1} of ${gallery.length}`}
                   className="w-full flex-1 max-h-[360px] object-cover md:rounded-tl-2xl"
@@ -206,7 +207,7 @@ export default function ProductDetailsModal({
                           index === activeImage ? 'border-blue-600' : 'border-transparent hover:border-gray-300'
                         }`}
                       >
-                        <img src={url} alt="" className="h-full w-full object-cover" />
+                        <Img src={url} alt="" className="h-full w-full object-cover" />
                       </button>
                     ))}
                   </div>
@@ -429,7 +430,7 @@ export default function ProductDetailsModal({
                         {review.photos.map((url) => (
                           <li key={url}>
                             <a href={url} target="_blank" rel="noopener noreferrer">
-                              <img
+                              <Img
                                 src={url}
                                 alt="Customer photo"
                                 className="h-16 w-16 rounded-lg border border-gray-200 object-cover transition-transform hover:scale-105"
@@ -484,7 +485,7 @@ export default function ProductDetailsModal({
                 <div className="flex flex-wrap items-center gap-2">
                   {reviewPhotos.map((photo, index) => (
                     <div key={photo.preview} className="relative">
-                      <img src={photo.preview} alt="" className="h-16 w-16 rounded-lg object-cover" />
+                      <Img src={photo.preview} alt="" className="h-16 w-16 rounded-lg object-cover" />
                       <button
                         type="button"
                         onClick={() => removeReviewPhoto(index)}

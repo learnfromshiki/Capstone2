@@ -1,5 +1,7 @@
 'use client';
 
+import Img from '@/components/ui/Img';
+
 /**
  * A profile picture, falling back to the person's initials when they have not
  * uploaded one. Used in the dashboards, the headers and on reviews.
@@ -25,8 +27,9 @@ export default function Avatar({ src, name, email, size = 'md', className = '' }
 
   if (src) {
     return (
-      <img
+      <Img
         src={src}
+        width={96}
         alt={name ? `${name}'s profile picture` : 'Profile picture'}
         className={`${dimension} flex-shrink-0 rounded-full object-cover ${className}`}
       />

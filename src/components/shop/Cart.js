@@ -5,6 +5,7 @@ import { describeSelection } from '@/lib/productOptions';
 import { useDialog } from '@/components/ui/Dialog';
 import { storeSelection } from '@/lib/checkoutSelection';
 import { estimateRewardPoints } from '@/lib/orders';
+import Img from '@/components/ui/Img';
 
 export default function Cart({ cart, isOpen, onClose, onUpdateQuantity, onRemoveItem, userId }) {
   const { showConfirm } = useDialog();
@@ -135,7 +136,7 @@ export default function Cart({ cart, isOpen, onClose, onUpdateQuantity, onRemove
                   {/* Product Image */}
                   <div className="w-24 h-24 bg-gray-100 rounded-lg flex-shrink-0 overflow-hidden">
                     {item.image_url ? (
-                      <img
+                      <Img
                         src={item.image_url}
                         alt={item.name}
                         className="w-full h-full object-cover"

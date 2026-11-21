@@ -31,6 +31,7 @@ import NotificationCenter from '@/components/ui/NotificationCenter';
 import { useDialog } from '@/components/ui/Dialog';
 import Avatar from '@/components/ui/Avatar';
 import AvatarUpload from '@/components/ui/AvatarUpload';
+import Img from '@/components/ui/Img';
 
 // Orders grouped the way a shop works through them: what has just come in,
 // what is being packed, what is already on the way, and what is finished.
@@ -1852,7 +1853,7 @@ export default function SellerDashboard() {
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-3">
                           {product.image_url && (
-                            <img src={product.image_url} alt={product.name} className="w-12 h-12 rounded-lg object-cover" />
+                            <Img src={product.image_url} alt={product.name} className="w-12 h-12 rounded-lg object-cover" />
                           )}
                           <div>
                             <div className="font-semibold text-gray-900">{product.name}</div>
@@ -2157,7 +2158,7 @@ export default function SellerDashboard() {
                   <label className="block text-sm font-semibold text-gray-700 mb-2">Shop Logo</label>
                   <div className="flex items-center gap-4">
                     {profileForm.logo_url ? (
-                      <img src={profileForm.logo_url} alt="Shop logo" className="w-16 h-16 rounded-xl object-cover border border-gray-200" />
+                      <Img src={profileForm.logo_url} alt="Shop logo" className="w-16 h-16 rounded-xl object-cover border border-gray-200" />
                     ) : (
                       <div className="w-16 h-16 rounded-xl bg-blue-100 flex items-center justify-center text-blue-600 font-bold text-xl">
                         {seller.business_name?.charAt(0) || 'S'}
@@ -2656,7 +2657,7 @@ export default function SellerDashboard() {
                               isCover ? 'border-blue-600' : 'border-gray-200'
                             }`}
                           >
-                            <img src={url} alt="Product" className="h-full w-full object-cover" />
+                            <Img src={url} alt="Product" className="h-full w-full object-cover" />
                             {isCover && (
                               <span className="absolute left-1 top-1 rounded-full bg-blue-600 px-2 py-0.5 text-[10px] font-bold text-white">
                                 Cover

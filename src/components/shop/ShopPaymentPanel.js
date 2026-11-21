@@ -3,6 +3,7 @@
 import { useRef, useState } from 'react';
 import { uploadAttachment } from '@/lib/attachments';
 import { useDialog } from '@/components/ui/Dialog';
+import Img from '@/components/ui/Img';
 
 /**
  * Paying each shop, at checkout.
@@ -58,7 +59,7 @@ export default function ShopPaymentPanel({ method, groups, receipts, onChange })
                   title="Tap to enlarge"
                   className="rounded-xl border border-gray-200 bg-white p-1"
                 >
-                  <img src={qr} alt={`${group.name} ${isGcash ? 'GCash' : 'bank'} QR code`} className="h-32 w-32 object-contain" />
+                  <Img src={qr} alt={`${group.name} ${isGcash ? 'GCash' : 'bank'} QR code`} className="h-32 w-32 object-contain" />
                 </button>
               )}
 
@@ -96,7 +97,7 @@ export default function ShopPaymentPanel({ method, groups, receipts, onChange })
 
               <div className="mt-3 flex flex-wrap items-center gap-3">
                 {receipt.url ? (
-                  <img
+                  <Img
                     src={receipt.url}
                     alt="Your payment receipt"
                     className="h-20 w-20 rounded-lg border border-gray-200 object-cover"
@@ -158,10 +159,13 @@ export default function ShopPaymentPanel({ method, groups, receipts, onChange })
           onClick={() => setZoomed('')}
           role="presentation"
         >
-          <img
+          <Img
             src={zoomed}
             alt="QR code"
             className="max-h-[80vh] max-w-full rounded-xl bg-white p-3"
+            // Full size and full detail, so the QR code still scans.
+            unoptimized
+            style={{ width: 'auto', height: 'auto' }}
             onClick={(event) => event.stopPropagation()}
           />
         </div>

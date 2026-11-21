@@ -2,6 +2,7 @@
 
 import { useEffect } from 'react';
 import StarRating from './StarRating';
+import Img from '@/components/ui/Img';
 
 /**
  * The public page of one shop: who they are and everything they sell.
@@ -133,7 +134,7 @@ export default function ShopProfileModal({
                   >
                     <div className="h-28 bg-gray-100">
                       {product.image_url ? (
-                        <img src={product.image_url} alt={product.name} className="h-full w-full object-cover" />
+                        <Img src={product.image_url} alt={product.name} className="h-full w-full object-cover" />
                       ) : (
                         <div className="flex h-full items-center justify-center text-xs text-gray-400">No image</div>
                       )}
