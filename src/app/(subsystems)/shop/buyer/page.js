@@ -34,6 +34,8 @@ import {
   sanitizePhone,
 } from '@/lib/fieldRules';
 import Img from '@/components/ui/Img';
+import CancelOrderDialog from '@/components/shop/CancelOrderDialog';
+import { WISHLIST_EVENT, readWishlist, toggleWishlist } from '@/lib/wishlist';
 
 // The shop has accepted the order, so the customer can confirm it arrived.
 // Matches confirm_order_received() in supabase-points-on-delivery.sql.
@@ -769,21 +771,25 @@ export default function BuyerDashboard() {
     }
   };
 
-  const handleCancelOrder = async (order) => {
+  // Cancelling asks for a reason first (CancelOrderDialog), like Shopee.
+  const [cancelTarget, setCancelTarget] = useState(null);
+
+  const handleCancelOrder = (order) => {
     if (cancellingOrderId) return;
-    const confirmed = await showConfirm({
-      tone: 'warning',
-      title: `Cancel order ${formatOrderNumber(order.id)}?`,
-      message: 'The items go back on sale, and any reward points you used on this order are returned to you.',
-      confirmLabel: 'Cancel my order',
-      cancelLabel: 'Keep it',
-    });
-    if (!confirmed) return;
+    setCancelTarget(order);
+  };
+
+  const confirmCancelOrder = async (reason) => {
+    const order = cancelTarget;
+    if (!order || cancellingOrderId) return;
 
     setCancellingOrderId(order.id);
     try {
-      await cancelMyOrder(order.id);
-      setOrders((prev) => prev.map((row) => (row.id === order.id ? { ...row, status: 'cancelled' } : row)));
+      await cancelMyOrder(order.id, reason);
+      setCancelTarget(null);
+      setOrders((prev) =>
+        prev.map((row) => (row.id === order.id ? { ...row, status: 'cancelled', cancel_reason: reason } : row))
+      );
       // Points may have changed, so refresh the profile card too
       const { data } = await supabase.from('profiles').select('*').eq('id', user.id).maybeSingle();
       if (data) setProfile(data);
@@ -795,6 +801,94 @@ export default function BuyerDashboard() {
       setCancellingOrderId(null);
     }
   };
+
+  /**
+   * "Buy Again": put an earlier order's items back in the cart at today's
+   * price, as many as are still in stock, and open the cart.
+   */
+  const [buyingAgainId, setBuyingAgainId] = useState(null);
+  const handleBuyAgain = async (order) => {
+    if (buyingAgainId) return;
+    const items = (order.shop_order_items || []).filter((item) => item.product_id);
+    if (items.length === 0) {
+      showAlert('These products are no longer sold.');
+      return;
+    }
+
+    setBuyingAgainId(order.id);
+    try {
+      const { data, error } = await supabase
+        .from('shop_products')
+        .select('id, name, price, stock, image_url, available, seller_id')
+        .in('id', [...new Set(items.map((item) => item.product_id))]);
+      if (error) throw error;
+
+      const live = new Map((data || []).map((product) => [product.id, product]));
+      const next = [...cart];
+      const skipped = [];
+
+      items.forEach((item) => {
+        const product = live.get(item.product_id);
+        const stock = Number(product?.stock) || 0;
+        if (!product || product.available === false || stock <= 0) {
+          skipped.push(item.product_name);
+          return;
+        }
+        const selectedOptions = item.options || {};
+        const lineId = cartLineId(product.id, selectedOptions);
+        const existing = next.findIndex((line) => line.lineId === lineId);
+        if (existing >= 0) {
+          next[existing] = {
+            ...next[existing],
+            quantity: Math.min(stock, (Number(next[existing].quantity) || 0) + Number(item.quantity)),
+          };
+        } else {
+          next.push({
+            id: product.id,
+            productId: product.id,
+            lineId,
+            selectedOptions,
+            name: product.name,
+            price: product.price,
+            stock,
+            image_url: product.image_url,
+            seller_id: product.seller_id,
+            quantity: Math.min(stock, Number(item.quantity) || 1),
+          });
+        }
+      });
+
+      if (next.length === cart.length && skipped.length === items.length) {
+        showAlert('Sorry, everything in this order is sold out or no longer sold.');
+        return;
+      }
+
+      writeCart(next);
+      setActiveTab('cart');
+      showToast(
+        skipped.length > 0
+          ? `Added to your cart. Not available any more: ${skipped.join(', ')}.`
+          : 'Added to your cart at today’s price.',
+        skipped.length > 0 ? 'info' : 'success'
+      );
+    } catch (error) {
+      console.error('Buy again failed:', error);
+      showAlert(error.message || 'Could not add these items to your cart.');
+    } finally {
+      setBuyingAgainId(null);
+    }
+  };
+
+  // Products the customer liked on the shop (kept in this browser per account)
+  const [likedIds, setLikedIds] = useState([]);
+  useEffect(() => {
+    setLikedIds(readWishlist(user?.id));
+    const onWishlist = (event) => {
+      if (event.detail?.userId === user?.id) setLikedIds(event.detail.ids || []);
+    };
+    window.addEventListener(WISHLIST_EVENT, onWishlist);
+    return () => window.removeEventListener(WISHLIST_EVENT, onWishlist);
+  }, [user?.id]);
 
   const getStatusColor = (status) => {
     const colors = {
@@ -1033,6 +1127,25 @@ export default function BuyerDashboard() {
                 </button>
 
                 <button
+                  onClick={() => setActiveTab('likes')}
+                  className={`flex min-h-[44px] items-center gap-2 px-4 py-3 text-left text-sm font-medium transition-colors whitespace-nowrap lg:gap-3 lg:px-6 lg:py-4 ${
+                    activeTab === 'likes'
+                      ? 'bg-blue-50 text-blue-600 border-b-4 border-blue-600 lg:border-b-0 lg:border-l-4'
+                      : 'text-gray-700 hover:bg-gray-50'
+                  }`}
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+                  </svg>
+                  My Likes
+                  {likedIds.length > 0 && (
+                    <span className="ml-auto px-2 py-1 bg-red-50 text-red-600 text-xs font-bold rounded-full">
+                      {likedIds.length}
+                    </span>
+                  )}
+                </button>
+
+                <button
                   onClick={() => setActiveTab('reviews')}
                   className={`flex min-h-[44px] items-center gap-2 px-4 py-3 text-left text-sm font-medium transition-colors whitespace-nowrap lg:gap-3 lg:px-6 lg:py-4 ${
                     activeTab === 'reviews'
@@ -1198,6 +1311,34 @@ export default function BuyerDashboard() {
 
                           <OrderTracking status={order.status} pickup={isPickup(order)} />
 
+                          {order.tracking_number && order.status !== 'cancelled' && (
+                            <div className="mt-3 flex flex-wrap items-center gap-2 rounded-lg bg-blue-50 px-3 py-2 text-sm text-blue-900">
+                              <span aria-hidden="true">🚚</span>
+                              <span>
+                                {order.courier || 'Courier'} tracking no.{' '}
+                                <span className="font-mono font-semibold">{order.tracking_number}</span>
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  navigator.clipboard?.writeText(order.tracking_number).then(
+                                    () => showToast('Tracking number copied', 'success'),
+                                    () => {}
+                                  );
+                                }}
+                                className="ml-auto min-h-[32px] rounded-md border border-blue-200 bg-white px-2 text-xs font-semibold text-blue-700 hover:bg-blue-100"
+                              >
+                                Copy
+                              </button>
+                            </div>
+                          )}
+
+                          {order.status === 'cancelled' && order.cancel_reason && (
+                            <p className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-800">
+                              Cancelled: {order.cancel_reason}
+                            </p>
+                          )}
+
                           {CAN_CONFIRM_RECEIVED.includes(order.status) && (
                             <p className="mt-3 rounded-lg bg-green-50 px-3 py-2 text-xs text-green-800">
                               {order.status === 'shipped'
@@ -1263,10 +1404,13 @@ export default function BuyerDashboard() {
 
                           <div className="border-t mt-4 pt-4 flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-center">
                             <div>
-                              {(Number(order.shipping_fee) > 0 || Number(order.points_discount) > 0) && (
+                              {(Number(order.shipping_fee) > 0 || Number(order.points_discount) > 0 || Number(order.voucher_discount) > 0) && (
                                 <p className="text-xs text-gray-500">
-                                  Items ₱{(Number(order.total_amount) - Number(order.shipping_fee) + (Number(order.points_discount) || 0)).toFixed(2)}
+                                  Items ₱{(Number(order.total_amount) - Number(order.shipping_fee) + (Number(order.points_discount) || 0) + (Number(order.voucher_discount) || 0)).toFixed(2)}
                                   {Number(order.shipping_fee) > 0 && <> + delivery ₱{Number(order.shipping_fee).toFixed(2)}</>}
+                                  {Number(order.voucher_discount) > 0 && (
+                                    <> − voucher {order.voucher_code} (₱{Number(order.voucher_discount).toFixed(2)})</>
+                                  )}
                                   {Number(order.points_discount) > 0 && (
                                     <> − {Number(order.points_redeemed).toLocaleString()} points (₱{Number(order.points_discount).toFixed(2)})</>
                                   )}
@@ -1329,6 +1473,16 @@ export default function BuyerDashboard() {
                                   ★ Rate the items
                                 </button>
                               )}
+                              {['delivered', 'cancelled'].includes(order.status) && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleBuyAgain(order)}
+                                  disabled={buyingAgainId === order.id}
+                                  className="min-h-[44px] rounded-lg bg-blue-600 px-5 font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
+                                >
+                                  {buyingAgainId === order.id ? 'Adding...' : 'Buy Again'}
+                                </button>
+                              )}
                             </div>
                           </div>
 
@@ -1349,6 +1503,68 @@ export default function BuyerDashboard() {
                   )}
                 </div>
               </div>
+              </div>
+            )}
+
+            {activeTab === 'likes' && (
+              <div className="rounded-xl border border-gray-100 bg-white p-4 shadow-sm sm:p-6">
+                <h2 className="mb-1 text-xl font-bold text-gray-900">My Likes</h2>
+                <p className="mb-4 text-sm text-gray-600">Products you tapped ♡ on. Saved on this device.</p>
+                {(() => {
+                  const liked = likedIds.map((id) => products.find((product) => product.id === id)).filter(Boolean);
+                  if (liked.length === 0) {
+                    return (
+                      <div className="py-10 text-center">
+                        <p className="text-4xl" aria-hidden="true">♡</p>
+                        <p className="mt-2 text-sm text-gray-600">
+                          Nothing here yet. Tap the heart on any product to save it for later.
+                        </p>
+                        <Link href="/shop" className="mt-4 inline-flex min-h-[44px] items-center rounded-lg bg-blue-600 px-5 font-semibold text-white hover:bg-blue-700">
+                          Browse the shop
+                        </Link>
+                      </div>
+                    );
+                  }
+                  return (
+                    <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                      {liked.map((product) => {
+                        const stock = Number(product.stock) || 0;
+                        return (
+                          <li key={product.id} className="overflow-hidden rounded-xl border border-gray-100 bg-white shadow-sm">
+                            <Link href={`/shop?product=${product.id}`} className="block">
+                              <div className="relative aspect-square w-full bg-gray-100">
+                                {product.image_url ? (
+                                  <Img src={product.image_url} alt={product.name} width={320} className="absolute inset-0 h-full w-full object-cover" />
+                                ) : (
+                                  <div className="flex h-full items-center justify-center text-xs text-gray-400">No image</div>
+                                )}
+                                {stock <= 0 && (
+                                  <span className="absolute inset-0 flex items-center justify-center bg-black/40 text-sm font-bold text-white">
+                                    Sold out
+                                  </span>
+                                )}
+                              </div>
+                              <div className="p-3">
+                                <p className="line-clamp-2 min-h-[2.5rem] text-sm text-gray-900">{product.name}</p>
+                                <p className="mt-1 font-bold text-blue-600">₱{Number(product.price).toFixed(2)}</p>
+                              </div>
+                            </Link>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const { ids } = toggleWishlist(user.id, product.id);
+                                setLikedIds(ids);
+                              }}
+                              className="min-h-[40px] w-full border-t border-gray-100 text-xs font-semibold text-red-600 hover:bg-red-50"
+                            >
+                              ♥ Remove
+                            </button>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  );
+                })()}
               </div>
             )}
 
@@ -2018,6 +2234,13 @@ export default function BuyerDashboard() {
         </div>
       </div>
 
+      <CancelOrderDialog
+        order={cancelTarget}
+        orderNumber={cancelTarget ? formatOrderNumber(cancelTarget.id) : ''}
+        busy={Boolean(cancellingOrderId)}
+        onConfirm={confirmCancelOrder}
+        onClose={() => setCancelTarget(null)}
+      />
     </div>
   );
 }

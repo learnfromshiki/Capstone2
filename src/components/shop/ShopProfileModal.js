@@ -3,11 +3,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import StarRating from './StarRating';
 import Img from '@/components/ui/Img';
+import { describeVoucher, formatSold, saleInfo } from '@/lib/shopFeatures';
 
 const SORTS = [
   { value: 'popular', label: 'Popular' },
   { value: 'latest', label: 'Latest' },
-  { value: 'rating', label: 'Top Rated' },
+  { value: 'sales', label: 'Top Sales' },
 ];
 
 /**
@@ -20,10 +21,16 @@ export default function ShopProfileModal({
   products = [],
   reviewSummaries = {},
   categories = [],
+  soldCounts = {},
+  followers = 0,
+  following = false,
+  onToggleFollow,
+  vouchers = [],
   onClose,
   onViewProduct,
   onMessageShop,
 }) {
+  const [copiedCode, setCopiedCode] = useState('');
   const [tab, setTab] = useState('products');
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState('all');
@@ -89,22 +96,29 @@ export default function ShopProfileModal({
         return priceDirection === 'asc' ? difference : -difference;
       }
       if (sort === 'latest') return newest(a, b);
-      if (sort === 'rating') {
-        return (
-          summaryOf(b).average - summaryOf(a).average ||
-          summaryOf(b).count - summaryOf(a).count ||
-          newest(a, b)
-        );
-      }
-      // Popular: available first, then the most reviewed and best rated.
+      const soldOf = (product) => soldCounts[product.id] || 0;
+      if (sort === 'sales') return soldOf(b) - soldOf(a) || newest(a, b);
+      // Popular: available first, then the best sellers, the most reviewed
+      // and the best rated.
       return (
         inStockFirst(a, b) ||
+        soldOf(b) - soldOf(a) ||
         summaryOf(b).count - summaryOf(a).count ||
         summaryOf(b).average - summaryOf(a).average ||
         newest(a, b)
       );
     });
-  }, [products, reviewSummaries, query, category, sort, priceDirection]);
+  }, [products, reviewSummaries, soldCounts, query, category, sort, priceDirection]);
+
+  const copyCode = async (code) => {
+    try {
+      await navigator.clipboard.writeText(code);
+      setCopiedCode(code);
+      setTimeout(() => setCopiedCode(''), 2000);
+    } catch (error) {
+      setCopiedCode('');
+    }
+  };
 
   if (!seller) return null;
 
@@ -202,20 +216,40 @@ export default function ShopProfileModal({
                 </span>
                 <span aria-hidden="true">|</span>
                 <span>
+                  {followers.toLocaleString()} {followers === 1 ? 'follower' : 'followers'}
+                </span>
+                <span aria-hidden="true">|</span>
+                <span>
                   {products.length} {products.length === 1 ? 'product' : 'products'}
                 </span>
                 <span className="rounded-full bg-white/20 px-2 py-0.5 text-xs font-semibold">Verified Seller</span>
               </div>
             </div>
-            {onMessageShop && (
-              <button
-                type="button"
-                onClick={() => onMessageShop(seller)}
-                className="min-h-[40px] flex-shrink-0 rounded-full border border-white/70 px-4 text-sm font-bold text-white transition-colors hover:bg-white hover:text-blue-700"
-              >
-                💬 Chat
-              </button>
-            )}
+            <div className="flex flex-shrink-0 flex-col gap-1.5">
+              {onToggleFollow && (
+                <button
+                  type="button"
+                  onClick={() => onToggleFollow(seller)}
+                  aria-pressed={following}
+                  className={`min-h-[36px] rounded-full border px-4 text-sm font-bold transition-colors ${
+                    following
+                      ? 'border-white bg-white text-blue-700 hover:bg-blue-50'
+                      : 'border-white/70 text-white hover:bg-white hover:text-blue-700'
+                  }`}
+                >
+                  {following ? '✓ Following' : '+ Follow'}
+                </button>
+              )}
+              {onMessageShop && (
+                <button
+                  type="button"
+                  onClick={() => onMessageShop(seller)}
+                  className="min-h-[36px] rounded-full border border-white/70 px-4 text-sm font-bold text-white transition-colors hover:bg-white hover:text-blue-700"
+                >
+                  💬 Chat
+                </button>
+              )}
+            </div>
           </div>
         </div>
 
@@ -327,6 +361,37 @@ export default function ShopProfileModal({
                 </button>
               </div>
 
+              {/* This shop's vouchers */}
+              {vouchers.length > 0 && !searching && (
+                <div className="-mx-0 flex gap-2 overflow-x-auto px-4 pt-3 sm:px-6">
+                  {vouchers.map((voucher) => {
+                    const text = describeVoucher(voucher);
+                    return (
+                      <div
+                        key={voucher.id}
+                        className="flex flex-shrink-0 items-center gap-3 rounded-lg border border-dashed border-red-300 bg-red-50 px-3 py-2"
+                      >
+                        <div>
+                          <p className="text-sm font-bold text-red-700">{text.headline}</p>
+                          <p className="text-[11px] text-red-600">
+                            {text.minimum}
+                            {text.until && ` · ${text.until}`}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => copyCode(voucher.code)}
+                          title="Copy code, then enter it at checkout"
+                          className="min-h-[32px] rounded-md bg-red-600 px-2 font-mono text-xs font-bold text-white hover:bg-red-700"
+                        >
+                          {copiedCode === voucher.code ? 'Copied!' : voucher.code}
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
               {/* Categories this shop sells in */}
               {shopCategories.length > 1 && (
                 <div className="flex gap-2 overflow-x-auto px-4 pt-3 sm:px-6">
@@ -382,6 +447,8 @@ export default function ShopProfileModal({
                     {visibleProducts.map((product) => {
                       const summary = reviewSummaries[product.id];
                       const stock = Number(product.stock) || 0;
+                      const sale = saleInfo(product);
+                      const sold = soldCounts[product.id] || 0;
 
                       return (
                         <button
@@ -406,10 +473,18 @@ export default function ShopProfileModal({
                                 Sold out
                               </span>
                             )}
+                            {sale && stock > 0 && (
+                              <span className="absolute right-1.5 top-1.5 rounded bg-red-600 px-1.5 py-0.5 text-[11px] font-bold text-white">
+                                -{sale.percent}%
+                              </span>
+                            )}
                           </div>
                           <div className="flex flex-1 flex-col p-3">
                             <p className="line-clamp-2 min-h-[2.5rem] text-sm text-gray-900">{product.name}</p>
-                            <p className="mt-1 text-lg font-bold text-blue-600">₱{Number(product.price).toFixed(2)}</p>
+                            <p className="mt-1 flex flex-wrap items-baseline gap-x-1.5">
+                              <span className="text-lg font-bold text-blue-600">₱{Number(product.price).toFixed(2)}</span>
+                              {sale && <span className="text-xs text-gray-400 line-through">₱{sale.original.toFixed(2)}</span>}
+                            </p>
                             <div className="mt-auto flex items-center justify-between gap-2 pt-1 text-xs text-gray-500">
                               {summary ? (
                                 <span className="flex items-center gap-1">
@@ -419,7 +494,7 @@ export default function ShopProfileModal({
                               ) : (
                                 <span>No reviews</span>
                               )}
-                              {stock > 0 && <span>{stock} left</span>}
+                              {sold > 0 ? <span>{formatSold(sold)} sold</span> : stock > 0 && <span>{stock} left</span>}
                             </div>
                           </div>
                         </button>

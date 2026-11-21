@@ -2,8 +2,53 @@
 
 import { useEffect, useRef, useState } from 'react';
 import StarRating from './StarRating';
+import LikeButton from './LikeButton';
 import Avatar from '@/components/ui/Avatar';
 import Img from '@/components/ui/Img';
+import { describeVoucher, formatSold, saleInfo, shareProduct } from '@/lib/shopFeatures';
+
+/** A row of small product tiles: "More from this shop", "You may also like". */
+function ProductStrip({ title, items, onSelect, soldCounts = {} }) {
+  if (!items || items.length === 0) return null;
+  return (
+    <section className="border-t border-gray-100 p-6">
+      <h3 className="mb-3 text-lg font-bold text-gray-900">{title}</h3>
+      <div className="-mx-1 flex gap-3 overflow-x-auto px-1 pb-1">
+        {items.map((item) => {
+          const sale = saleInfo(item);
+          return (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => onSelect(item)}
+              className="w-36 flex-shrink-0 overflow-hidden rounded-xl border border-gray-100 bg-white text-left shadow-sm transition-shadow hover:shadow-md"
+            >
+              <div className="relative aspect-square w-full bg-gray-100">
+                {item.image_url ? (
+                  <Img src={item.image_url} alt={item.name} width={288} className="absolute inset-0 h-full w-full object-cover" />
+                ) : (
+                  <div className="flex h-full items-center justify-center text-[10px] text-gray-400">No image</div>
+                )}
+                {sale && (
+                  <span className="absolute right-1 top-1 rounded bg-red-600 px-1.5 py-0.5 text-[10px] font-bold text-white">
+                    -{sale.percent}%
+                  </span>
+                )}
+              </div>
+              <div className="p-2">
+                <p className="line-clamp-2 min-h-[2rem] text-xs text-gray-900">{item.name}</p>
+                <p className="mt-1 text-sm font-bold text-blue-600">₱{Number(item.price).toFixed(2)}</p>
+                {soldCounts[item.id] > 0 && (
+                  <p className="text-[10px] text-gray-500">{formatSold(soldCounts[item.id])} sold</p>
+                )}
+              </div>
+            </button>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
 
 const formatReviewDate = (value) => {
   if (!value) return '';
@@ -39,8 +84,23 @@ export default function ProductDetailsModal({
   onClose,
   onAddToCart,
   onBuyNow,
+  sold = 0,
+  soldCounts = {},
+  liked = false,
+  onToggleLike,
+  vouchers = [],
+  freeShippingThreshold = null,
+  moreFromShop = [],
+  similarProducts = [],
+  onSelectProduct,
 }) {
   const [quantity, setQuantity] = useState(1);
+  // Reviews: which stars to show (0 = all, 'photos' = only with photos), and
+  // whether the whole list is open.
+  const [reviewFilter, setReviewFilter] = useState(0);
+  const [showAllReviews, setShowAllReviews] = useState(false);
+  const [shareNote, setShareNote] = useState('');
+  const [copiedCode, setCopiedCode] = useState('');
   const [draftRating, setDraftRating] = useState(5);
   const [draftComment, setDraftComment] = useState('');
   const [savingReview, setSavingReview] = useState(false);
@@ -52,6 +112,11 @@ export default function ProductDetailsModal({
   // A second input with `capture` opens the phone's camera instead of its
   // gallery; a laptop falls back to a normal file picker.
   const reviewCameraRef = useRef(null);
+  // Opening another product from "More from this shop" starts at the top.
+  const scrollRef = useRef(null);
+  useEffect(() => {
+    if (scrollRef.current) scrollRef.current.scrollTop = 0;
+  }, [product?.id]);
 
   // Every product opens with a clean review draft and its first photo.
   useEffect(() => {
@@ -60,6 +125,10 @@ export default function ProductDetailsModal({
     setReviewFeedback(null);
     setQuantity(1);
     setActiveImage(0);
+    setReviewFilter(0);
+    setShowAllReviews(false);
+    setShareNote('');
+    setCopiedCode('');
     setReviewPhotos((current) => {
       current.forEach((photo) => URL.revokeObjectURL(photo.preview));
       return [];
@@ -91,6 +160,39 @@ export default function ProductDetailsModal({
   const averageRating = reviewCount
     ? reviews.reduce((sum, review) => sum + (Number(review.rating) || 0), 0) / reviewCount
     : 0;
+  const sale = saleInfo(product);
+
+  // How many reviews gave each number of stars, for the bars.
+  const starCounts = [5, 4, 3, 2, 1].map((stars) => ({
+    stars,
+    count: reviews.filter((review) => Math.round(Number(review.rating) || 0) === stars).length,
+  }));
+  const withPhotos = reviews.filter((review) => Array.isArray(review.photos) && review.photos.length > 0);
+  const filteredReviews =
+    reviewFilter === 'photos'
+      ? withPhotos
+      : reviewFilter
+        ? reviews.filter((review) => Math.round(Number(review.rating) || 0) === reviewFilter)
+        : reviews;
+  const shownReviews = showAllReviews ? filteredReviews : filteredReviews.slice(0, 3);
+
+  const handleShare = async () => {
+    const result = await shareProduct(product);
+    setShareNote(
+      result === 'copied' ? 'Link copied' : result === 'shared' ? 'Shared' : result === 'failed' ? 'Could not share' : ''
+    );
+    setTimeout(() => setShareNote(''), 2500);
+  };
+
+  const copyCode = async (code) => {
+    try {
+      await navigator.clipboard.writeText(code);
+      setCopiedCode(code);
+      setTimeout(() => setCopiedCode(''), 2000);
+    } catch (error) {
+      setCopiedCode('');
+    }
+  };
 
   const handleReviewSubmit = async (event) => {
     event.preventDefault();
@@ -180,6 +282,7 @@ export default function ProductDetailsModal({
       onClick={onClose}
     >
       <div
+        ref={scrollRef}
         className="bg-white rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto shadow-2xl"
         onClick={(event) => event.stopPropagation()}
       >
@@ -254,14 +357,94 @@ export default function ProductDetailsModal({
               </button>
             </div>
 
-            <h2 className="text-2xl font-bold text-gray-900 mb-2">{product.name}</h2>
+            <div className="mb-2 flex items-start gap-2">
+              <h2 className="min-w-0 flex-1 text-2xl font-bold text-gray-900">{product.name}</h2>
+              <div className="flex flex-shrink-0 items-center gap-1">
+                {onToggleLike && (
+                  <LikeButton
+                    liked={liked}
+                    onToggle={() => onToggleLike(product)}
+                    productName={product.name}
+                    size="sm"
+                    className="border border-gray-200 shadow-none"
+                  />
+                )}
+                <button
+                  type="button"
+                  onClick={handleShare}
+                  aria-label={`Share ${product.name}`}
+                  title="Share"
+                  className="flex h-9 w-9 items-center justify-center rounded-full border border-gray-200 text-gray-600 transition-colors hover:bg-gray-50"
+                >
+                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12s-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+            {shareNote && <p className="-mt-1 mb-2 text-right text-xs font-semibold text-green-700" role="status">{shareNote}</p>}
 
-            <div className="flex items-end gap-3 mb-4">
+            <div className="mb-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-gray-600">
+              {reviewCount > 0 && (
+                <span className="flex items-center gap-1">
+                  <span className="font-semibold text-gray-900 underline">{averageRating.toFixed(1)}</span>
+                  <StarRating rating={averageRating} />
+                </span>
+              )}
+              {reviewCount > 0 && <span className="text-gray-300">|</span>}
+              {reviewCount > 0 && <span>{reviewCount} {reviewCount === 1 ? 'rating' : 'ratings'}</span>}
+              {sold > 0 && reviewCount > 0 && <span className="text-gray-300">|</span>}
+              {sold > 0 && <span>{formatSold(sold)} sold</span>}
+            </div>
+
+            <div className="mb-4 flex flex-wrap items-end gap-x-3 gap-y-1 rounded-xl bg-gray-50 px-3 py-2">
+              {sale && <span className="text-base text-gray-400 line-through">₱{sale.original.toFixed(2)}</span>}
               <span className="text-3xl font-bold text-blue-600">₱{price.toFixed(2)}</span>
-              <span className={`text-sm font-semibold ${inStock ? 'text-green-600' : 'text-red-600'}`}>
+              {sale && (
+                <span className="rounded bg-red-600 px-1.5 py-0.5 text-xs font-bold text-white">-{sale.percent}%</span>
+              )}
+              <span className={`ml-auto text-sm font-semibold ${inStock ? 'text-green-600' : 'text-red-600'}`}>
                 {inStock ? `${stock} in stock` : 'Out of stock'}
               </span>
             </div>
+
+            {/* Shop vouchers */}
+            {vouchers.length > 0 && (
+              <div className="mb-4">
+                <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-gray-500">Shop vouchers</p>
+                <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
+                  {vouchers.map((voucher) => {
+                    const text = describeVoucher(voucher);
+                    return (
+                      <div
+                        key={voucher.id}
+                        className="flex flex-shrink-0 items-center gap-3 rounded-lg border border-dashed border-red-300 bg-red-50 px-3 py-2"
+                      >
+                        <div>
+                          <p className="text-sm font-bold text-red-700">{text.headline}</p>
+                          <p className="text-[11px] text-red-600">{text.minimum}</p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => copyCode(voucher.code)}
+                          className="min-h-[32px] rounded-md bg-red-600 px-2 font-mono text-xs font-bold text-white hover:bg-red-700"
+                          title="Copy code, then enter it at checkout"
+                        >
+                          {copiedCode === voucher.code ? 'Copied!' : voucher.code}
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {freeShippingThreshold > 0 && (
+              <p className="mb-4 flex items-center gap-2 text-sm text-green-700">
+                <span aria-hidden="true">🚚</span>
+                Free delivery within Daet on orders of ₱{Number(freeShippingThreshold).toLocaleString('en-PH')}+ from this shop
+              </p>
+            )}
 
             {(sellerInfo || product.artisan_name) && (
               <div className="space-y-2 mb-4 pb-4 border-b border-gray-100">
@@ -389,13 +572,69 @@ export default function ProductDetailsModal({
             </p>
           )}
 
+          {reviewCount > 0 && (
+            <div className="mb-4 rounded-xl border border-gray-100 bg-amber-50/50 p-4">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+                <div className="text-center sm:w-32">
+                  <p className="text-3xl font-bold text-amber-600">
+                    {averageRating.toFixed(1)}
+                    <span className="text-base text-gray-500"> / 5</span>
+                  </p>
+                  <div className="mt-1 flex justify-center">
+                    <StarRating rating={averageRating} />
+                  </div>
+                </div>
+                <ul className="flex-1 space-y-1">
+                  {starCounts.map(({ stars, count }) => (
+                    <li key={stars} className="flex items-center gap-2 text-xs text-gray-600">
+                      <span className="w-6 text-right">{stars}★</span>
+                      <span className="h-2 flex-1 overflow-hidden rounded-full bg-gray-200">
+                        <span
+                          className="block h-full rounded-full bg-amber-400"
+                          style={{ width: `${reviewCount ? (count / reviewCount) * 100 : 0}%` }}
+                        />
+                      </span>
+                      <span className="w-6">{count}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {[
+                  { value: 0, label: `All (${reviewCount})` },
+                  ...starCounts.map(({ stars, count }) => ({ value: stars, label: `${stars} Star (${count})` })),
+                  { value: 'photos', label: `With photos (${withPhotos.length})` },
+                ].map((chip) => (
+                  <button
+                    key={chip.value}
+                    type="button"
+                    onClick={() => {
+                      setReviewFilter(chip.value);
+                      setShowAllReviews(false);
+                    }}
+                    aria-pressed={reviewFilter === chip.value}
+                    className={`min-h-[32px] rounded-md border px-3 text-xs font-medium transition-colors ${
+                      reviewFilter === chip.value
+                        ? 'border-blue-600 bg-white text-blue-600'
+                        : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300'
+                    }`}
+                  >
+                    {chip.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           {reviewCount === 0 ? (
             <p className="text-sm text-gray-500">
               Be the first to review this product once your order has been delivered.
             </p>
+          ) : filteredReviews.length === 0 ? (
+            <p className="text-sm text-gray-500">No reviews match this filter yet.</p>
           ) : (
             <ul className="space-y-3">
-              {reviews.slice(0, 3).map((review) => (
+              {shownReviews.map((review) => (
                 <li key={review.id} className="flex gap-3 rounded-xl bg-gray-50 p-4">
                   {/* Who wrote it: the name and picture are stored on the
                       review itself, because profiles are private. */}
@@ -444,6 +683,16 @@ export default function ProductDetailsModal({
                 </li>
               ))}
             </ul>
+          )}
+
+          {filteredReviews.length > 3 && (
+            <button
+              type="button"
+              onClick={() => setShowAllReviews((open) => !open)}
+              className="mt-3 min-h-[40px] w-full rounded-lg border border-gray-200 text-sm font-semibold text-blue-600 hover:bg-gray-50"
+            >
+              {showAllReviews ? 'Show fewer reviews' : `See all ${filteredReviews.length} reviews`}
+            </button>
           )}
 
           {canReview && (
@@ -579,6 +828,23 @@ export default function ProductDetailsModal({
             </p>
           )}
         </section>
+
+        {onSelectProduct && (
+          <>
+            <ProductStrip
+              title={sellerInfo?.business_name ? `More from ${sellerInfo.business_name}` : 'More from this shop'}
+              items={moreFromShop}
+              onSelect={onSelectProduct}
+              soldCounts={soldCounts}
+            />
+            <ProductStrip
+              title="You may also like"
+              items={similarProducts}
+              onSelect={onSelectProduct}
+              soldCounts={soldCounts}
+            />
+          </>
+        )}
       </div>
     </div>
   );

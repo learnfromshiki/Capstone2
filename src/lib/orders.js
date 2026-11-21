@@ -233,8 +233,11 @@ export const transitionOrderStatus = async (orderId, newStatus) => {
  * cancel_my_order() function from supabase-checkout-security.sql; buyers have
  * no direct write access to orders or stock.
  */
-export const cancelMyOrder = async (orderId) => {
-  const { data, error } = await supabase.rpc('cancel_my_order', { p_order_id: orderId });
+export const cancelMyOrder = async (orderId, reason = null) => {
+  // The reason is sent only when given, so this still works on a database
+  // that has not run supabase-shopee-features.sql.
+  const args = reason ? { p_order_id: orderId, p_reason: reason } : { p_order_id: orderId };
+  const { data, error } = await supabase.rpc('cancel_my_order', args);
 
   if (error) {
     if (isMissingFunction(error)) {

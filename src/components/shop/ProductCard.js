@@ -1,7 +1,9 @@
 'use client';
 
 import StarRating from './StarRating';
+import LikeButton from './LikeButton';
 import Img from '@/components/ui/Img';
+import { formatSold, saleInfo } from '@/lib/shopFeatures';
 
 export default function ProductCard({
   product,
@@ -11,10 +13,14 @@ export default function ProductCard({
   sellerInfo,
   reviewSummary,
   onViewShop,
+  sold = 0,
+  liked = false,
+  onToggleLike,
 }) {
   // One reading of the stock for the badge, the label and the buttons, so they
   // can never disagree about whether something is sold out.
   const stock = Number(product.stock) || 0;
+  const sale = saleInfo(product);
   const categoryIcons = {
     handicrafts: '🧺',
     food: '🍽️',
@@ -57,9 +63,21 @@ export default function ProductCard({
         
         {/* Category Badge */}
         {product.category && (
-          <div className="absolute top-3 right-3 bg-white/95 backdrop-blur-sm text-gray-900 text-xs px-3 py-1.5 rounded-full font-semibold shadow-lg flex items-center gap-1">
+          <div className="absolute bottom-3 left-3 bg-white/95 backdrop-blur-sm text-gray-900 text-xs px-3 py-1.5 rounded-full font-semibold shadow-lg flex items-center gap-1">
             <span>{categoryIcons[product.category] || '🏪'}</span>
             <span className="capitalize">{product.category}</span>
+          </div>
+        )}
+
+        {onToggleLike && (
+          <div className="absolute right-2 top-2">
+            <LikeButton liked={liked} onToggle={() => onToggleLike(product)} productName={product.name} />
+          </div>
+        )}
+
+        {sale && stock > 0 && (
+          <div className="absolute bottom-3 right-3 rounded-md bg-red-600 px-2 py-1 text-xs font-bold text-white shadow">
+            -{sale.percent}%
           </div>
         )}
 
@@ -90,13 +108,23 @@ export default function ProductCard({
           {product.name}
         </button>
 
-        {reviewSummary && reviewSummary.count > 0 && (
-          <div className="flex items-center gap-2 mb-2">
-            <StarRating rating={reviewSummary.average} />
-            <span className="text-sm font-semibold text-gray-800">
-              {reviewSummary.average.toFixed(1)}
-            </span>
-            <span className="text-xs text-gray-500">({reviewSummary.count})</span>
+        {((reviewSummary && reviewSummary.count > 0) || sold > 0) && (
+          <div className="mb-2 flex flex-wrap items-center gap-2">
+            {reviewSummary && reviewSummary.count > 0 && (
+              <>
+                <StarRating rating={reviewSummary.average} />
+                <span className="text-sm font-semibold text-gray-800">
+                  {reviewSummary.average.toFixed(1)}
+                </span>
+                <span className="text-xs text-gray-500">({reviewSummary.count})</span>
+              </>
+            )}
+            {sold > 0 && (
+              <span className="text-xs text-gray-500">
+                {reviewSummary && reviewSummary.count > 0 && <span className="mr-2 text-gray-300">|</span>}
+                {formatSold(sold)} sold
+              </span>
+            )}
           </div>
         )}
         
@@ -160,6 +188,9 @@ export default function ProductCard({
             <span className="text-2xl font-bold text-blue-700">
               ₱{Number(product.price || 0).toFixed(2)}
             </span>
+            {sale && (
+              <span className="ml-2 text-sm text-gray-400 line-through">₱{sale.original.toFixed(2)}</span>
+            )}
           </div>
           <div className="text-right">
             <p className="text-xs text-gray-500 mb-1">Stock</p>

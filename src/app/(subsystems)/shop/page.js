@@ -20,8 +20,21 @@ import NavBadge from '@/components/ui/NavBadge';
 import useLiveBadges from '@/lib/useLiveBadges';
 import { storeBuyNow } from '@/lib/buyNow';
 import ShopFooter from '@/components/shop/ShopFooter';
+import Img from '@/components/ui/Img';
 import { flushCart, loadCart, readLocalCart, saveCart } from '@/lib/cart';
 import { dashboardPathForRole } from '@/lib/roles';
+import { listShippingRates } from '@/lib/shipping';
+import { WISHLIST_EVENT, readWishlist, toggleWishlist } from '@/lib/wishlist';
+import {
+  clearRecentlyViewed,
+  fetchFollowerCounts,
+  fetchMyFollows,
+  fetchShopVouchers,
+  fetchSoldCounts,
+  readRecentlyViewed,
+  rememberViewed,
+  setFollowing,
+} from '@/lib/shopFeatures';
 
 export default function ShopPage() {
   const [products, setProducts] = useState([]);
@@ -86,6 +99,17 @@ export default function ShopPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState('newest');
   const [inStockOnly, setInStockOnly] = useState(false);
+  // Price range filter (empty = no limit)
+  const [priceMin, setPriceMin] = useState('');
+  const [priceMax, setPriceMax] = useState('');
+  // Shopee-style extras: units sold, followers, vouchers, likes, history
+  const [soldCounts, setSoldCounts] = useState({});
+  const [followerCounts, setFollowerCounts] = useState({});
+  const [myFollows, setMyFollows] = useState(() => new Set());
+  const [vouchersBySeller, setVouchersBySeller] = useState({});
+  const [likedIds, setLikedIds] = useState([]);
+  const [recentIds, setRecentIds] = useState([]);
+  const [freeShippingThreshold, setFreeShippingThreshold] = useState(null);
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [loginRequested, setLoginRequested] = useState(false);
   const { user, profile, role, isSuspended, loading: authLoading, signOut } = useAuth();
@@ -101,6 +125,95 @@ export default function ShopPage() {
       window.location.href = dashboardPathForRole(role);
     }
   }, [loginRequested, authLoading, user, role]);
+
+  // Units sold, followers, live vouchers and the free-delivery threshold:
+  // public figures, loaded once with the page.
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all([fetchSoldCounts(), fetchFollowerCounts(), fetchShopVouchers()]).then(([sold, followers, vouchers]) => {
+      if (cancelled) return;
+      setSoldCounts(sold);
+      setFollowerCounts(followers);
+      setVouchersBySeller(vouchers);
+    });
+    listShippingRates()
+      .then(({ rates }) => {
+        if (cancelled) return;
+        const active = (rates || []).filter((rate) => rate.is_active !== false);
+        const daet =
+          active.find((rate) => /^daet$/i.test(rate.city || '')) ||
+          active.find((rate) => /camarines norte/i.test(rate.province || '') && !rate.city) ||
+          active.find((rate) => !rate.province && !rate.city);
+        setFreeShippingThreshold(Number(daet?.free_threshold) > 0 ? Number(daet.free_threshold) : null);
+      })
+      .catch(() => {});
+    setRecentIds(readRecentlyViewed());
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // The shops this account follows, and its liked products (kept in this
+  // browser, per account, and shared with the My Account page).
+  useEffect(() => {
+    let cancelled = false;
+    fetchMyFollows(user?.id).then((follows) => {
+      if (!cancelled) setMyFollows(follows);
+    });
+    setLikedIds(readWishlist(user?.id));
+    const onWishlist = (event) => {
+      if (event.detail?.userId === user?.id) setLikedIds(event.detail.ids || []);
+    };
+    window.addEventListener(WISHLIST_EVENT, onWishlist);
+    return () => {
+      cancelled = true;
+      window.removeEventListener(WISHLIST_EVENT, onWishlist);
+    };
+  }, [user?.id]);
+
+  // Opening a product adds it to "Recently viewed".
+  useEffect(() => {
+    if (selectedProduct?.id) setRecentIds(rememberViewed(selectedProduct.id));
+  }, [selectedProduct?.id]);
+
+  const toggleLike = (product) => {
+    if (!user) {
+      setShowAuthModal(true);
+      return;
+    }
+    const { ids, saved } = toggleWishlist(user.id, product.id);
+    setLikedIds(ids);
+    showToast(saved ? 'Added to your Likes' : 'Removed from your Likes', 'success');
+  };
+
+  const toggleFollow = async (seller) => {
+    if (!user) {
+      setShowAuthModal(true);
+      return;
+    }
+    const follow = !myFollows.has(seller.id);
+    // Show it at once; undo if the database says no.
+    const apply = (on) => {
+      setMyFollows((current) => {
+        const next = new Set(current);
+        if (on) next.add(seller.id);
+        else next.delete(seller.id);
+        return next;
+      });
+      setFollowerCounts((counts) => ({
+        ...counts,
+        [seller.id]: Math.max(0, (counts[seller.id] || 0) + (on ? 1 : -1)),
+      }));
+    };
+    apply(follow);
+    try {
+      await setFollowing(user.id, seller.id, follow);
+      showToast(follow ? `You are now following ${seller.business_name}` : `Unfollowed ${seller.business_name}`, 'success');
+    } catch (error) {
+      apply(!follow);
+      showToast(error.message || 'Could not update. Please try again.', 'error');
+    }
+  };
   const cartKey = user ? `shop_cart:${user.id}` : null;
   const [cartOwner, setCartOwner] = useState(undefined);
   // The cart as last loaded from / sent to the database, so it is not re-sent.
@@ -750,16 +863,22 @@ export default function ShopPage() {
   });
 
   const normalizedQuery = searchQuery.trim().toLowerCase();
+  const minPrice = priceMin === '' ? null : Number(priceMin);
+  const maxPrice = priceMax === '' ? null : Number(priceMax);
+  const priceFilterOn = minPrice !== null || maxPrice !== null;
   const filteredProducts = products
     .filter((p) => {
       const matchesCategory = filter === 'all' || p.category === filter;
       const matchesStock = !inStockOnly || (Number(p.stock) || 0) > 0;
+      const price = Number(p.price) || 0;
+      const matchesPrice =
+        (minPrice === null || price >= minPrice) && (maxPrice === null || price <= maxPrice);
       // The search box looks for the product's name and nothing else.
       // Matching descriptions as well meant typing "wood" returned anything
       // whose write-up mentioned wood, which made the results look random.
       const matchesSearch =
         normalizedQuery === '' || String(p.name || '').toLowerCase().includes(normalizedQuery);
-      return matchesCategory && matchesStock && matchesSearch;
+      return matchesCategory && matchesStock && matchesSearch && matchesPrice;
     })
     .sort((a, b) => {
       // The chosen order is applied exactly as its label says. Sold-out items
@@ -776,12 +895,40 @@ export default function ShopPage() {
             (reviewSummaries[b.id]?.average || 0) - (reviewSummaries[a.id]?.average || 0) ||
             (reviewSummaries[b.id]?.count || 0) - (reviewSummaries[a.id]?.count || 0)
           );
+        case 'sales':
+          return (soldCounts[b.id] || 0) - (soldCounts[a.id] || 0);
         case 'name':
           return String(a.name || '').localeCompare(String(b.name || ''));
         default:
           return new Date(b.created_at || 0) - new Date(a.created_at || 0);
       }
     });
+
+  // Recently viewed products that are still listed, newest first.
+  const productById = new Map(products.map((product) => [product.id, product]));
+  const recentlyViewed = recentIds.map((id) => productById.get(id)).filter(Boolean);
+
+  // For the product window: more from the same shop, then similar products
+  // (same category) from other shops, best sellers first.
+  const bySales = (a, b) => (soldCounts[b.id] || 0) - (soldCounts[a.id] || 0);
+  const moreFromShop = selectedProduct?.seller_id
+    ? products
+        .filter((item) => item.seller_id === selectedProduct.seller_id && item.id !== selectedProduct.id)
+        .sort(bySales)
+        .slice(0, 10)
+    : [];
+  const similarProducts = selectedProduct
+    ? products
+        .filter(
+          (item) =>
+            item.id !== selectedProduct.id &&
+            item.seller_id !== selectedProduct.seller_id &&
+            item.category &&
+            item.category === selectedProduct.category
+        )
+        .sort(bySales)
+        .slice(0, 10)
+    : [];
 
   const cartItemCount = cart.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0);
   const accountHref =
@@ -987,6 +1134,43 @@ export default function ShopPage() {
                 {filter !== 'all' && ` in ${categories.find((c) => c.value === filter)?.label || filter}`}
               </p>
               <div className="flex flex-wrap items-center gap-3">
+                {/* Price range */}
+                <div className="flex items-center gap-1.5 text-sm text-gray-700" role="group" aria-label="Price range">
+                  <span className="sr-only sm:not-sr-only">₱</span>
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    min="0"
+                    value={priceMin}
+                    onChange={(e) => setPriceMin(e.target.value.replace(/[^\d.]/g, ''))}
+                    placeholder="Min"
+                    aria-label="Minimum price"
+                    className="min-h-[44px] w-20 rounded-lg border-2 border-gray-200 px-2 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+                  />
+                  <span aria-hidden="true">–</span>
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    min="0"
+                    value={priceMax}
+                    onChange={(e) => setPriceMax(e.target.value.replace(/[^\d.]/g, ''))}
+                    placeholder="Max"
+                    aria-label="Maximum price"
+                    className="min-h-[44px] w-20 rounded-lg border-2 border-gray-200 px-2 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+                  />
+                  {priceFilterOn && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPriceMin('');
+                        setPriceMax('');
+                      }}
+                      className="min-h-[44px] px-1 text-xs font-semibold text-blue-600 hover:underline"
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
                 <label className="flex min-h-[44px] cursor-pointer items-center gap-2 text-sm text-gray-700">
                   <input
                     type="checkbox"
@@ -1004,6 +1188,7 @@ export default function ShopPage() {
                     className="min-h-[44px] rounded-lg border-2 border-gray-200 bg-white px-3 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
                   >
                     <option value="newest">Newest</option>
+                    <option value="sales">Top Sales</option>
                     <option value="price-asc">Price: Low to High</option>
                     <option value="price-desc">Price: High to Low</option>
                     <option value="rating">Top Rated</option>
@@ -1044,12 +1229,14 @@ export default function ShopPage() {
             <p className="text-gray-500 mb-6">
               {searchQuery ? `We couldn't find any products matching "${searchQuery}"` : 'No products available in this category'}
             </p>
-            {(searchQuery || filter !== 'all' || inStockOnly) && (
+            {(searchQuery || filter !== 'all' || inStockOnly || priceFilterOn) && (
               <button
                 onClick={() => {
                   setSearchQuery('');
                   setFilter('all');
                   setInStockOnly(false);
+                  setPriceMin('');
+                  setPriceMax('');
                 }}
                 className="inline-flex items-center gap-2 bg-blue-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-blue-700 transition-colors"
               >
@@ -1061,6 +1248,45 @@ export default function ShopPage() {
             )}
           </div>
         ) : (
+          <>
+            {/* Recently viewed: only on the plain front of the shop */}
+            {recentlyViewed.length > 0 && !searchQuery && filter === 'all' && !priceFilterOn && (
+              <section className="mb-6 mt-6 rounded-2xl bg-white p-4 shadow-sm" aria-label="Recently viewed">
+                <div className="mb-3 flex items-center justify-between">
+                  <h2 className="text-base font-bold text-gray-900">Recently viewed</h2>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      clearRecentlyViewed();
+                      setRecentIds([]);
+                    }}
+                    className="min-h-[36px] text-xs font-semibold text-gray-500 hover:text-gray-800"
+                  >
+                    Clear
+                  </button>
+                </div>
+                <div className="-mx-1 flex gap-3 overflow-x-auto px-1 pb-1">
+                  {recentlyViewed.map((item) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => setSelectedProduct(item)}
+                      className="w-28 flex-shrink-0 text-left"
+                    >
+                      <div className="relative aspect-square w-full overflow-hidden rounded-lg bg-gray-100">
+                        {item.image_url ? (
+                          <Img src={item.image_url} alt={item.name} width={224} className="absolute inset-0 h-full w-full object-cover" />
+                        ) : (
+                          <div className="flex h-full items-center justify-center text-[10px] text-gray-400">No image</div>
+                        )}
+                      </div>
+                      <p className="mt-1 truncate text-xs text-gray-800">{item.name}</p>
+                      <p className="text-xs font-bold text-blue-600">₱{Number(item.price).toFixed(2)}</p>
+                    </button>
+                  ))}
+                </div>
+              </section>
+            )}
           <div className="stagger-children grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
             {filteredProducts.map((product) => (
               <ProductCard
@@ -1072,9 +1298,13 @@ export default function ShopPage() {
                 sellerInfo={sellers[product.seller_id]}
                 onViewShop={() => setSelectedSellerId(product.seller_id)}
                 reviewSummary={reviewSummaries[product.id]}
+                sold={soldCounts[product.id] || 0}
+                liked={likedIds.includes(product.id)}
+                onToggleLike={toggleLike}
               />
             ))}
           </div>
+          </>
         )}
       </main>
 
@@ -1106,6 +1336,15 @@ export default function ShopPage() {
         onClose={() => setSelectedProduct(null)}
         onAddToCart={addToCart}
         onBuyNow={buyNow}
+        sold={selectedProduct ? soldCounts[selectedProduct.id] || 0 : 0}
+        soldCounts={soldCounts}
+        liked={Boolean(selectedProduct && likedIds.includes(selectedProduct.id))}
+        onToggleLike={toggleLike}
+        vouchers={selectedProduct?.seller_id ? vouchersBySeller[selectedProduct.seller_id] || [] : []}
+        freeShippingThreshold={freeShippingThreshold}
+        moreFromShop={moreFromShop}
+        similarProducts={similarProducts}
+        onSelectProduct={setSelectedProduct}
       />
 
       {/* Choose options (Buy Now / products with variants) */}
@@ -1122,6 +1361,11 @@ export default function ShopPage() {
         products={selectedSellerId ? products.filter((item) => item.seller_id === selectedSellerId) : []}
         reviewSummaries={reviewSummaries}
         categories={categories}
+        soldCounts={soldCounts}
+        followers={selectedSellerId ? followerCounts[selectedSellerId] || 0 : 0}
+        following={Boolean(selectedSellerId && myFollows.has(selectedSellerId))}
+        onToggleFollow={toggleFollow}
+        vouchers={selectedSellerId ? vouchersBySeller[selectedSellerId] || [] : []}
         onClose={() => setSelectedSellerId(null)}
         onViewProduct={(product) => {
           setSelectedSellerId(null);

@@ -23,6 +23,8 @@ import {
 import SellerPaymentSettings from '@/components/shop/SellerPaymentSettings';
 import ProductReviewsModal from '@/components/shop/ProductReviewsModal';
 import PaymentProof from '@/components/shop/PaymentProof';
+import TrackingForm from '@/components/shop/TrackingForm';
+import SellerVouchers from '@/components/shop/SellerVouchers';
 import { fetchProfileRow, joinName, splitName } from '@/lib/profile';
 import { describeSelection, readOptions } from '@/lib/productOptions';
 import ChatPanel from '@/components/shop/ChatPanel';
@@ -320,9 +322,16 @@ export default function SellerDashboard() {
     // fall back so an older database still lists its orders.
     // Pickup and points arrive with supabase-cart-pickup-redemption.sql.
     const PAYMENT_COLUMNS = 'payment_proof_url, payment_reference, payment_proof_at, payment_status, paid_at';
+    // Vouchers, cancel reasons and tracking arrive with supabase-shopee-features.sql.
     let { data: orderRows, error: ordersError } = await readOrders(
-      `${ORDER_COLUMNS}, ${PAYMENT_COLUMNS}, fulfillment_method, points_redeemed, points_discount`
+      `${ORDER_COLUMNS}, ${PAYMENT_COLUMNS}, fulfillment_method, points_redeemed, points_discount, voucher_code, voucher_discount, cancel_reason, courier, tracking_number`
     );
+
+    if (ordersError && /column/i.test(ordersError.message || '')) {
+      ({ data: orderRows, error: ordersError } = await readOrders(
+        `${ORDER_COLUMNS}, ${PAYMENT_COLUMNS}, fulfillment_method, points_redeemed, points_discount`
+      ));
+    }
 
     if (ordersError && /column/i.test(ordersError.message || '')) {
       ({ data: orderRows, error: ordersError } = await readOrders(`${ORDER_COLUMNS}, ${PAYMENT_COLUMNS}`));
@@ -572,6 +581,13 @@ export default function SellerDashboard() {
     const description = newProduct.description.trim();
     const price = Number(newProduct.price);
     const stock = Number(newProduct.stock);
+    const originalPriceInput = String(newProduct.original_price || '').trim();
+    const originalPrice = originalPriceInput === '' ? null : Number(originalPriceInput);
+
+    if (originalPrice !== null && (!Number.isFinite(originalPrice) || originalPrice <= price)) {
+      showAlert('The original price must be higher than the price, or leave it empty if the product is not on sale.');
+      return;
+    }
 
     if (!name) {
       showAlert('Please enter a product name.');
@@ -653,6 +669,8 @@ export default function SellerDashboard() {
         images,
         artisan_name: newProduct.artisan_name.trim() || null,
         options,
+        // The "was" price; kept only when it is really higher than the price.
+        original_price: originalPrice,
       };
 
       if (editingProductId) {
@@ -833,6 +851,7 @@ export default function SellerDashboard() {
       name: product.name || '',
       description: product.description || '',
       price: product.price ?? '',
+      original_price: product.original_price ?? '',
       stock: product.stock ?? '',
       category: product.category || 'handicrafts',
       image_url: product.image_url || '',
@@ -858,6 +877,7 @@ export default function SellerDashboard() {
       name: '',
       description: '',
       price: '',
+      original_price: '',
       stock: '',
       category: 'handicrafts',
       options: [],
@@ -1342,6 +1362,20 @@ export default function SellerDashboard() {
             </svg>
             <span className="font-medium">Orders</span>
             <NavBadge {...tabBadges.orders} />
+          </button>
+
+          <button
+            onClick={() => setActiveTab('vouchers')}
+            className={`w-full flex items-center gap-3 px-6 py-3 text-left transition-colors ${
+              activeTab === 'vouchers'
+                ? 'bg-white/10 border-l-4 border-blue-400 font-semibold'
+                : 'hover:bg-white/5'
+            }`}
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 5v2m0 4v2m0 4v2M5 5a2 2 0 00-2 2v3a2 2 0 110 4v3a2 2 0 002 2h14a2 2 0 002-2v-3a2 2 0 110-4V7a2 2 0 00-2-2H5z" />
+            </svg>
+            <span className="font-medium">Vouchers</span>
           </button>
 
           <button
@@ -2010,6 +2044,11 @@ export default function SellerDashboard() {
                           + ₱{Number(order.shipping_fee).toFixed(2)} delivery collected
                         </p>
                       )}
+                      {Number(order.voucher_discount) > 0 && (
+                        <p className="text-xs font-semibold text-red-600">
+                          Your voucher {order.voucher_code}: −₱{Number(order.voucher_discount).toFixed(2)}
+                        </p>
+                      )}
                       {Number(order.points_discount) > 0 && (
                         <p className="text-xs text-gray-500">
                           Customer paid ₱{Number(order.points_discount).toFixed(2)} with CONNECT-Daet points
@@ -2078,6 +2117,21 @@ export default function SellerDashboard() {
                     )}
                   </div>
 
+                  {order.status === 'cancelled' && order.cancel_reason && (
+                    <p className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-800">
+                      <span className="font-semibold">Cancelled:</span> {order.cancel_reason}
+                    </p>
+                  )}
+
+                  {!isPickup(order) && order.status !== 'cancelled' && order.status !== 'pending' && (
+                    <TrackingForm
+                      order={order}
+                      onSaved={(tracking) =>
+                        setOrders((rows) => rows.map((row) => (row.id === order.id ? { ...row, ...tracking } : row)))
+                      }
+                    />
+                  )}
+
                   {/* What the customer sent, for a GCash or bank order */}
                   <div className="mt-3">
                     <PaymentProof
@@ -2097,6 +2151,8 @@ export default function SellerDashboard() {
             </div>
           </div>
         )}
+
+        {activeTab === 'vouchers' && <SellerVouchers seller={seller} />}
 
         {activeTab === 'messages' && (
           <ChatPanel
@@ -2501,6 +2557,25 @@ export default function SellerDashboard() {
                     required
                   />
                   <p className="mt-1 text-xs text-gray-500">Centavos are fine, for example 1.50 or 249.99.</p>
+                </div>
+
+                <div>
+                  <label htmlFor="productOriginalPrice" className="block text-sm font-semibold mb-2">
+                    Original price (₱) <span className="font-normal text-gray-500">for a sale</span>
+                  </label>
+                  <input
+                    id="productOriginalPrice"
+                    type="text"
+                    inputMode="decimal"
+                    value={newProduct.original_price || ''}
+                    onChange={(e) => setNewProduct({ ...newProduct, original_price: sanitizePrice(e.target.value) })}
+                    placeholder="Leave empty if not on sale"
+                    maxLength={10}
+                    className="w-full min-h-[44px] px-4 py-3 border-2 rounded-xl focus:ring-2 focus:ring-blue-500"
+                  />
+                  <p className="mt-1 text-xs text-gray-500">
+                    Higher than the price above. Buyers see it crossed out with the % off.
+                  </p>
                 </div>
 
                 <div>
