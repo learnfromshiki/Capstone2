@@ -286,6 +286,8 @@ export const ONLINE_PAYMENT_METHODS = ['xendit'];
 export const isCountedSale = (order) =>
   Boolean(order) &&
   order.status !== 'cancelled' &&
+  // A returned order whose money went back is not a sale either.
+  order.payment_status !== 'refunded' &&
   !(ONLINE_PAYMENT_METHODS.includes(order.payment_method) && order.payment_status !== 'paid');
 
 /** Short, readable order number shown to buyers, sellers and admins. */

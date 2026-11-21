@@ -664,6 +664,15 @@ export default function ProductDetailsModal({
                       <p className="whitespace-pre-line text-sm leading-relaxed text-gray-700">{review.comment}</p>
                     )}
 
+                    {review.seller_reply && (
+                      <div className="mt-2 rounded-lg border-l-4 border-blue-400 bg-white px-3 py-2 text-sm">
+                        <p className="text-xs font-semibold text-blue-700">
+                          Shop reply{sellerInfo?.business_name ? ` · ${sellerInfo.business_name}` : ''}
+                        </p>
+                        <p className="whitespace-pre-line text-gray-700">{review.seller_reply}</p>
+                      </div>
+                    )}
+
                     {Array.isArray(review.photos) && review.photos.length > 0 && (
                       <ul className="mt-2 flex flex-wrap gap-2">
                         {review.photos.map((url) => (

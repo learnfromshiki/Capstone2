@@ -380,11 +380,17 @@ export default function ShopPage() {
 
       // The author columns arrive with supabase-product-options.sql; fall back
       // so an older database still shows its reviews.
-      let { data, error } = await read(`${columns}, reviewer_name, reviewer_avatar_url, photos`);
+      let { data, error } = await read(
+        `${columns}, reviewer_name, reviewer_avatar_url, photos, seller_reply, seller_reply_at, is_hidden`
+      );
 
-      // Photos arrive with supabase-notifications-payments.sql and the author
+      // Shop replies and moderation arrive with supabase-returns-reviews.sql,
+      // photos with supabase-notifications-payments.sql and the author
       // columns with supabase-product-options.sql; step back one at a time so
       // an older database still shows its reviews.
+      if (error && /column/i.test(error.message || '')) {
+        ({ data, error } = await read(`${columns}, reviewer_name, reviewer_avatar_url, photos`));
+      }
       if (error && /photos|column/i.test(error.message || '')) {
         ({ data, error } = await read(`${columns}, reviewer_name, reviewer_avatar_url`));
       }
@@ -400,7 +406,9 @@ export default function ShopPage() {
 
       const grouped = {};
       (data || []).forEach((review) => {
-        if (!review.product_id) return;
+        // A review the admin hid stays out of the shop for everyone, even
+        // the people the database still lets read it (its writer, the shop).
+        if (!review.product_id || review.is_hidden) return;
         if (!grouped[review.product_id]) grouped[review.product_id] = [];
         grouped[review.product_id].push(review);
       });

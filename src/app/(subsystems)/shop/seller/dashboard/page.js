@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSellerAuth } from '@/contexts/SellerAuthContext';
 import { supabase } from '@/lib/supabaseClient';
@@ -25,6 +25,8 @@ import ProductReviewsModal from '@/components/shop/ProductReviewsModal';
 import PaymentProof from '@/components/shop/PaymentProof';
 import TrackingForm from '@/components/shop/TrackingForm';
 import SellerVouchers from '@/components/shop/SellerVouchers';
+import ReturnRequestPanel from '@/components/shop/ReturnRequestPanel';
+import { fetchReturnRequests } from '@/lib/returns';
 import { fetchProfileRow, joinName, splitName } from '@/lib/profile';
 import { describeSelection, readOptions } from '@/lib/productOptions';
 import ChatPanel from '@/components/shop/ChatPanel';
@@ -96,6 +98,14 @@ export default function SellerDashboard() {
 
   const [products, setProducts] = useState([]);
   const [orders, setOrders] = useState([]);
+  // Return / refund requests on this shop's orders, by order
+  const [returnRequests, setReturnRequests] = useState({});
+  const loadReturnRequests = useCallback(async () => {
+    setReturnRequests(await fetchReturnRequests());
+  }, []);
+  useEffect(() => {
+    if (seller?.id) loadReturnRequests();
+  }, [seller?.id, loadReturnRequests]);
   const [categories, setCategories] = useState([]);
   const [stats, setStats] = useState({
     totalProducts: 0,
@@ -2122,6 +2132,16 @@ export default function SellerDashboard() {
                       <span className="font-semibold">Cancelled:</span> {order.cancel_reason}
                     </p>
                   )}
+
+                  <ReturnRequestPanel
+                    request={returnRequests[order.id]}
+                    order={order}
+                    role="seller"
+                    onChanged={async () => {
+                      await loadReturnRequests();
+                      fetchData();
+                    }}
+                  />
 
                   {!isPickup(order) && order.status !== 'cancelled' && order.status !== 'pending' && (
                     <TrackingForm

@@ -693,7 +693,15 @@ export default function CheckoutModal({
   const redeemableNow = allocateRedemption(afterVouchers, pointsBalance).total;
   const pointsDiscount = redemption.total * POINT_VALUE;
   const amountDue = Math.max(0, summaryTotal - voucherTotal + shippingFee - pointsDiscount);
-  const summaryPoints = estimateRewardPoints(summaryItems, redemption.bySeller);
+  // Points are earned on what is actually paid for the goods: after the
+  // shop's voucher and any points spent (as place_order() records it).
+  const deductionsBySeller = Object.fromEntries(
+    Object.keys(subtotalsBySeller).map((key) => [
+      key,
+      (Number(redemption.bySeller[key]) || 0) * POINT_VALUE + (voucherDiscounts[key] || 0),
+    ])
+  );
+  const summaryPoints = estimateRewardPoints(summaryItems, deductionsBySeller);
   // After the order is placed: exactly what the database charged.
   const chargedTotal = Number(verifiedCart?.charged) || amountDue;
   const orderNumbers = placedOrders.map((order) => formatOrderNumber(order.id));

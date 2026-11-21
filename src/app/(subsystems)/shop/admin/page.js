@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 // Shares the storefront client: sessions are per tab, so signing in as an admin
 // from the shop carries into this page instead of asking for the password again.
 import { supabase, clearStoredSession, startAdminSession } from '@/lib/supabaseClient';
@@ -25,6 +25,9 @@ import PaymentProof from '@/components/shop/PaymentProof';
 import { describeSelection } from '@/lib/productOptions';
 import { describeArea, listShippingRates } from '@/lib/shipping';
 import Img from '@/components/ui/Img';
+import AdminReviews from '@/components/shop/AdminReviews';
+import ReturnRequestPanel from '@/components/shop/ReturnRequestPanel';
+import { fetchReturnRequests, markOrderRefunded } from '@/lib/returns';
 
 /**
  * Row action buttons. Soft tinted fills instead of solid saturated colours, so
@@ -176,6 +179,12 @@ export default function ShopAdminPage() {
   // Site-wide notifications: a modal for anything that must be read or
   // confirmed, a corner toast for routine successes.
   const { showAlert, showConfirm, showToast } = useDialog();
+
+  // Return / refund requests across the marketplace, by order
+  const [returnRequests, setReturnRequests] = useState({});
+  const loadReturnRequests = useCallback(async () => {
+    setReturnRequests(await fetchReturnRequests());
+  }, []);
   
   // Live counts for the sidebar badges. A new order, shop application or
   // stock change also reloads the open tab and the bell's to-do list.
@@ -230,6 +239,7 @@ export default function ShopAdminPage() {
       fetchData();
       fetchSettings();
       loadShippingRates();
+      loadReturnRequests();
       loadNotices();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1701,6 +1711,20 @@ export default function ShopAdminPage() {
           </button>
 
           <button
+            onClick={() => setActiveTab('reviews')}
+            className={`flex w-auto flex-shrink-0 items-center gap-3 px-4 py-3 text-left transition-colors lg:w-full lg:flex-shrink lg:px-6 ${
+              activeTab === 'reviews'
+                ? 'bg-white/10 border-l-4 border-blue-400 font-semibold'
+                : 'hover:bg-white/5'
+            }`}
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
+            </svg>
+            <span className="font-medium">Reviews</span>
+          </button>
+
+          <button
             onClick={() => setActiveTab('transactions')}
             className={`flex w-auto flex-shrink-0 items-center gap-3 px-4 py-3 text-left transition-colors lg:w-full lg:flex-shrink lg:px-6 ${
               activeTab === 'transactions'
@@ -2427,6 +2451,11 @@ export default function ShopAdminPage() {
                           after {Number(order.points_redeemed).toLocaleString()} reward points ({peso(order.points_discount)})
                         </div>
                       )}
+                      {Number(order.voucher_discount) > 0 && (
+                        <div className="text-xs text-red-600">
+                          shop voucher {order.voucher_code} −{peso(order.voucher_discount)}
+                        </div>
+                      )}
                       <div className="text-sm text-gray-500">
                         {new Date(order.created_at).toLocaleString('en-PH', { dateStyle: 'medium', timeStyle: 'short' })}
                       </div>
@@ -2466,6 +2495,53 @@ export default function ShopAdminPage() {
                     </span>
                     <OnlinePaymentStatus order={order} />
                   </div>
+
+                  {order.status === 'cancelled' && order.cancel_reason && (
+                    <p className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-800">
+                      <span className="font-semibold">Cancelled:</span> {order.cancel_reason}
+                    </p>
+                  )}
+                  {order.tracking_number && (
+                    <p className="mt-3 text-sm text-gray-700">
+                      🚚 {order.courier || 'Courier'} · <span className="font-mono">{order.tracking_number}</span>
+                    </p>
+                  )}
+
+                  <ReturnRequestPanel
+                    request={returnRequests[order.id]}
+                    order={order}
+                    role="admin"
+                    onChanged={async () => {
+                      await loadReturnRequests();
+                      await fetchData();
+                    }}
+                  />
+
+                  {/* Paid, then cancelled, with no request to carry the refund */}
+                  {order.status === 'cancelled' &&
+                    order.payment_status === 'paid' &&
+                    !['approved', 'refunded'].includes(returnRequests[order.id]?.status) && (
+                      <div className="mt-3 flex flex-wrap items-center gap-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                        <span>
+                          <strong>Refund needed:</strong> this order was paid {peso(order.total_amount)} and then cancelled.
+                        </span>
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            try {
+                              await markOrderRefunded(order.id, null);
+                              showToast('Marked as refunded. The customer was notified.', 'success');
+                              await fetchData();
+                            } catch (refundError) {
+                              showAlert(refundError.message);
+                            }
+                          }}
+                          className="min-h-[40px] rounded-lg bg-blue-600 px-4 font-semibold text-white hover:bg-blue-700"
+                        >
+                          I sent the refund — mark as refunded
+                        </button>
+                      </div>
+                    )}
 
                   {/* What the customer sent, for a GCash or bank order */}
                   <PaymentProof
@@ -2536,6 +2612,8 @@ export default function ShopAdminPage() {
               </table>
             </div>
           </div>
+        ) : activeTab === 'reviews' ? (
+          <AdminReviews />
         ) : activeTab === 'transactions' ? (
           <div>
             <div className="mb-6">

@@ -5,9 +5,72 @@ import { supabase } from '@/lib/supabaseClient';
 import StarRating from './StarRating';
 import Avatar from '@/components/ui/Avatar';
 import Img from '@/components/ui/Img';
+import { replyToReview } from '@/lib/returns';
 
 const formatDate = (value) =>
   value ? new Date(value).toLocaleDateString('en-PH', { dateStyle: 'medium' }) : '';
+
+/** The shop's public answer to one review: shown, written or edited. */
+function ReplyBox({ review, onSaved }) {
+  const [editing, setEditing] = useState(!review.seller_reply);
+  const [text, setText] = useState(review.seller_reply || '');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  const save = async () => {
+    setSaving(true);
+    setError('');
+    try {
+      await replyToReview(review.id, text.trim());
+      onSaved({ ...review, seller_reply: text.trim() || null, seller_reply_at: text.trim() ? new Date().toISOString() : null });
+      setEditing(!text.trim());
+    } catch (saveError) {
+      setError(saveError.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (!editing && review.seller_reply) {
+    return (
+      <div className="mt-2 rounded-lg border-l-4 border-blue-400 bg-white px-3 py-2 text-sm">
+        <p className="text-xs font-semibold text-blue-700">Your reply</p>
+        <p className="whitespace-pre-line text-gray-700">{review.seller_reply}</p>
+        <button type="button" onClick={() => setEditing(true)} className="mt-1 text-xs font-semibold text-blue-600 hover:underline">
+          Edit reply
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-2">
+      <textarea
+        value={text}
+        onChange={(event) => setText(event.target.value.slice(0, 1000))}
+        rows={2}
+        placeholder="Reply publicly to this review (thank them, or explain how you will fix it)"
+        className="w-full rounded-lg border border-gray-300 p-2 text-sm"
+      />
+      <div className="mt-1 flex items-center gap-2">
+        <button
+          type="button"
+          onClick={save}
+          disabled={saving || (!text.trim() && !review.seller_reply)}
+          className="min-h-[36px] rounded-lg bg-blue-600 px-3 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
+        >
+          {saving ? 'Saving…' : review.seller_reply && !text.trim() ? 'Remove reply' : 'Post reply'}
+        </button>
+        {review.seller_reply && (
+          <button type="button" onClick={() => { setText(review.seller_reply); setEditing(false); }} className="text-xs text-gray-500 hover:underline">
+            Cancel
+          </button>
+        )}
+        {error && <span className="text-xs text-red-600">{error}</span>}
+      </div>
+    </div>
+  );
+}
 
 /**
  * Every review a shop's product has received.
@@ -15,7 +78,7 @@ const formatDate = (value) =>
  * A seller cannot read customer profiles, by design, so the reviewer's name,
  * picture and photos are the copies stored on the review itself.
  */
-export default function ProductReviewsModal({ product, onClose }) {
+export default function ProductReviewsModal({ product, onClose, canReply = true }) {
   const [reviews, setReviews] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -37,8 +100,13 @@ export default function ProductReviewsModal({ product, onClose }) {
     (async () => {
       // Author columns and photos are later additions; step back so an older
       // database still shows the ratings it has.
-      let { data, error } = await read(`${columns}, reviewer_name, reviewer_avatar_url, photos`);
+      let { data, error } = await read(
+        `${columns}, reviewer_name, reviewer_avatar_url, photos, seller_reply, seller_reply_at, is_hidden`
+      );
 
+      if (error && /column/i.test(error.message || '')) {
+        ({ data, error } = await read(`${columns}, reviewer_name, reviewer_avatar_url, photos`));
+      }
       if (error && /photos|column/i.test(error.message || '')) {
         ({ data, error } = await read(`${columns}, reviewer_name, reviewer_avatar_url`));
       }
@@ -171,6 +239,26 @@ export default function ProductReviewsModal({ product, onClose }) {
                           </li>
                         ))}
                       </ul>
+                    )}
+
+                    {review.is_hidden && (
+                      <p className="mt-2 text-xs font-semibold text-gray-500">Hidden from the public by the admin.</p>
+                    )}
+
+                    {canReply ? (
+                      <ReplyBox
+                        review={review}
+                        onSaved={(updated) =>
+                          setReviews((current) => current.map((entry) => (entry.id === updated.id ? updated : entry)))
+                        }
+                      />
+                    ) : (
+                      review.seller_reply && (
+                        <div className="mt-2 rounded-lg border-l-4 border-blue-400 bg-white px-3 py-2 text-sm">
+                          <p className="text-xs font-semibold text-blue-700">Shop reply</p>
+                          <p className="whitespace-pre-line text-gray-700">{review.seller_reply}</p>
+                        </div>
+                      )
                     )}
                   </div>
                 </li>

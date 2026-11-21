@@ -35,6 +35,9 @@ import {
 } from '@/lib/fieldRules';
 import Img from '@/components/ui/Img';
 import CancelOrderDialog from '@/components/shop/CancelOrderDialog';
+import ReturnRequestDialog from '@/components/shop/ReturnRequestDialog';
+import ReturnRequestPanel from '@/components/shop/ReturnRequestPanel';
+import { canRequestReturn, fetchReturnRequests, requestReturn } from '@/lib/returns';
 import { WISHLIST_EVENT, readWishlist, toggleWishlist } from '@/lib/wishlist';
 
 // The shop has accepted the order, so the customer can confirm it arrived.
@@ -879,6 +882,24 @@ export default function BuyerDashboard() {
     }
   };
 
+  // Return / refund requests, by order
+  const [returnRequests, setReturnRequests] = useState({});
+  const [returnTarget, setReturnTarget] = useState(null);
+  const loadReturnRequests = useCallback(async () => {
+    setReturnRequests(await fetchReturnRequests());
+  }, []);
+  useEffect(() => {
+    if (user?.id) loadReturnRequests();
+  }, [user?.id, loadReturnRequests]);
+
+  const submitReturnRequest = async (request) => {
+    const order = returnTarget;
+    await requestReturn(order.id, request);
+    setReturnTarget(null);
+    await loadReturnRequests();
+    showToast('Request sent. The shop will review it.', 'success');
+  };
+
   // Products the customer liked on the shop (kept in this browser per account)
   const [likedIds, setLikedIds] = useState([]);
   useEffect(() => {
@@ -1339,6 +1360,13 @@ export default function BuyerDashboard() {
                             </p>
                           )}
 
+                          <ReturnRequestPanel
+                            request={returnRequests[order.id]}
+                            order={order}
+                            role="buyer"
+                            onChanged={loadReturnRequests}
+                          />
+
                           {CAN_CONFIRM_RECEIVED.includes(order.status) && (
                             <p className="mt-3 rounded-lg bg-green-50 px-3 py-2 text-xs text-green-800">
                               {order.status === 'shipped'
@@ -1471,6 +1499,15 @@ export default function BuyerDashboard() {
                                   className="min-h-[44px] rounded-lg border-2 border-yellow-300 px-4 font-semibold text-yellow-700 hover:bg-yellow-50"
                                 >
                                   ★ Rate the items
+                                </button>
+                              )}
+                              {canRequestReturn(order, returnRequests[order.id]) && (
+                                <button
+                                  type="button"
+                                  onClick={() => setReturnTarget(order)}
+                                  className="min-h-[44px] rounded-lg border-2 border-gray-300 px-4 font-semibold text-gray-700 hover:bg-gray-50"
+                                >
+                                  {order.status === 'delivered' ? 'Return / Refund' : 'Cancel & refund'}
                                 </button>
                               )}
                               {['delivered', 'cancelled'].includes(order.status) && (
@@ -2240,6 +2277,13 @@ export default function BuyerDashboard() {
         busy={Boolean(cancellingOrderId)}
         onConfirm={confirmCancelOrder}
         onClose={() => setCancelTarget(null)}
+      />
+
+      <ReturnRequestDialog
+        order={returnTarget}
+        orderNumber={returnTarget ? formatOrderNumber(returnTarget.id) : ''}
+        onSubmit={submitReturnRequest}
+        onClose={() => setReturnTarget(null)}
       />
     </div>
   );
