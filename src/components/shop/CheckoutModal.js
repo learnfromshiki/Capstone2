@@ -591,9 +591,11 @@ export default function CheckoutModal({
       // Re-read prices and stock right before ordering; if anything changed
       // since the page opened, show the new figures instead of ordering.
       const fresh = await verifyCart();
-      const shownTotal = Number(verifiedCart?.total) || 0;
+      // Compare only with a total that was actually shown: if the check on
+      // opening failed, there is no earlier total and nothing "changed".
+      const shownTotal = verifiedCart ? Number(verifiedCart.total) || 0 : null;
       setVerifiedCart(fresh);
-      if (Math.abs(fresh.total - shownTotal) > 0.004) {
+      if (shownTotal !== null && Math.abs(fresh.total - shownTotal) > 0.004) {
         throw new Error('Some prices changed while you were checking out. Please review the new total and place your order again.');
       }
 

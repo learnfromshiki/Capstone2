@@ -39,6 +39,9 @@ export default function ProductCard({
         tabIndex={0}
         aria-label={`View details for ${product.name}`}
         onKeyDown={(event) => {
+          // Only the photo box itself: Enter on the ♡ button inside it must
+          // not also open the product.
+          if (event.target !== event.currentTarget) return;
           if (event.key === 'Enter' || event.key === ' ') {
             event.preventDefault();
             if (onViewDetails) onViewDetails(product);
