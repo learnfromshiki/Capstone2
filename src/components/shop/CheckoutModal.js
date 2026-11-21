@@ -1077,9 +1077,10 @@ export default function CheckoutModal({
                 </label>
               )}
 
-              {!gcashAvailable && !bankAvailable && (
+              {!onlineEnabled && !gcashAvailable && !bankAvailable && (
                 <p className="text-xs text-gray-500">
-                  The shops in your basket have not set up online payments, so this order is cash on delivery.
+                  Online payment is not available for this order, so you will pay in cash
+                  {isPickupOrder ? ' when you pick it up' : ' on delivery'}.
                 </p>
               )}
             </div>
