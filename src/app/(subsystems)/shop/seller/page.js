@@ -44,7 +44,7 @@ export default function SellerLoginPage() {
   const [resendIn, setResendIn] = useState(0);
 
   const { signIn, signUp, signOut, seller, user, loading: authLoading } = useSellerAuth();
-  const { verifyEmailCode, resendEmailCode } = useAuth();
+  const { verifyEmailCode, resendEmailCode, role, loading: roleLoading } = useAuth();
   const router = useRouter();
 
   // Redirect if already logged in. The verify step signs the new shop owner in,
@@ -79,6 +79,23 @@ export default function SellerLoginPage() {
     }
     router.replace('/shop?login=1');
   }, [authLoading, user, mode, router]);
+
+  // Someone already signed in who does not own a shop (a customer, or the
+  // admin) has no business on the seller sign-in either: send them home.
+  // The role is looked up a moment after a sign-in, so a shop owner who has
+  // just verified their email is recognised by their shop row or by the
+  // seller sign-up marker on the account, not by the role alone.
+  const signedInNonSeller =
+    Boolean(user) &&
+    !authLoading &&
+    !roleLoading &&
+    !seller &&
+    user.user_metadata?.account_type !== 'seller' &&
+    role !== 'seller';
+  useEffect(() => {
+    if (!signedInNonSeller || mode !== 'login') return;
+    router.replace(role === 'admin' ? '/shop/admin' : '/shop');
+  }, [signedInNonSeller, mode, role, router]);
 
   const awaitingApproval = Boolean(user && seller && !seller.is_approved && !seller.is_rejected);
   const wasRejected = Boolean(user && seller?.is_rejected);
@@ -381,7 +398,7 @@ export default function SellerLoginPage() {
         )}
 
         <div className={`bg-white rounded-2xl shadow-xl border border-gray-200 overflow-hidden ${
-          awaitingApproval || wasRejected || (mode === 'login' && !user) ? 'hidden' : ''
+          awaitingApproval || wasRejected || (mode === 'login' && (!user || signedInNonSeller)) ? 'hidden' : ''
         }`}>
           {/* Header */}
           <div className="bg-gradient-to-r from-blue-600 to-blue-700 p-8 text-white">

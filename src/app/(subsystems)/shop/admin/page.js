@@ -1776,9 +1776,17 @@ export default function ShopAdminPage() {
               }}
             />
             <div className="flex items-center gap-2">
-              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-100">
-                <span className="font-bold text-blue-700">A</span>
-              </div>
+              {adminAvatarUrl ? (
+                <img
+                  src={adminAvatarUrl}
+                  alt={`${adminName}'s profile picture`}
+                  className="h-10 w-10 flex-shrink-0 rounded-full object-cover"
+                />
+              ) : (
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-100">
+                  <span className="font-bold text-blue-700">{(adminName || 'A').trim().charAt(0).toUpperCase() || 'A'}</span>
+                </div>
+              )}
               <div className="hidden text-right sm:block">
                 <p className="max-w-[180px] truncate text-sm font-semibold text-gray-900">{adminName}</p>
                 <p className="max-w-[180px] truncate text-xs text-gray-600">{adminEmail || 'Administrator'}</p>
