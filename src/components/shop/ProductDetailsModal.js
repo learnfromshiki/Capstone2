@@ -93,6 +93,7 @@ export default function ProductDetailsModal({
   moreFromShop = [],
   similarProducts = [],
   onSelectProduct,
+  onReport,
 }) {
   const [quantity, setQuantity] = useState(1);
   // Reviews: which stars to show (0 = all, 'photos' = only with photos), and
@@ -493,6 +494,15 @@ export default function ProductDetailsModal({
               <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-line">
                 {product.description || 'Authentic Daet product handcrafted with care.'}
               </p>
+              {onReport && (
+                <button
+                  type="button"
+                  onClick={() => onReport({ type: 'product', productId: product.id, name: product.name })}
+                  className="mt-2 text-xs font-medium text-gray-400 hover:text-red-600 hover:underline"
+                >
+                  ⚑ Report this product
+                </button>
+              )}
             </div>
 
             {/* Quantity */}

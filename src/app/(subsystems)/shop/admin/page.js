@@ -26,6 +26,7 @@ import { describeSelection } from '@/lib/productOptions';
 import { describeArea, listShippingRates } from '@/lib/shipping';
 import Img from '@/components/ui/Img';
 import AdminReviews from '@/components/shop/AdminReviews';
+import AdminReports from '@/components/shop/AdminReports';
 import ReturnRequestPanel from '@/components/shop/ReturnRequestPanel';
 import { fetchReturnRequests, markOrderRefunded } from '@/lib/returns';
 
@@ -1725,6 +1726,20 @@ export default function ShopAdminPage() {
           </button>
 
           <button
+            onClick={() => setActiveTab('reports-abuse')}
+            className={`flex w-auto flex-shrink-0 items-center gap-3 px-4 py-3 text-left transition-colors lg:w-full lg:flex-shrink lg:px-6 ${
+              activeTab === 'reports-abuse'
+                ? 'bg-white/10 border-l-4 border-blue-400 font-semibold'
+                : 'hover:bg-white/5'
+            }`}
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 21v-4m0 0V5a2 2 0 012-2h6.5l1 1H21l-3 6 3 6h-8.5l-1-1H5a2 2 0 00-2 2zm9-13.5V9" />
+            </svg>
+            <span className="font-medium">Reports</span>
+          </button>
+
+          <button
             onClick={() => setActiveTab('transactions')}
             className={`flex w-auto flex-shrink-0 items-center gap-3 px-4 py-3 text-left transition-colors lg:w-full lg:flex-shrink lg:px-6 ${
               activeTab === 'transactions'
@@ -2614,6 +2629,8 @@ export default function ShopAdminPage() {
           </div>
         ) : activeTab === 'reviews' ? (
           <AdminReviews />
+        ) : activeTab === 'reports-abuse' ? (
+          <AdminReports onOpenSellers={() => setActiveTab('sellers')} />
         ) : activeTab === 'transactions' ? (
           <div>
             <div className="mb-6">

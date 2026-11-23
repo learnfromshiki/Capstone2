@@ -35,6 +35,7 @@ import {
 } from '@/lib/fieldRules';
 import Img from '@/components/ui/Img';
 import CancelOrderDialog from '@/components/shop/CancelOrderDialog';
+import DeleteAccountCard from '@/components/DeleteAccountCard';
 import ReturnRequestDialog from '@/components/shop/ReturnRequestDialog';
 import ReturnRequestPanel from '@/components/shop/ReturnRequestPanel';
 import { canRequestReturn, fetchReturnRequests, requestReturn } from '@/lib/returns';
@@ -2281,6 +2282,8 @@ export default function BuyerDashboard() {
                       description="Use your current password, or email yourself a code if you have forgotten it."
                     />
                   </div>
+
+                  {role !== 'seller' && role !== 'admin' && <DeleteAccountCard />}
 
                   <div className="p-4 border border-gray-200 rounded-lg">
                     <h3 className="font-semibold text-gray-900 mb-2">Account Details</h3>

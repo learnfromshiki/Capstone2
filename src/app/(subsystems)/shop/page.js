@@ -21,6 +21,7 @@ import useLiveBadges from '@/lib/useLiveBadges';
 import { storeBuyNow } from '@/lib/buyNow';
 import ShopFooter from '@/components/shop/ShopFooter';
 import Img from '@/components/ui/Img';
+import ReportDialog from '@/components/shop/ReportDialog';
 import { flushCart, loadCart, readLocalCart, saveCart } from '@/lib/cart';
 import { dashboardPathForRole } from '@/lib/roles';
 import { listShippingRates } from '@/lib/shipping';
@@ -50,6 +51,7 @@ export default function ShopPage() {
   // The product whose options sheet is open, and why it was opened
   const [optionsFor, setOptionsFor] = useState(null);
   const [reviewsByProduct, setReviewsByProduct] = useState({});
+  const [ratingSummaries, setRatingSummaries] = useState({});
   const [reviewableProducts, setReviewableProducts] = useState({});
 
   const [pendingProductId, setPendingProductId] = useState(null);
@@ -110,6 +112,8 @@ export default function ShopPage() {
   const [likedIds, setLikedIds] = useState([]);
   const [recentIds, setRecentIds] = useState([]);
   const [freeShippingThreshold, setFreeShippingThreshold] = useState(null);
+  // What is being reported (a product or a shop), while the report form is open
+  const [reportTarget, setReportTarget] = useState(null);
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [loginRequested, setLoginRequested] = useState(false);
   const { user, profile, role, isSuspended, loading: authLoading, signOut } = useAuth();
@@ -184,6 +188,14 @@ export default function ShopPage() {
     const { ids, saved } = toggleWishlist(user.id, product.id);
     setLikedIds(ids);
     showToast(saved ? 'Added to your Likes' : 'Removed from your Likes', 'success');
+  };
+
+  const openReport = (target) => {
+    if (!user) {
+      setShowAuthModal(true);
+      return;
+    }
+    setReportTarget(target);
   };
 
   const toggleFollow = async (seller) => {
@@ -289,8 +301,15 @@ export default function ShopPage() {
   useEffect(() => {
     fetchProducts();
     fetchCategories();
-    fetchReviews();
+    fetchRatingSummaries();
   }, []);
+
+  // A product's reviews load when its window opens.
+  useEffect(() => {
+    if (selectedProduct?.id) fetchReviews(selectedProduct.id);
+    // fetchReviews only reads and stores; the product id is what matters
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedProduct?.id]);
 
   // The product list arrives after the page, so wait for it before opening the
   // product asked for in the link.
@@ -370,13 +389,35 @@ export default function ShopPage() {
     }
   };
 
-  // Reviews are readable by everyone, so guests see them too and each product
-  // card can show the rating its buyers gave.
-  const fetchReviews = async () => {
+  // Every product's average and count, from the database in one call. Loading
+  // reviews themselves for this would stop at some limit, and products past
+  // it would lose their rating; the reviews are loaded per product instead.
+  const fetchRatingSummaries = async () => {
+    const { data, error } = await supabase.rpc('product_review_summaries');
+    if (error) {
+      console.warn('Ratings are unavailable:', error.message);
+      return;
+    }
+    setRatingSummaries(
+      Object.fromEntries(
+        (data || []).map((row) => [row.product_id, { average: Number(row.average) || 0, count: Number(row.review_count) || 0 }])
+      )
+    );
+  };
+
+  // The reviews of one product, read when its window opens. Reviews are
+  // readable by everyone, so guests see them too.
+  const fetchReviews = async (productId) => {
+    if (!productId) return;
     try {
       const columns = 'id, product_id, rating, comment, created_at';
       const read = (select) =>
-        supabase.from('shop_reviews').select(select).order('created_at', { ascending: false }).limit(300);
+        supabase
+          .from('shop_reviews')
+          .select(select)
+          .eq('product_id', productId)
+          .order('created_at', { ascending: false })
+          .limit(100);
 
       // The author columns arrive with supabase-product-options.sql; fall back
       // so an older database still shows its reviews.
@@ -404,16 +445,10 @@ export default function ShopPage() {
         return;
       }
 
-      const grouped = {};
-      (data || []).forEach((review) => {
-        // A review the admin hid stays out of the shop for everyone, even
-        // the people the database still lets read it (its writer, the shop).
-        if (!review.product_id || review.is_hidden) return;
-        if (!grouped[review.product_id]) grouped[review.product_id] = [];
-        grouped[review.product_id].push(review);
-      });
-
-      setReviewsByProduct(grouped);
+      // A review the admin hid stays out of the shop for everyone, even the
+      // people the database still lets read it (its writer, the shop).
+      const visible = (data || []).filter((review) => !review.is_hidden);
+      setReviewsByProduct((current) => ({ ...current, [productId]: visible }));
     } catch (error) {
       console.warn('Reviews are unavailable:', error?.message || error);
     }
@@ -533,7 +568,7 @@ export default function ShopPage() {
       return next;
     });
 
-    await fetchReviews();
+    await Promise.all([fetchReviews(product.id), fetchRatingSummaries()]);
   };
 
   /**
@@ -861,14 +896,9 @@ export default function ShopPage() {
     }
   };
   
-  // Card-level average and count; the modal lists the reviews themselves.
-  const reviewSummaries = {};
-  Object.keys(reviewsByProduct).forEach((productId) => {
-    const rows = reviewsByProduct[productId] || [];
-    if (rows.length === 0) return;
-    const total = rows.reduce((sum, review) => sum + (Number(review.rating) || 0), 0);
-    reviewSummaries[productId] = { average: total / rows.length, count: rows.length };
-  });
+  // Card-level average and count (every product); the product window lists
+  // the reviews themselves.
+  const reviewSummaries = ratingSummaries;
 
   const normalizedQuery = searchQuery.trim().toLowerCase();
   const minPrice = priceMin === '' ? null : Number(priceMin);
@@ -1353,6 +1383,7 @@ export default function ShopPage() {
         moreFromShop={moreFromShop}
         similarProducts={similarProducts}
         onSelectProduct={setSelectedProduct}
+        onReport={openReport}
       />
 
       {/* Choose options (Buy Now / products with variants) */}
@@ -1380,6 +1411,16 @@ export default function ShopPage() {
           setSelectedProduct(product);
         }}
         onMessageShop={(seller) => messageShop(seller)}
+        onReport={openReport}
+      />
+
+      <ReportDialog
+        target={reportTarget}
+        onClose={() => setReportTarget(null)}
+        onDone={() => {
+          setReportTarget(null);
+          showToast('Thank you. The admin will review your report.', 'success');
+        }}
       />
 
       {/* Auth Modal */}

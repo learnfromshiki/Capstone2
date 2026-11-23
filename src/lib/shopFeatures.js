@@ -186,7 +186,8 @@ export const clearRecentlyViewed = () => {
 /** Share a product link (phone share sheet, else copy). Returns 'shared' | 'copied' | 'failed'. */
 export const shareProduct = async (product) => {
   if (typeof window === 'undefined' || !product?.id) return 'failed';
-  const url = `${window.location.origin}/shop?product=${product.id}`;
+  // The product's own page: link previews show its photo, name and price.
+  const url = `${window.location.origin}/shop/product/${product.id}`;
   const title = product.name || 'CONNECT-Daet';
 
   if (navigator.share) {

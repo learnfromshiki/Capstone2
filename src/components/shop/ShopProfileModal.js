@@ -29,6 +29,7 @@ export default function ShopProfileModal({
   onClose,
   onViewProduct,
   onMessageShop,
+  onReport,
 }) {
   const [copiedCode, setCopiedCode] = useState('');
   const [tab, setTab] = useState('products');
@@ -302,6 +303,15 @@ export default function ShopProfileModal({
                   {seller.description || 'This shop has not written a description yet.'}
                 </p>
                 {memberSince && <p className="mt-2 text-xs text-gray-500">Selling on CONNECT-Daet since {memberSince}</p>}
+                {onReport && (
+                  <button
+                    type="button"
+                    onClick={() => onReport({ type: 'shop', sellerId: seller.id, name: seller.business_name })}
+                    className="mt-3 text-xs font-medium text-gray-400 hover:text-red-600 hover:underline"
+                  >
+                    ⚑ Report this shop
+                  </button>
+                )}
               </div>
 
               {shopCategories.length > 0 && (
