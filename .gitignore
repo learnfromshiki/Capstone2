@@ -40,3 +40,6 @@ ADMIN-LOGIN-FLOW.md
 dev-server.log
 start-server.log
 build-output.txt
+
+# Local project archives
+*.zip
