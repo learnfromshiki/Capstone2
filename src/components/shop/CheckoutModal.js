@@ -374,13 +374,15 @@ export default function CheckoutModal({
         lineId: item.lineId || item.id,
         selectedOptions: item.selectedOptions || {},
         quantity,
+        image_url: item.image_url || null,
+        sellerName: item.sellerName,
       };
     });
 
     const uniqueIds = [...new Set(normalized.map((item) => item.id))];
     const { data: products, error: productsError } = await supabase
       .from('shop_products')
-      .select('id, name, price, stock, available, seller_id')
+      .select('id, name, price, stock, available, seller_id, image_url')
       .in('id', uniqueIds);
 
     if (productsError) throw productsError;

@@ -896,6 +896,14 @@ export default function ShopPage() {
     }
   };
   
+  // Only show a tab for a category that has products right now (plus "All"
+  // and whichever tab is selected), so shoppers never open an empty category.
+  // Until products load, every tab is shown so the bar doesn't jump.
+  const categoriesInUse = new Set(products.map((p) => p.category).filter(Boolean));
+  const visibleCategories = loading
+    ? categories
+    : categories.filter((c) => c.value === 'all' || c.value === filter || categoriesInUse.has(c.value));
+
   // Card-level average and count (every product); the product window lists
   // the reviews themselves.
   const reviewSummaries = ratingSummaries;
@@ -1144,7 +1152,7 @@ export default function ShopPage() {
               the emoji's own height, and the selected chip is marked with a
               ring rather than scale-105, which used to overlap its neighbours. */}
           <div className="-mx-1 flex gap-2.5 overflow-x-auto px-1 py-1 scrollbar-hide">
-            {categories.map((category) => (
+            {visibleCategories.map((category) => (
               <button
                 key={category.value}
                 onClick={() => setFilter(category.value)}

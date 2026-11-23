@@ -288,14 +288,16 @@ export default function ProductDetailsModal({
         onClick={(event) => event.stopPropagation()}
       >
         <div className="grid md:grid-cols-2">
-          {/* Photos */}
-          <div className="relative bg-gray-100 min-h-[280px] md:min-h-full">
+          {/* Photos. The panel is only as tall as the photo (square) and stays
+              in view while the details scroll, instead of stretching to the
+              details column and leaving an empty grey block under the photo. */}
+          <div className="relative bg-gray-100 min-h-[280px] md:sticky md:top-0 md:self-start md:rounded-tl-2xl">
             {gallery.length > 0 ? (
               <div className="flex h-full flex-col">
                 <Img
                   src={gallery[activeImage] || gallery[0]}
                   alt={`${product.name} photo ${activeImage + 1} of ${gallery.length}`}
-                  className="w-full flex-1 max-h-[360px] object-cover md:rounded-tl-2xl"
+                  className="aspect-square w-full object-cover md:rounded-tl-2xl"
                 />
 
                 {gallery.length > 1 && (
@@ -318,7 +320,7 @@ export default function ProductDetailsModal({
                 )}
               </div>
             ) : (
-              <div className="w-full h-full min-h-[280px] flex flex-col items-center justify-center text-gray-400">
+              <div className="w-full aspect-square min-h-[280px] flex flex-col items-center justify-center text-gray-400">
                 <svg className="w-20 h-20 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                 </svg>

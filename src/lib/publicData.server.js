@@ -53,3 +53,27 @@ export const listPublicProducts = async () => {
   });
   return Array.isArray(rows) ? rows : [];
 };
+
+/**
+ * Category slugs that have at least one listed product from a public shop,
+ * or null when the store could not be read (callers then keep their default).
+ */
+export const listCategoriesInUse = async () => {
+  const [products, sellers] = await Promise.all([
+    rest('shop_products?available=eq.true&select=category,seller_id&limit=5000'),
+    rest('shop_sellers?is_approved=eq.true&is_active=eq.true&select=id&limit=5000'),
+  ]);
+  if (!Array.isArray(products)) return null;
+  const publicShops = new Set(Array.isArray(sellers) ? sellers.map((s) => s.id) : []);
+  const used = new Set();
+  products.forEach((p) => {
+    if (p.category && (!p.seller_id || publicShops.has(p.seller_id))) used.add(p.category);
+  });
+  return used;
+};
+
+/** Active categories from shop_categories (name, slug, icon), or null. */
+export const listPublicCategories = async () => {
+  const rows = await rest('shop_categories?is_active=eq.true&select=name,slug,icon,display_order&order=display_order.asc');
+  return Array.isArray(rows) ? rows : null;
+};

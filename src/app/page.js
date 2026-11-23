@@ -1,6 +1,10 @@
 import Link from 'next/link';
 import Reveal from '@/components/landing/Reveal';
 import LandingNav from '@/components/landing/LandingNav';
+import { listCategoriesInUse, listPublicCategories } from '@/lib/publicData.server';
+
+// Re-read which categories have products every few minutes.
+export const revalidate = 300;
 
 const FEATURES = [
   {
@@ -41,6 +45,37 @@ const CATEGORIES = [
   { value: 'art', label: 'Art', icon: '🎨', text: 'Paintings and works by local artists', tint: 'from-slate-100 to-blue-50' },
 ];
 
+const TINTS = ['from-amber-100 to-orange-50', 'from-rose-100 to-pink-50', 'from-sky-100 to-blue-50', 'from-emerald-100 to-teal-50', 'from-slate-100 to-blue-50', 'from-violet-100 to-purple-50'];
+
+/**
+ * Only categories that currently have products in the shop get a tile, so a
+ * shopper never lands on an empty category. Categories added by the admin
+ * (shop_categories) appear here too once something is listed in them. If the
+ * store cannot be read, the built-in list is shown as before.
+ */
+async function loadCategories() {
+  const [inUse, rows] = await Promise.all([listCategoriesInUse(), listPublicCategories()]);
+  if (!inUse) return CATEGORIES;
+  const known = Object.fromEntries(CATEGORIES.map((c) => [c.value, c]));
+  const source = rows && rows.length
+    ? rows.filter((r) => r.slug && r.slug !== 'all').map((r) => ({ value: r.slug, label: r.name, icon: r.icon }))
+    : CATEGORIES;
+  const listed = new Set(source.map((c) => c.value));
+  // A product whose category is missing from shop_categories still gets a tile.
+  inUse.forEach((value) => {
+    if (!listed.has(value)) source.push({ value, label: value.charAt(0).toUpperCase() + value.slice(1) });
+  });
+  return source
+    .filter((c) => inUse.has(c.value))
+    .map((c, i) => ({
+      value: c.value,
+      label: c.label || known[c.value]?.label,
+      icon: known[c.value]?.icon || c.icon || '🏪',
+      text: known[c.value]?.text || `Shop ${String(c.label || c.value).toLowerCase()} from local sellers`,
+      tint: known[c.value]?.tint || TINTS[i % TINTS.length],
+    }));
+}
+
 const STEPS = [
   { title: 'Browse', text: 'Explore products by category, search by name, and read reviews from other buyers.', icon: 'M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z' },
   { title: 'Order', text: 'Add to cart or buy now, choose delivery or pickup, and pay the way you prefer.', icon: 'M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z' },
@@ -57,7 +92,8 @@ function Icon({ d, className = 'h-6 w-6' }) {
   );
 }
 
-export default function Home() {
+export default async function Home() {
+  const categories = await loadCategories();
   return (
     <main className="min-h-screen overflow-x-hidden bg-white">
       {/* Nav + hero share one backdrop so the transparent nav sits on it. */}
@@ -244,8 +280,11 @@ export default function Home() {
             </Link>
           </Reveal>
 
+          {categories.length === 0 && (
+            <p className="mt-12 text-gray-600">Products are on their way. Check back soon!</p>
+          )}
           <div className="mt-12 grid gap-5 sm:grid-cols-2 lg:grid-cols-5">
-            {CATEGORIES.map((category, i) => (
+            {categories.map((category, i) => (
               <Reveal key={category.value} variant="zoom" delay={i * 90}>
                 <Link
                   href={`/shop?category=${category.value}`}

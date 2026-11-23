@@ -162,7 +162,8 @@ export default function ProductOptionsModal({ product, intent = 'cart', onClose,
                   value={quantity}
                   onChange={(event) => changeQuantity(Number(event.target.value) || 1)}
                   aria-label="Quantity"
-                  className="w-14 border-0 text-center font-semibold focus:ring-0"
+                  inputMode="numeric"
+                  className="no-spinner w-14 border-0 text-center font-semibold focus:outline-none focus:ring-0"
                 />
                 <button
                   type="button"

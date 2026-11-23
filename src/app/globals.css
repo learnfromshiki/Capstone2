@@ -198,6 +198,12 @@ input[type='password']::-webkit-strong-password-auto-fill-button {
 }
 
 @layer utilities {
+  /* Hide the browser's own up/down arrows on number boxes that already have
+     their own - and + buttons. */
+  .no-spinner { -moz-appearance: textfield; appearance: textfield; }
+  .no-spinner::-webkit-outer-spin-button,
+  .no-spinner::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+
   .text-balance {
     text-wrap: balance;
   }

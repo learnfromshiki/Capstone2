@@ -955,8 +955,13 @@ export default function BuyerDashboard() {
   };
 
   const getOrderStats = () => {
-    const toPay = orders.filter(o => o.status === 'pending').length;
-    const toShip = orders.filter(o => o.status === 'confirmed' || o.status === 'processing').length;
+    // A pending order that is already paid (online payment went through) is
+    // no longer "to pay": it is waiting for the seller, so it counts as "to ship".
+    const isPaid = (o) => o.payment_status === 'paid';
+    const toPay = orders.filter(o => o.status === 'pending' && !isPaid(o)).length;
+    const toShip = orders.filter(
+      o => (o.status === 'pending' && isPaid(o)) || o.status === 'confirmed' || o.status === 'processing'
+    ).length;
     const toReceive = orders.filter(o => o.status === 'shipped').length;
     const completed = orders.filter(o => o.status === 'delivered').length;
 
@@ -1350,8 +1355,10 @@ export default function BuyerDashboard() {
                                 })}
                               </p>
                             </div>
-                            <span className={`self-start px-3 py-1 text-xs font-semibold rounded-full ${getStatusColor(order.status)}`}>
-                              {statusLabel(order.status, order)}
+                            <span className={`self-start px-3 py-1 text-xs font-semibold rounded-full ${order.status === 'pending' && order.payment_status === 'paid' ? 'bg-green-100 text-green-700' : getStatusColor(order.status)}`}>
+                              {order.status === 'pending' && order.payment_status === 'paid'
+                                ? 'Paid · awaiting seller'
+                                : statusLabel(order.status, order)}
                             </span>
                           </div>
 
