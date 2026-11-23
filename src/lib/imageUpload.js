@@ -4,6 +4,8 @@ import { supabase } from './supabaseClient';
 const MAX_DIMENSION = 1600;
 /** Photos already this small are sent as they are. */
 const SMALL_ENOUGH = 600 * 1024;
+/** A resized PNG bigger than this is sent as a JPEG instead. */
+const LARGE_PNG = 1.5 * 1024 * 1024;
 
 /**
  * Shrink a phone photo before it is uploaded. A 4-8 MB camera picture often
@@ -28,9 +30,17 @@ export const shrinkImage = async (file) => {
     canvas.getContext('2d').drawImage(bitmap, 0, 0, width, height);
     bitmap.close?.();
 
+    const encode = (type) => new Promise((resolve) => canvas.toBlob(resolve, type, 0.85));
+
     // PNG keeps its transparency (logos); everything else becomes a JPEG.
-    const type = file.type === 'image/png' ? 'image/png' : 'image/jpeg';
-    const blob = await new Promise((resolve) => canvas.toBlob(resolve, type, 0.85));
+    // A PNG photo can stay several MB even after resizing, so a PNG that is
+    // still large is sent as a JPEG instead (photos have no transparency).
+    let type = file.type === 'image/png' ? 'image/png' : 'image/jpeg';
+    let blob = await encode(type);
+    if (type === 'image/png' && (!blob || blob.size > LARGE_PNG)) {
+      type = 'image/jpeg';
+      blob = await encode(type);
+    }
     if (!blob || blob.size >= file.size) return file;
 
     const name = file.name.replace(/\.[^.]+$/, '') + (type === 'image/png' ? '.png' : '.jpg');
@@ -45,6 +55,10 @@ const isNetworkError = (error) =>
   error?.name === 'TypeError' ||
   /failed to fetch|network|load failed|fetch failed/i.test(error?.message || '');
 
+// When the first try's connection dropped after the file had arrived, the
+// retry is told the file already exists: that means it did upload.
+const isAlreadyThere = (error) => /already exists|duplicate/i.test(error?.message || '') || error?.statusCode === '409';
+
 /**
  * Upload to a storage bucket, trying once more if the connection drops, and
  * turning a dropped connection into a message a shop owner can act on.
@@ -54,6 +68,7 @@ export const uploadWithRetry = async (bucket, path, file, options) => {
     try {
       const { error } = await supabase.storage.from(bucket).upload(path, file, options);
       if (!error) return;
+      if (attempt === 2 && isAlreadyThere(error)) return;
       if (attempt === 2 || !isNetworkError(error)) throw error;
     } catch (error) {
       if (attempt === 2 || !isNetworkError(error)) {

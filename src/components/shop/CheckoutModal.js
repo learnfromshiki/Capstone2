@@ -234,7 +234,11 @@ export default function CheckoutModal({
   };
 
   // ...and the details each shop in this basket saved for itself.
-  const sellerIdKey = Array.from(new Set(cart.map((item) => item.seller_id).filter(Boolean)))
+  // The re-checked items know every product's shop even when an old cart
+  // line saved in this browser does not, so prefer them.
+  const sellerIdKey = Array.from(
+    new Set((verifiedCart?.items || cart).map((item) => item.seller_id).filter(Boolean))
+  )
     .sort()
     .join(',');
 

@@ -91,10 +91,17 @@ export const AuthProvider = ({ children }) => {
         return;
       }
 
-      // Same account as the role already loaded (a token refresh, a profile
-      // edit): keep the user object fresh, the role is still right.
+      // Same account as the role already loaded: keep the user object fresh
+      // at once. Unless this is only a token refresh, look the role up again
+      // in the background (the account may have just opened a shop); the
+      // current role stays until the new one is known, so nothing flickers.
       if (sessionUser.id === resolvedUserIdRef.current) {
         setUser(sessionUser);
+        if (event !== 'TOKEN_REFRESHED') {
+          setTimeout(() => {
+            if (active && resolvedUserIdRef.current === sessionUser.id) applyAccount(sessionUser);
+          }, 0);
+        }
         return;
       }
 

@@ -911,6 +911,36 @@ export default function BuyerDashboard() {
     return () => window.removeEventListener(WISHLIST_EVENT, onWishlist);
   }, [user?.id]);
 
+  // The liked products themselves, read by id: the page's own product list
+  // is only the newest 60, so older likes would otherwise disappear.
+  const [likedProducts, setLikedProducts] = useState([]);
+  const likedKey = likedIds.join(',');
+  useEffect(() => {
+    const ids = likedKey ? likedKey.split(',') : [];
+    if (ids.length === 0) {
+      setLikedProducts([]);
+      return undefined;
+    }
+    let cancelled = false;
+    supabase
+      .from('shop_products')
+      .select('id, name, price, stock, image_url, available')
+      .in('id', ids)
+      .then(({ data, error }) => {
+        if (cancelled) return;
+        if (error) {
+          console.warn('Could not load your likes:', error.message);
+          return;
+        }
+        // Keep the order they were liked in; drop products no longer sold.
+        const byId = new Map((data || []).filter((row) => row.available !== false).map((row) => [row.id, row]));
+        setLikedProducts(ids.map((id) => byId.get(id)).filter(Boolean));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [likedKey]);
+
   const getStatusColor = (status) => {
     const colors = {
       pending: 'bg-yellow-100 text-yellow-700',
@@ -1548,7 +1578,7 @@ export default function BuyerDashboard() {
                 <h2 className="mb-1 text-xl font-bold text-gray-900">My Likes</h2>
                 <p className="mb-4 text-sm text-gray-600">Products you tapped ♡ on. Saved on this device.</p>
                 {(() => {
-                  const liked = likedIds.map((id) => products.find((product) => product.id === id)).filter(Boolean);
+                  const liked = likedProducts;
                   if (liked.length === 0) {
                     return (
                       <div className="py-10 text-center">
