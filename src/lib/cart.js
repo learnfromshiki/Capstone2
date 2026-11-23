@@ -105,9 +105,11 @@ const pushToDatabase = (userId, lines) => {
   // land after a newer one.
   const run = previous.catch(() => {}).then(() => sendToDatabase(userId, lines));
   inflight.set(userId, run);
-  run.finally(() => {
-    if (inflight.get(userId) === run) inflight.delete(userId);
-  });
+  run
+    .finally(() => {
+      if (inflight.get(userId) === run) inflight.delete(userId);
+    })
+    .catch(() => {});
   return run;
 };
 
@@ -131,10 +133,15 @@ const sendToDatabase = async (userId, lines) => {
 /** Send any cart change that is still waiting. Call before leaving the page. */
 export const flushCart = async (userId) => {
   const entry = pending.get(userId);
-  if (!entry) return;
-  clearTimeout(entry.timer);
-  pending.delete(userId);
-  await pushToDatabase(userId, entry.lines);
+  if (entry) {
+    clearTimeout(entry.timer);
+    pending.delete(userId);
+    pushToDatabase(userId, entry.lines);
+  }
+  // Also wait for a save that was already on its way: leaving the page
+  // could otherwise cut it off.
+  const running = inflight.get(userId);
+  if (running) await running;
 };
 
 /**

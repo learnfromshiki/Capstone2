@@ -163,7 +163,7 @@ export default function ProductOptionsModal({ product, intent = 'cart', onClose,
                   min={1}
                   max={stock || 1}
                   value={quantity}
-                  onChange={(event) => changeQuantity(Number(event.target.value) || 1)}
+                  onChange={(event) => changeQuantity(Math.floor(Number(event.target.value)) || 1)}
                   aria-label="Quantity"
                   inputMode="numeric"
                   className="no-spinner w-14 border-0 text-center font-semibold focus:outline-none focus:ring-0"
