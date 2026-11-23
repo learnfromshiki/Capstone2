@@ -47,6 +47,13 @@ export default function CancelOrderDialog({ order, orderNumber, busy = false, on
           automatically.
         </p>
 
+        {order.payment_proof_url && order.payment_status !== 'paid' && (
+          <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900">
+            You already sent a payment receipt for this order. After cancelling, message the shop to arrange how you
+            get your money back.
+          </p>
+        )}
+
         <fieldset className="mt-4 space-y-2">
           <legend className="sr-only">Reason for cancelling</legend>
           {CANCEL_REASONS.map((entry) => (

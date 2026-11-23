@@ -629,7 +629,8 @@ export default function SellerDashboard() {
         .from('shop_products')
         .select('id')
         .eq('seller_id', seller.id)
-        .ilike('name', name)
+        // % and _ are wildcards in ILIKE; escape them so they match literally.
+        .ilike('name', name.replace(/[\\%_]/g, (ch) => '\\' + ch))
         .limit(1);
 
       if (editingProductId) duplicateQuery = duplicateQuery.neq('id', editingProductId);
@@ -815,7 +816,12 @@ export default function SellerDashboard() {
       const confirmed = await showConfirm({
         tone: 'warning',
         title: 'Cancel this order?',
-        message: 'The stock for its items goes back to your shop and the order cannot be reopened.',
+        message:
+          currentOrder?.payment_status === 'paid'
+            ? 'This order was already paid online. The stock goes back to your shop, the order cannot be reopened, and the CONNECT-Daet admin is told to refund the customer.'
+            : currentOrder?.payment_proof_url
+            ? 'The customer already sent payment for this order (receipt attached). The stock goes back to your shop and the order cannot be reopened. Please refund the customer.'
+            : 'The stock for its items goes back to your shop and the order cannot be reopened.',
         confirmLabel: 'Cancel order',
         cancelLabel: 'Keep order',
       });

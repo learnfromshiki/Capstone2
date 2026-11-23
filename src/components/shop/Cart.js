@@ -5,6 +5,7 @@ import { describeSelection } from '@/lib/productOptions';
 import { useDialog } from '@/components/ui/Dialog';
 import { storeSelection } from '@/lib/checkoutSelection';
 import { estimateRewardPoints } from '@/lib/orders';
+import { flushCart } from '@/lib/cart';
 import Img from '@/components/ui/Img';
 
 export default function Cart({ cart, isOpen, onClose, onUpdateQuantity, onRemoveItem, userId }) {
@@ -12,6 +13,7 @@ export default function Cart({ cart, isOpen, onClose, onUpdateQuantity, onRemove
   // Which lines are going through checkout. Everything starts ticked, so the
   // common case - buy the lot - is still one tap.
   const [selected, setSelected] = useState([]);
+  const [leaving, setLeaving] = useState(false);
 
   // A new line is ticked by default; a removed one stops counting.
   useEffect(() => {
@@ -50,6 +52,14 @@ export default function Cart({ cart, isOpen, onClose, onUpdateQuantity, onRemove
 
     if (confirmed) onRemoveItem(item.lineId);
   };
+
+  // Coming back with the browser's Back button shows the page as it was left,
+  // so the checkout button must not stay stuck on "Opening checkout...".
+  useEffect(() => {
+    const reset = () => setLeaving(false);
+    window.addEventListener('pageshow', reset);
+    return () => window.removeEventListener('pageshow', reset);
+  }, []);
 
   // Escape closes the cart
   useEffect(() => {
@@ -252,24 +262,36 @@ export default function Cart({ cart, isOpen, onClose, onUpdateQuantity, onRemove
                   <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
                 </svg>
                 <p className="text-sm text-yellow-900">
-                  <span className="font-bold">Earn about {estimateRewardPoints(selectedItems)} points</span> once this order is delivered
+                  <span className="font-bold">Earn about {estimateRewardPoints(selectedItems)} points</span> once your order arrives
                 </p>
               </div>
             </div>
 
             {/* Checkout Button */}
             <button
-              onClick={() => {
-                // Only the ticked lines go to checkout; the rest stay in the cart
-                storeSelection(userId, selected);
+              onClick={async () => {
+                // Only the ticked lines that can be bought go to checkout
+                // (a sold-out line stays ticked in the list but is left out);
+                // the rest stay in the cart.
+                setLeaving(true);
+                storeSelection(userId, selectedItems.map((item) => item.lineId));
+                // A quantity changed a moment ago must be saved before the
+                // checkout page reads the cart back from the database.
+                try {
+                  await flushCart(userId);
+                } catch (error) {
+                  console.warn('Could not save the cart before checkout:', error);
+                }
                 window.location.href = '/shop/checkout';
               }}
-              disabled={selectedItems.length === 0}
+              disabled={selectedItems.length === 0 || leaving}
               className="w-full bg-gradient-to-r from-blue-600 to-blue-700 text-white py-4 rounded-xl font-bold text-lg hover:from-blue-700 hover:to-blue-800 transition-all shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 active:scale-95 flex items-center justify-center gap-2 disabled:cursor-not-allowed disabled:from-gray-300 disabled:to-gray-300 disabled:shadow-none disabled:transform-none"
             >
               <span>
                 {selectedItems.length === 0
                   ? 'Select an item to check out'
+                  : leaving
+                  ? 'Opening checkout...'
                   : `Check Out ${selectedItems.length} ${selectedItems.length === 1 ? 'Item' : 'Items'}`}
               </span>
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

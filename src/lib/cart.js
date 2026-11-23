@@ -81,6 +81,9 @@ const isMissingCartTable = (error) =>
 // so tapping "+" five times is one request, not five.
 // ---------------------------------------------------------------------------
 const pending = new Map(); // userId -> { timer, lines }
+// Saves already sent but not answered yet. Reading the cart waits for them,
+// so a page opened right after a change (checkout) never sees the old cart.
+const inflight = new Map(); // userId -> Promise
 let databaseAvailable = true;
 
 const toRow = (item) => {
@@ -96,7 +99,19 @@ const toRow = (item) => {
   };
 };
 
-const pushToDatabase = async (userId, lines) => {
+const pushToDatabase = (userId, lines) => {
+  const previous = inflight.get(userId) || Promise.resolve();
+  // One save at a time per customer, in order, so an older cart can never
+  // land after a newer one.
+  const run = previous.catch(() => {}).then(() => sendToDatabase(userId, lines));
+  inflight.set(userId, run);
+  run.finally(() => {
+    if (inflight.get(userId) === run) inflight.delete(userId);
+  });
+  return run;
+};
+
+const sendToDatabase = async (userId, lines) => {
   if (!databaseAvailable || !supabase) return;
 
   const { error } = await supabase.rpc('save_my_cart', { p_items: lines.map(toRow) });
@@ -162,6 +177,8 @@ export const loadCart = async (userId) => {
 
   // A change made a moment ago may still be waiting to be sent.
   if (pending.has(userId)) return pending.get(userId).lines;
+  // Or already on its way: let it land before reading.
+  if (inflight.has(userId)) await inflight.get(userId).catch(() => {});
 
   const { data, error } = await supabase
     .from('shop_cart_items')

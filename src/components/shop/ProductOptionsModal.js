@@ -42,7 +42,10 @@ export default function ProductOptionsModal({ product, intent = 'cart', onClose,
   const changeQuantity = (next) => {
     if (next < 1) return;
     if (stock && next > stock) {
+      // Typing a number above what is left sets it to the most you can buy,
+      // instead of silently keeping the old number.
       setError(`Only ${stock} left in stock.`);
+      setQuantity(stock);
       return;
     }
     setError('');
