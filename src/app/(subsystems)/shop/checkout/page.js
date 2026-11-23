@@ -8,6 +8,7 @@ import CheckoutModal from '@/components/shop/CheckoutModal';
 import { loadCart, readLocalCart, saveCart } from '@/lib/cart';
 import { clearBuyNow, readBuyNow } from '@/lib/buyNow';
 import { clearSelection, readSelection } from '@/lib/checkoutSelection';
+import { signInPathFor } from '@/lib/roles';
 
 /**
  * The checkout page.
@@ -35,7 +36,7 @@ export default function CheckoutPage() {
     if (authLoading) return;
 
     if (!user) {
-      router.push('/shop');
+      router.push(signInPathFor('/shop/checkout' + window.location.search));
       return;
     }
 

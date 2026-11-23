@@ -12,7 +12,7 @@ import OnlinePaymentStatus from '@/components/shop/OnlinePaymentStatus';
 import PaymentInstructions from '@/components/shop/PaymentInstructions';
 import ChangePasswordCard from '@/components/ChangePasswordCard';
 import { joinName, splitName } from '@/lib/profile';
-import { ROLE_LABELS } from '@/lib/roles';
+import { ROLE_LABELS, signInPathFor } from '@/lib/roles';
 import { useDialog } from '@/components/ui/Dialog';
 import { cartLineId, describeSelection } from '@/lib/productOptions';
 import ChatPanel from '@/components/shop/ChatPanel';
@@ -257,7 +257,9 @@ export default function BuyerDashboard() {
     if (authLoading) return;
 
     if (!user) {
-      router.push('/shop');
+      // Signed out (often from an order link in an email): ask them to sign
+      // in and bring them straight back here.
+      router.push(signInPathFor(window.location.pathname + window.location.search));
       return;
     }
 

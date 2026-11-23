@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { dashboardPathForRole } from '@/lib/roles';
+import { dashboardPathForRole, returnPathForRole } from '@/lib/roles';
 import { ensureSellerProfile } from '@/lib/sellerProfile';
 import { ensureProfileRow } from '@/lib/profile';
 import { describePasswordProblem, isPasswordValid } from '@/lib/passwordPolicy';
@@ -19,7 +19,7 @@ const RESEND_SECONDS = 60;
 const inputClass =
   'w-full min-h-[44px] px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-full focus:ring-2 focus:ring-blue-600 focus:border-transparent transition-all text-sm text-gray-900 placeholder-gray-400';
 
-export default function AuthModal({ isOpen, onClose, mode: initialMode = 'login' }) {
+export default function AuthModal({ isOpen, onClose, mode: initialMode = 'login', nextPath = null }) {
   // 'login' | 'signup' | 'verify' | 'forgot' | 'reset'
   const [mode, setMode] = useState(initialMode);
   const [email, setEmail] = useState('');
@@ -106,9 +106,12 @@ export default function AuthModal({ isOpen, onClose, mode: initialMode = 'login'
     setNotice('');
   };
 
-  /** Send the account to the dashboard that matches its role. */
+  /**
+   * Send the account where it was going (a link from an email or a page
+   * that needed signing in), or else to the dashboard that matches its role.
+   */
   const goToDashboard = (role) => {
-    const path = role === 'customer' ? '/shop' : dashboardPathForRole(role);
+    const path = returnPathForRole(nextPath, role) || (role === 'customer' ? '/shop' : dashboardPathForRole(role));
     window.location.href = path;
   };
 

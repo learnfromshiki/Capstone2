@@ -105,3 +105,21 @@ export const getAccountRole = async (userId, client = supabase) => {
 
 /** Where to send this account after a successful sign-in. */
 export const dashboardPathForRole = (role) => DASHBOARD_PATHS[role] || DASHBOARD_PATHS.customer;
+
+/**
+ * The page to return to after signing in (from ?next=), or null. Only a path
+ * on this site that belongs to the account's own area is accepted, so a link
+ * can never send someone to another website or into another role's pages.
+ */
+export const returnPathForRole = (next, role) => {
+  if (typeof next !== 'string' || !next.startsWith('/') || next.startsWith('//') || /[\\\s]/.test(next)) {
+    return null;
+  }
+  if (role === 'admin') return next.startsWith(DASHBOARD_PATHS.admin) ? next : null;
+  if (role === 'seller') return next.startsWith('/shop/seller') ? next : null;
+  // Customers: anywhere in the shop except the seller and admin areas.
+  return next.startsWith('/shop') && !next.startsWith('/shop/seller') && !next.startsWith('/shop/admin') ? next : null;
+};
+
+/** The shop's sign-in window, coming back to `path` afterwards. */
+export const signInPathFor = (path) => `/shop?login=1&next=${encodeURIComponent(path)}`;

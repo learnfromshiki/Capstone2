@@ -290,6 +290,10 @@ export const isCountedSale = (order) =>
   order.payment_status !== 'refunded' &&
   !(ONLINE_PAYMENT_METHODS.includes(order.payment_method) && order.payment_status !== 'paid');
 
+/** A peso amount with thousands separators and always two decimals: 1,234.50 */
+export const formatPeso = (amount) =>
+  (Number(amount) || 0).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
 /** Short, readable order number shown to buyers, sellers and admins. */
 export const formatOrderNumber = (orderId) =>
   orderId ? `#${String(orderId).slice(0, 8).toUpperCase()}` : '';

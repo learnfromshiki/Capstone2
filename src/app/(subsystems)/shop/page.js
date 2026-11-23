@@ -23,7 +23,7 @@ import ShopFooter from '@/components/shop/ShopFooter';
 import Img from '@/components/ui/Img';
 import ReportDialog from '@/components/shop/ReportDialog';
 import { flushCart, loadCart, readLocalCart, saveCart } from '@/lib/cart';
-import { dashboardPathForRole } from '@/lib/roles';
+import { dashboardPathForRole, returnPathForRole } from '@/lib/roles';
 import { listShippingRates } from '@/lib/shipping';
 import { WISHLIST_EVENT, readWishlist, toggleWishlist } from '@/lib/wishlist';
 import {
@@ -86,14 +86,17 @@ export default function ShopPage() {
     // ?login=1 opens the shop's sign-in window. Emails and the old seller
     // login page send shop owners here, so everyone signs in the same way.
     if (params.get('login') === '1') setLoginRequested(true);
+    // ?next=<path>: where to go once signed in (an order link from an email).
+    if (params.get('next')) setLoginNext(params.get('next'));
 
     // Tidy the address bar so a refresh does not reopen the cart or the
     // product window again.
-    if (params.has('cart') || params.has('product') || params.has('category') || params.has('login')) {
+    if (params.has('cart') || params.has('product') || params.has('category') || params.has('login') || params.has('next')) {
       params.delete('cart');
       params.delete('product');
       params.delete('category');
       params.delete('login');
+      params.delete('next');
       const query = params.toString();
       window.history.replaceState({}, '', window.location.pathname + (query ? `?${query}` : ''));
     }
@@ -116,6 +119,7 @@ export default function ShopPage() {
   const [reportTarget, setReportTarget] = useState(null);
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [loginRequested, setLoginRequested] = useState(false);
+  const [loginNext, setLoginNext] = useState(null);
   const { user, profile, role, isSuspended, loading: authLoading, signOut } = useAuth();
 
   // Answer ?login=1 once we know who is here: someone already signed in as a
@@ -125,10 +129,16 @@ export default function ShopPage() {
     setLoginRequested(false);
     if (!user) {
       setShowAuthModal(true);
+      return;
+    }
+    // Already signed in: go straight to where the link was pointing.
+    const back = returnPathForRole(loginNext, role || 'customer');
+    if (back) {
+      window.location.href = back;
     } else if (role === 'seller' || role === 'admin') {
       window.location.href = dashboardPathForRole(role);
     }
-  }, [loginRequested, authLoading, user, role]);
+  }, [loginRequested, authLoading, user, role, loginNext]);
 
   // Units sold, followers, live vouchers and the free-delivery threshold:
   // public figures, loaded once with the page.
@@ -1436,6 +1446,7 @@ export default function ShopPage() {
         isOpen={showAuthModal}
         onClose={() => setShowAuthModal(false)}
         mode="login"
+        nextPath={loginNext}
       />
     </div>
   );

@@ -8,7 +8,7 @@ import { goToShop, showSigningOut } from '@/lib/signOutScreen';
 import NavBadge from '@/components/ui/NavBadge';
 import useLiveBadges from '@/lib/useLiveBadges';
 import { uploadProductImage } from '@/lib/imageUpload';
-import { allowedStatusesFor, formatOrderNumber, isCountedSale, isPickup, paymentLabel, statusLabel, STATUS_LABELS, transitionOrderStatus } from '@/lib/orders';
+import { allowedStatusesFor, formatOrderNumber, isCountedSale, isPickup, paymentLabel, statusLabel, STATUS_LABELS, transitionOrderStatus, formatPeso } from '@/lib/orders';
 import OnlinePaymentStatus from '@/components/shop/OnlinePaymentStatus';
 import ChangePasswordCard from '@/components/ChangePasswordCard';
 import {
@@ -36,6 +36,7 @@ import { useDialog } from '@/components/ui/Dialog';
 import Avatar from '@/components/ui/Avatar';
 import AvatarUpload from '@/components/ui/AvatarUpload';
 import Img from '@/components/ui/Img';
+import { signInPathFor } from '@/lib/roles';
 
 // Orders grouped the way a shop works through them: what has just come in,
 // what is being packed, what is already on the way, and what is finished.
@@ -200,7 +201,9 @@ export default function SellerDashboard() {
   useEffect(() => {
     if (!authLoading) {
       if (!user) {
-        if (!loggingOut) router.push('/shop/seller');
+        // Sign in through the shop's window and come back to this page (and
+        // the order an email linked to).
+        if (!loggingOut) router.push(signInPathFor(window.location.pathname + window.location.search));
       } else if (!seller) {
         // Signed in without a shop: this is a buyer account, so it belongs in the
         // shop rather than on the seller login form.
@@ -1778,7 +1781,7 @@ export default function SellerDashboard() {
                           <tr key={order.id} className="hover:bg-gray-50">
                             <td className="px-6 py-4 text-sm font-semibold text-blue-600">{formatOrderNumber(order.id)}</td>
                             <td className="px-6 py-4 text-sm text-gray-900">{order.customer_name}</td>
-                            <td className="px-6 py-4 text-sm font-semibold text-gray-900">₱{order.my_total?.toLocaleString()}</td>
+                            <td className="px-6 py-4 text-sm font-semibold text-gray-900">₱{formatPeso(order.my_total)}</td>
                             <td className="px-6 py-4">
                               <span className={`px-3 py-1 text-xs font-semibold rounded-full ${
                                 order.status === 'delivered' ? 'bg-green-100 text-green-700' :
@@ -2053,7 +2056,7 @@ export default function SellerDashboard() {
                       )}
                     </div>
                     <div className="text-left sm:text-right">
-                      <div className="text-2xl font-bold text-blue-600">₱{order.my_total.toLocaleString()}</div>
+                      <div className="text-2xl font-bold text-blue-600">₱{formatPeso(order.my_total)}</div>
                       <p className="text-xs text-gray-500">Your items in this order</p>
                       {Number(order.shipping_fee) > 0 && (
                         <p className="text-xs text-gray-500">
@@ -2081,7 +2084,7 @@ export default function SellerDashboard() {
                     <h4 className="font-semibold mb-2">Your items:</h4>
                     {order.my_items?.map((item) => (
                       <div key={item.id} className="text-sm text-gray-600">
-                        {item.product_name} x{item.quantity} - ₱{(Number(item.price) * Number(item.quantity)).toLocaleString()}
+                        {item.product_name} x{item.quantity} - ₱{formatPeso(Number(item.price) * Number(item.quantity))}
                         {describeSelection(item.options) && (
                           <span className="block text-xs font-medium text-blue-700">
                             {describeSelection(item.options)}
@@ -2196,16 +2199,16 @@ export default function SellerDashboard() {
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
                 <div>
                   <p className="text-sm text-gray-600 mb-1">Total Sales</p>
-                  <p className="text-3xl font-bold text-gray-900">₱{stats.totalSales.toLocaleString()}</p>
+                  <p className="text-3xl font-bold text-gray-900">₱{formatPeso(stats.totalSales)}</p>
                   <p className="text-xs text-gray-500 mt-1">Your products only, cancelled orders excluded</p>
                 </div>
                 <div>
                   <p className="text-sm text-gray-600 mb-1">Platform Fee ({stats.commissionRate}%)</p>
-                  <p className="text-3xl font-bold text-red-600">-₱{stats.platformFee.toLocaleString()}</p>
+                  <p className="text-3xl font-bold text-red-600">-₱{formatPeso(stats.platformFee)}</p>
                 </div>
                 <div>
                   <p className="text-sm text-gray-600 mb-1">Your Earnings</p>
-                  <p className="text-3xl font-bold text-green-600">₱{stats.earnings.toLocaleString()}</p>
+                  <p className="text-3xl font-bold text-green-600">₱{formatPeso(stats.earnings)}</p>
                 </div>
               </div>
 
@@ -2213,12 +2216,12 @@ export default function SellerDashboard() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6 pt-6 border-t">
                   <div className="p-4 bg-yellow-50 rounded-lg">
                     <p className="text-sm text-gray-600 mb-1">Pending Earnings</p>
-                    <p className="text-2xl font-bold text-yellow-700">₱{stats.pendingEarnings.toLocaleString()}</p>
+                    <p className="text-2xl font-bold text-yellow-700">₱{formatPeso(stats.pendingEarnings)}</p>
                     <p className="text-xs text-gray-500 mt-1">Released when the order is delivered</p>
                   </div>
                   <div className="p-4 bg-green-50 rounded-lg">
                     <p className="text-sm text-gray-600 mb-1">Paid Earnings</p>
-                    <p className="text-2xl font-bold text-green-700">₱{stats.paidEarnings.toLocaleString()}</p>
+                    <p className="text-2xl font-bold text-green-700">₱{formatPeso(stats.paidEarnings)}</p>
                     <p className="text-xs text-gray-500 mt-1">Already released to you</p>
                   </div>
                 </div>
@@ -2480,7 +2483,7 @@ export default function SellerDashboard() {
                       <p className="text-sm text-gray-600 mt-1">Orders</p>
                     </div>
                     <div className="text-center p-4 bg-green-50 rounded-lg">
-                      <p className="text-2xl font-bold text-green-600">₱{stats.totalSales.toLocaleString()}</p>
+                      <p className="text-2xl font-bold text-green-600">₱{formatPeso(stats.totalSales)}</p>
                       <p className="text-sm text-gray-600 mt-1">Sales</p>
                     </div>
                     <div className="text-center p-4 bg-yellow-50 rounded-lg">

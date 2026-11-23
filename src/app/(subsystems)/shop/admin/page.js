@@ -6,7 +6,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { supabase, clearStoredSession, startAdminSession } from '@/lib/supabaseClient';
 import { goToShop, showSigningOut } from '@/lib/signOutScreen';
 import { getAccountRole } from '@/lib/roles';
-import { allowedStatusesFor, formatOrderNumber, isCountedSale, isMissingFunction, isPickup, paymentLabel, statusLabel, STATUS_LABELS, transitionOrderStatus } from '@/lib/orders';
+import { allowedStatusesFor, formatOrderNumber, isCountedSale, isMissingFunction, isPickup, paymentLabel, statusLabel, STATUS_LABELS, transitionOrderStatus, formatPeso } from '@/lib/orders';
 import OnlinePaymentStatus from '@/components/shop/OnlinePaymentStatus';
 import { DEFAULT_SHOP_SETTINGS, fetchShopSettings } from '@/lib/shopSettings';
 import PasswordRequirements from '@/components/PasswordRequirements';
@@ -29,6 +29,9 @@ import AdminReviews from '@/components/shop/AdminReviews';
 import AdminReports from '@/components/shop/AdminReports';
 import ReturnRequestPanel from '@/components/shop/ReturnRequestPanel';
 import { fetchReturnRequests, markOrderRefunded } from '@/lib/returns';
+
+// Tabs a link may open (?tab=...).
+const ADMIN_TABS = ['dashboard', 'products', 'orders', 'sellers', 'customers', 'categories', 'transactions', 'reviews', 'reports', 'reports-abuse', 'settings'];
 
 /**
  * Row action buttons. Soft tinted fills instead of solid saturated colours, so
@@ -138,6 +141,32 @@ export default function ShopAdminPage() {
     toFulfill: 0
   });
   const [activeTab, setActiveTab] = useState('dashboard');
+
+  /**
+   * Follow a link such as /shop/admin?tab=orders&order=<id> (from a
+   * notification or an email): open the tab and, for an order, find it.
+   */
+  const openAdminLink = (link) => {
+    let params;
+    try {
+      params = new URL(link, window.location.origin).searchParams;
+    } catch {
+      return;
+    }
+    const tab = params.get('tab');
+    if (tab && ADMIN_TABS.includes(tab)) setActiveTab(tab);
+    const order = params.get('order');
+    if (order && /^[0-9a-f-]{8,36}$/i.test(order)) {
+      setOrderStatusFilter('all');
+      setOrderSearch(order.slice(0, 8));
+    }
+  };
+
+  // Opened from a link: honour ?tab= and ?order= once.
+  useEffect(() => {
+    if (window.location.search) openAdminLink(window.location.href);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [salesDaily, setSalesDaily] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -1810,10 +1839,7 @@ export default function ShopAdminPage() {
               audience="admin"
               emptyMessage="Nothing new. The marketplace is running smoothly."
               items={adminNotifications}
-              onNavigate={(link) => {
-                const tab = new URL(link, window.location.origin).searchParams.get('tab');
-                if (tab) setActiveTab(tab);
-              }}
+              onNavigate={openAdminLink}
             />
             <div className="flex items-center gap-2">
               {adminAvatarUrl ? (
@@ -2103,7 +2129,7 @@ export default function ShopAdminPage() {
                           {order.shop_order_items?.length || 0} items
                         </td>
                         <td className="px-6 py-4 text-sm font-semibold text-gray-900">
-                          ₱{order.total_amount?.toLocaleString() || '0'}
+                          ₱{formatPeso(order.total_amount)}
                         </td>
                         <td className="px-6 py-4">
                           <span className={`px-3 py-1 text-xs font-semibold rounded-full ${
@@ -2649,7 +2675,7 @@ export default function ShopAdminPage() {
                   </div>
                   <div>
                     <p className="text-xs text-gray-600 font-medium">Completed</p>
-                    <p className="text-xl font-bold text-gray-900">₱{orderTotals.completed.toLocaleString()}</p>
+                    <p className="text-xl font-bold text-gray-900">₱{formatPeso(orderTotals.completed)}</p>
                   </div>
                 </div>
               </div>
@@ -2663,7 +2689,7 @@ export default function ShopAdminPage() {
                   </div>
                   <div>
                     <p className="text-xs text-gray-600 font-medium">Pending</p>
-                    <p className="text-xl font-bold text-gray-900">₱{orderTotals.pending.toLocaleString()}</p>
+                    <p className="text-xl font-bold text-gray-900">₱{formatPeso(orderTotals.pending)}</p>
                   </div>
                 </div>
               </div>
@@ -2677,7 +2703,7 @@ export default function ShopAdminPage() {
                   </div>
                   <div>
                     <p className="text-xs text-gray-600 font-medium">Refunds / Cancelled</p>
-                    <p className="text-xl font-bold text-gray-900">₱{orderTotals.refunded.toLocaleString()}</p>
+                    <p className="text-xl font-bold text-gray-900">₱{formatPeso(orderTotals.refunded)}</p>
                   </div>
                 </div>
               </div>
@@ -2692,7 +2718,7 @@ export default function ShopAdminPage() {
                   <div>
                     <p className="text-xs text-gray-600 font-medium">COD</p>
                     <p className="text-xl font-bold text-gray-900">
-                      ₱{orderTotals.cod.toLocaleString()}
+                      ₱{formatPeso(orderTotals.cod)}
                     </p>
                   </div>
                 </div>
@@ -2708,7 +2734,7 @@ export default function ShopAdminPage() {
                   <div>
                     <p className="text-xs text-gray-600 font-medium">GCash</p>
                     <p className="text-xl font-bold text-gray-900">
-                      ₱{orderTotals.gcash.toLocaleString()}
+                      ₱{formatPeso(orderTotals.gcash)}
                     </p>
                   </div>
                 </div>
@@ -2724,7 +2750,7 @@ export default function ShopAdminPage() {
                   <div>
                     <p className="text-xs text-gray-600 font-medium">Bank Transfer</p>
                     <p className="text-xl font-bold text-gray-900">
-                      ₱{orderTotals.bank.toLocaleString()}
+                      ₱{formatPeso(orderTotals.bank)}
                     </p>
                   </div>
                 </div>
@@ -2740,7 +2766,7 @@ export default function ShopAdminPage() {
                   <div>
                     <p className="text-xs text-gray-600 font-medium">Paid online (Xendit)</p>
                     <p className="text-xl font-bold text-gray-900">
-                      ₱{orderTotals.online.toLocaleString()}
+                      ₱{formatPeso(orderTotals.online)}
                     </p>
                   </div>
                 </div>
@@ -2771,7 +2797,7 @@ export default function ShopAdminPage() {
                         <td className="px-6 py-4 text-sm font-mono text-gray-900">TXN-{order.id.slice(0, 8).toUpperCase()}</td>
                         <td className="px-6 py-4 text-sm font-semibold text-blue-600">{formatOrderNumber(order.id)}</td>
                         <td className="px-6 py-4 text-sm text-gray-600">{order.customer_name || 'Customer'}</td>
-                        <td className="px-6 py-4 text-sm font-bold text-gray-900">₱{order.total_amount?.toLocaleString()}</td>
+                        <td className="px-6 py-4 text-sm font-bold text-gray-900">₱{formatPeso(order.total_amount)}</td>
                         <td className="px-6 py-4">
                           <span className="px-3 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-700 uppercase">
                             {order.payment_method}
