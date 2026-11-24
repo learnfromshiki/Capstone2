@@ -50,7 +50,7 @@ export default function ShopFooter() {
                 </a>
               </li>
             )}
-            <li>Payment: GCash, Bank Transfer, Cash on Delivery</li>
+            <li>Payment: Online via Xendit (GCash, Maya, cards), Cash on Delivery</li>
           </ul>
         </div>
 

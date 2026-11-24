@@ -49,9 +49,8 @@ export default function TermsPage() {
             <h2 className="text-lg font-bold text-gray-900">3. Orders and payment</h2>
             <p className="mt-2">
               Placing an order is an offer to buy. The seller confirms it, prepares it and ships it. Prices are in
-              Philippine pesos. Payment is online through Xendit (GCash, Maya, QR Ph, cards and other channels), by
-              GCash or bank transfer with a receipt, or cash on delivery, as shown at checkout. For GCash and bank
-              transfers, your order is confirmed once the seller receives the payment. An order paid online is
+              Philippine pesos. Payment is online through Xendit (GCash, Maya, QR Ph, cards and other channels), or
+              cash on delivery (cash on pickup for pickup orders), as shown at checkout. An order paid online is
               prepared only after the payment arrives, and one that is not paid within 24 hours is cancelled
               automatically.
             </p>

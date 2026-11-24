@@ -20,7 +20,6 @@ import {
   sanitizePhone,
   sanitizePrice,
 } from '@/lib/fieldRules';
-import SellerPaymentSettings from '@/components/shop/SellerPaymentSettings';
 import ProductReviewsModal from '@/components/shop/ProductReviewsModal';
 import PaymentProof from '@/components/shop/PaymentProof';
 import ReturnRequestPanel from '@/components/shop/ReturnRequestPanel';
@@ -91,7 +90,7 @@ const SELLER_TABS = [
 let loggingOut = false;
 
 export default function SellerDashboard() {
-  const { user, seller, loading: authLoading, signOut, updateSellerProfile, refreshSellerProfile } = useSellerAuth();
+  const { user, seller, loading: authLoading, signOut, updateSellerProfile } = useSellerAuth();
   const { showAlert, showConfirm, showToast } = useDialog();
   const router = useRouter();
 
@@ -2345,14 +2344,6 @@ export default function SellerDashboard() {
                   </p>
                 )}
               </div>
-            </div>
-
-            {/* How customers pay this shop */}
-            <div className="mt-6">
-              <SellerPaymentSettings
-                seller={seller}
-                onSaved={() => refreshSellerProfile()}
-              />
             </div>
           </div>
         )}

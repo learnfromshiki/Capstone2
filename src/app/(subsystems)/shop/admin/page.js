@@ -440,7 +440,10 @@ export default function ShopAdminPage() {
       if (error) return;
 
       if (data?.length) {
-        const stored = data.reduce((acc, row) => ({ ...acc, [row.key]: row.value }), {});
+        // Only the settings this page still edits (old GCash/bank rows are ignored).
+        const stored = data
+          .filter((row) => row.key in DEFAULT_SHOP_SETTINGS)
+          .reduce((acc, row) => ({ ...acc, [row.key]: row.value }), {});
         setWebsiteSettings((prev) => ({ ...prev, ...stored }));
       }
     } catch (error) {
@@ -1339,11 +1342,6 @@ export default function ShopAdminPage() {
       return;
     }
 
-    if (trimmed.gcashNumber && trimmed.gcashNumber.replace(/\D/g, '').length < 10) {
-      showToast('Please enter the full 11-digit GCash number (e.g. 0917 123 4567).', 'error');
-      return;
-    }
-
     setSavingSettings(true);
 
     try {
@@ -1354,7 +1352,7 @@ export default function ShopAdminPage() {
       if (error) throw error;
 
       setWebsiteSettings(trimmed);
-      // Refresh the cached copy that checkout and My Orders read
+      // Refresh the cached copy the shop footer reads
       fetchShopSettings({ force: true });
       showToast('Website settings saved.', 'success');
     } catch (error) {
@@ -3145,73 +3143,6 @@ export default function ShopAdminPage() {
                       type="tel"
                       value={websiteSettings.contactPhone}
                       onChange={(e) => setWebsiteSettings({ ...websiteSettings, contactPhone: e.target.value })}
-                      className="w-full px-4 py-3 border-2 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
-                    />
-                  </div>
-                  <div className="border-t pt-4">
-                    <p className="font-semibold text-gray-900">Payment details shown to buyers</p>
-                    <p className="text-xs text-gray-500 mt-1">
-                      Buyers who choose GCash or bank transfer see these at checkout and in My Orders. Leave blank to send them yourself when you confirm an order.
-                    </p>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-semibold mb-2 text-gray-700">GCash Number</label>
-                    <input
-                      type="tel"
-                      value={websiteSettings.gcashNumber || ''}
-                      onChange={(e) => setWebsiteSettings({ ...websiteSettings, gcashNumber: e.target.value })}
-                      placeholder="09XX XXX XXXX"
-                      className="w-full px-4 py-3 border-2 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-semibold mb-2 text-gray-700">GCash Account Name</label>
-                    <input
-                      type="text"
-                      value={websiteSettings.gcashName || ''}
-                      onChange={(e) => setWebsiteSettings({ ...websiteSettings, gcashName: e.target.value })}
-                      placeholder="e.g. JUAN D."
-                      className="w-full px-4 py-3 border-2 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-semibold mb-2 text-gray-700">Bank Name</label>
-                    <input
-                      type="text"
-                      value={websiteSettings.bankName || ''}
-                      onChange={(e) => setWebsiteSettings({ ...websiteSettings, bankName: e.target.value })}
-                      placeholder="e.g. BDO, BPI, Landbank"
-                      className="w-full px-4 py-3 border-2 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-semibold mb-2 text-gray-700">Bank Account Name</label>
-                    <input
-                      type="text"
-                      value={websiteSettings.bankAccountName || ''}
-                      onChange={(e) => setWebsiteSettings({ ...websiteSettings, bankAccountName: e.target.value })}
-                      placeholder=""
-                      className="w-full px-4 py-3 border-2 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-semibold mb-2 text-gray-700">Bank Account Number</label>
-                    <input
-                      type="text"
-                      value={websiteSettings.bankAccountNumber || ''}
-                      onChange={(e) => setWebsiteSettings({ ...websiteSettings, bankAccountNumber: e.target.value })}
-                      placeholder=""
-                      className="w-full px-4 py-3 border-2 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-semibold mb-2 text-gray-700">Payment Note (optional)</label>
-                    <textarea
-                      rows={2}
-                      maxLength={300}
-                      value={websiteSettings.paymentNote || ''}
-                      onChange={(e) => setWebsiteSettings({ ...websiteSettings, paymentNote: e.target.value })}
-                      placeholder="e.g. Send a screenshot of your receipt to our Facebook page with your order number."
                       className="w-full px-4 py-3 border-2 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
                     />
                   </div>

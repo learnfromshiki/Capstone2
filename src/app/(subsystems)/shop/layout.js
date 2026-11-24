@@ -4,7 +4,7 @@
 export const metadata = {
   title: 'Daet Local Shop | CONNECT-Daet.ph',
   description:
-    'Buy authentic Daet handicrafts, food, souvenirs, weavings and art directly from local artisans. Pay by GCash, bank transfer or cash on delivery.',
+    'Buy authentic Daet handicrafts, food, souvenirs, weavings and art directly from local artisans. Pay online through Xendit (GCash, Maya, cards) or cash on delivery.',
   openGraph: {
     title: 'Daet Local Shop | CONNECT-Daet.ph',
     description: 'Authentic products from the artisans of Daet, Camarines Norte.',

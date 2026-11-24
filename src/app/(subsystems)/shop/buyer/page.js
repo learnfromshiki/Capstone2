@@ -6,10 +6,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabaseClient';
 import Link from 'next/link';
 import { cancelMyOrder, confirmOrderReceived, formatOrderNumber, isPickup, paymentLabel, statusLabel } from '@/lib/orders';
-import { fetchShopSettings } from '@/lib/shopSettings';
 import { returnPagePath, startOnlinePayment } from '@/lib/xendit';
 import OnlinePaymentStatus from '@/components/shop/OnlinePaymentStatus';
-import PaymentInstructions from '@/components/shop/PaymentInstructions';
 import ChangePasswordCard from '@/components/ChangePasswordCard';
 import { joinName, splitName } from '@/lib/profile';
 import { ROLE_LABELS, signInPathFor } from '@/lib/roles';
@@ -212,7 +210,6 @@ export default function BuyerDashboard() {
       cancelled = true;
     };
   }, []);
-  const [shopSettings, setShopSettings] = useState(null);
 
   // Open exactly what a link points at: a tab, and the order or conversation
   // inside it. Notifications link this way, so tapping one lands on the thing
@@ -242,17 +239,6 @@ export default function BuyerDashboard() {
     const node = document.getElementById(`order-${highlightOrderId}`);
     if (node) node.scrollIntoView({ behavior: 'smooth', block: 'center' });
   }, [highlightOrderId, activeTab, orders]);
-
-  // Contact and payment details from Admin -> Settings
-  useEffect(() => {
-    let cancelled = false;
-    fetchShopSettings().then((settings) => {
-      if (!cancelled) setShopSettings(settings);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   useEffect(() => {
     // Wait for the session to resolve before redirecting, otherwise a fresh
@@ -1546,17 +1532,6 @@ export default function BuyerDashboard() {
                             </div>
                           </div>
 
-                          {order.status === 'pending' && ['gcash', 'bank'].includes(order.payment_method) && (
-                            <div className="mt-4">
-                              <PaymentInstructions
-                                method={order.payment_method}
-                                settings={shopSettings}
-                                amount={Number(order.total_amount)}
-                                orderNumbers={[formatOrderNumber(order.id)]}
-                                compact
-                              />
-                            </div>
-                          )}
                         </div>
                       ))}
                     </div>

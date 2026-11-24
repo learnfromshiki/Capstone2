@@ -2,19 +2,14 @@ import { supabase } from './supabaseClient';
 
 /**
  * Website settings the admin edits in Admin → Settings. Stored as key/value rows
- * in shop_settings, which everyone may read (contact details and payment
- * instructions are meant to be public).
+ * in shop_settings, which everyone may read (the contact details are public).
+ * Buyers pay online through Xendit or in cash, so there are no payment
+ * account details here.
  */
 export const DEFAULT_SHOP_SETTINGS = {
   siteName: 'Daet Local Shop',
   contactEmail: 'support@connect-daet.ph',
   contactPhone: '+63 900 000 0000',
-  gcashName: '',
-  gcashNumber: '',
-  bankName: '',
-  bankAccountName: '',
-  bankAccountNumber: '',
-  paymentNote: '',
 };
 
 let cachedSettings = null;
@@ -49,12 +44,4 @@ export const fetchShopSettings = async ({ force = false } = {}) => {
   })();
 
   return pendingRequest;
-};
-
-/** True when the admin has filled in where buyers should send this payment. */
-export const hasPaymentDetails = (settings, method) => {
-  if (!settings) return false;
-  if (method === 'gcash') return Boolean(settings.gcashNumber);
-  if (method === 'bank') return Boolean(settings.bankAccountNumber);
-  return false;
 };
