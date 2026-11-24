@@ -1268,7 +1268,7 @@ export default function ShopPage() {
       {/* Products Grid */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-12">
         {loading ? (
-          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4" aria-busy="true" aria-label="Loading products">
+          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3" aria-busy="true" aria-label="Loading products">
             {Array.from({ length: 8 }).map((_, i) => (
               <div key={i} className="overflow-hidden rounded-xl border border-gray-200 bg-white">
                 <div className="skeleton aspect-[4/3] w-full" />
@@ -1350,7 +1350,7 @@ export default function ShopPage() {
                 </div>
               </section>
             )}
-          <div className="stagger-children grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+          <div className="stagger-children grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
             {filteredProducts.map((product) => (
               <ProductCard
                 key={product.id}
@@ -1364,6 +1364,7 @@ export default function ShopPage() {
                 sold={soldCounts[product.id] || 0}
                 liked={likedIds.includes(product.id)}
                 onToggleLike={toggleLike}
+                categoryInfo={categories.find((entry) => entry.value === product.category)}
               />
             ))}
           </div>

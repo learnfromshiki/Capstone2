@@ -3,6 +3,7 @@
 import StarRating from './StarRating';
 import LikeButton from './LikeButton';
 import Img from '@/components/ui/Img';
+import CategoryIcon from './CategoryIcon';
 import { formatSold, saleInfo } from '@/lib/shopFeatures';
 
 export default function ProductCard({
@@ -16,6 +17,7 @@ export default function ProductCard({
   sold = 0,
   liked = false,
   onToggleLike,
+  categoryInfo,
 }) {
   // One reading of the stock for the badge, the label and the buttons, so they
   // can never disagree about whether something is sold out.
@@ -52,7 +54,7 @@ export default function ProductCard({
           <Img
             src={product.image_url}
             alt={product.name}
-            sizes="(min-width: 1024px) 25vw, (min-width: 640px) 50vw, 100vw"
+            sizes="(min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw"
             className="absolute inset-0 h-full w-full object-cover transition-transform duration-300 group-hover:scale-110"
           />
         ) : (
@@ -67,8 +69,10 @@ export default function ProductCard({
         {/* Category Badge */}
         {product.category && (
           <div className="absolute bottom-3 left-3 bg-white/95 backdrop-blur-sm text-gray-900 text-xs px-3 py-1.5 rounded-full font-semibold shadow-lg flex items-center gap-1">
-            <span>{categoryIcons[product.category] || '🏪'}</span>
-            <span className="capitalize">{product.category}</span>
+            <span className="inline-flex">
+              <CategoryIcon icon={categoryInfo?.icon || categoryIcons[product.category]} fallback="🏷️" className="h-4 w-4" />
+            </span>
+            <span>{categoryInfo?.label || product.category.replace(/-/g, ' ').replace(/w/g, (c) => c.toUpperCase())}</span>
           </div>
         )}
 
