@@ -3,8 +3,9 @@ import Reveal from '@/components/landing/Reveal';
 import LandingNav from '@/components/landing/LandingNav';
 import { listCategoriesInUse, listPublicCategories } from '@/lib/publicData.server';
 
-// Re-read which categories have products every few minutes.
-export const revalidate = 300;
+// Read which categories have products on every visit, so a category a
+// seller just listed in shows up here straight away (as it does in the shop).
+export const dynamic = 'force-dynamic';
 
 const FEATURES = [
   {

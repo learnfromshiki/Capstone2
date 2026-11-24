@@ -5,7 +5,8 @@ import StarRating from './StarRating';
 import LikeButton from './LikeButton';
 import Avatar from '@/components/ui/Avatar';
 import Img from '@/components/ui/Img';
-import { describeVoucher, formatSold, saleInfo, shareProduct } from '@/lib/shopFeatures';
+import CameraButton from '@/components/ui/CameraButton';
+import { formatSold, saleInfo, shareProduct } from '@/lib/shopFeatures';
 
 /** A row of small product tiles: "More from this shop", "You may also like". */
 function ProductStrip({ title, items, onSelect, soldCounts = {} }) {
@@ -88,7 +89,6 @@ export default function ProductDetailsModal({
   soldCounts = {},
   liked = false,
   onToggleLike,
-  vouchers = [],
   freeShippingThreshold = null,
   moreFromShop = [],
   similarProducts = [],
@@ -101,7 +101,6 @@ export default function ProductDetailsModal({
   const [reviewFilter, setReviewFilter] = useState(0);
   const [showAllReviews, setShowAllReviews] = useState(false);
   const [shareNote, setShareNote] = useState('');
-  const [copiedCode, setCopiedCode] = useState('');
   const [draftRating, setDraftRating] = useState(5);
   const [draftComment, setDraftComment] = useState('');
   const [savingReview, setSavingReview] = useState(false);
@@ -112,7 +111,6 @@ export default function ProductDetailsModal({
   const reviewFileRef = useRef(null);
   // A second input with `capture` opens the phone's camera instead of its
   // gallery; a laptop falls back to a normal file picker.
-  const reviewCameraRef = useRef(null);
   // Opening another product from "More from this shop" starts at the top.
   const scrollRef = useRef(null);
   useEffect(() => {
@@ -129,7 +127,6 @@ export default function ProductDetailsModal({
     setReviewFilter(0);
     setShowAllReviews(false);
     setShareNote('');
-    setCopiedCode('');
     setReviewPhotos((current) => {
       current.forEach((photo) => URL.revokeObjectURL(photo.preview));
       return [];
@@ -183,16 +180,6 @@ export default function ProductDetailsModal({
       result === 'copied' ? 'Link copied' : result === 'shared' ? 'Shared' : result === 'failed' ? 'Could not share' : ''
     );
     setTimeout(() => setShareNote(''), 2500);
-  };
-
-  const copyCode = async (code) => {
-    try {
-      await navigator.clipboard.writeText(code);
-      setCopiedCode(code);
-      setTimeout(() => setCopiedCode(''), 2000);
-    } catch (error) {
-      setCopiedCode('');
-    }
   };
 
   const handleReviewSubmit = async (event) => {
@@ -288,10 +275,11 @@ export default function ProductDetailsModal({
         onClick={(event) => event.stopPropagation()}
       >
         <div className="grid md:grid-cols-2">
-          {/* Photos. The panel is only as tall as the photo (square) and stays
-              in view while the details scroll, instead of stretching to the
-              details column and leaving an empty grey block under the photo. */}
-          <div className="relative bg-gray-100 min-h-[280px] md:sticky md:top-0 md:self-start md:rounded-tl-2xl">
+          {/* Photos. The panel is only as tall as the photo (square) instead of
+              stretching to the details column, and it scrolls away with the
+              rest of the window (it used to stay pinned and slide over the
+              reviews below while scrolling). */}
+          <div className="relative bg-gray-100 min-h-[280px] md:self-start md:rounded-tl-2xl">
             {gallery.length > 0 ? (
               <div className="flex h-full flex-col">
                 <Img
@@ -410,37 +398,6 @@ export default function ProductDetailsModal({
                 {inStock ? `${stock} in stock` : 'Out of stock'}
               </span>
             </div>
-
-            {/* Shop vouchers */}
-            {vouchers.length > 0 && (
-              <div className="mb-4">
-                <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-gray-500">Shop vouchers</p>
-                <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
-                  {vouchers.map((voucher) => {
-                    const text = describeVoucher(voucher);
-                    return (
-                      <div
-                        key={voucher.id}
-                        className="flex flex-shrink-0 items-center gap-3 rounded-lg border border-dashed border-red-300 bg-red-50 px-3 py-2"
-                      >
-                        <div>
-                          <p className="text-sm font-bold text-red-700">{text.headline}</p>
-                          <p className="text-[11px] text-red-600">{text.minimum}</p>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => copyCode(voucher.code)}
-                          className="min-h-[32px] rounded-md bg-red-600 px-2 font-mono text-xs font-bold text-white hover:bg-red-700"
-                          title="Copy code, then enter it at checkout"
-                        >
-                          {copiedCode === voucher.code ? 'Copied!' : voucher.code}
-                        </button>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
 
             {freeShippingThreshold > 0 && (
               <p className="mb-4 flex items-center gap-2 text-sm text-green-700">
@@ -779,23 +736,10 @@ export default function ProductDetailsModal({
                         onChange={addReviewPhotos}
                         className="hidden"
                       />
-                      {/* `capture` asks the phone for its camera rather than
-                          its gallery. A laptop ignores it and opens the usual
-                          file picker, so the button works everywhere. */}
-                      <input
-                        ref={reviewCameraRef}
-                        type="file"
-                        accept="image/*"
-                        capture="environment"
-                        onChange={addReviewPhotos}
-                        className="hidden"
-                      />
-
-                      <button
-                        type="button"
-                        onClick={() => reviewCameraRef.current?.click()}
-                        aria-label="Take a photo with the camera"
-                        title="Take a photo"
+                      {/* Opens the phone's camera app, or the webcam inside
+                          the page on a laptop. */}
+                      <CameraButton
+                        onFiles={(files) => addReviewPhotos({ target: { files, value: '' } })}
                         className="flex h-16 w-16 flex-col items-center justify-center gap-0.5 rounded-lg border-2 border-blue-200 bg-blue-50 text-blue-600 transition-colors hover:border-blue-500 hover:bg-blue-100"
                       >
                         <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -803,7 +747,7 @@ export default function ProductDetailsModal({
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
                         </svg>
                         <span className="text-[10px] font-semibold">Camera</span>
-                      </button>
+                      </CameraButton>
 
                       <button
                         type="button"

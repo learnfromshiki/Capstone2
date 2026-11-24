@@ -17,7 +17,6 @@ import PaymentInstructions from './PaymentInstructions';
 import { describeSelection } from '@/lib/productOptions';
 import AddressFields from './AddressFields';
 import Img from '@/components/ui/Img';
-import { describeVoucher, fetchShopVouchers, voucherDiscount } from '@/lib/shopFeatures';
 import { DEFAULT_CITY, DEFAULT_PROVINCE, formatAddress, parseAddress } from '@/lib/philippineAddresses';
 import { PHONE_HINT, describeNameProblem, describePhoneProblem, sanitizeName, sanitizePhone } from '@/lib/fieldRules';
 import { fetchShippingFee } from '@/lib/shipping';
@@ -68,12 +67,6 @@ export default function CheckoutModal({
   const [placedCheckoutId, setPlacedCheckoutId] = useState(null);
   const [paymentStartError, setPaymentStartError] = useState('');
   const [startingPayment, setStartingPayment] = useState(false);
-  // Shop vouchers: the live ones of each shop in the basket, the one applied
-  // per shop, and the code being typed.
-  const [shopVouchers, setShopVouchers] = useState({});
-  const [appliedVouchers, setAppliedVouchers] = useState({});
-  const [voucherInputs, setVoucherInputs] = useState({});
-  const [voucherErrors, setVoucherErrors] = useState({});
   // Delivered to an address, or picked up at the shop (no delivery fee)
   const [fulfillment, setFulfillment] = useState('delivery');
   const isPickupOrder = fulfillment === 'pickup';
@@ -248,9 +241,6 @@ export default function CheckoutModal({
 
     fetchSellerPayments(ids).then((map) => {
       if (!cancelled) setSellerPayments(map);
-    });
-    fetchShopVouchers(ids).then((map) => {
-      if (!cancelled) setShopVouchers(map);
     });
 
     return () => {
@@ -552,10 +542,6 @@ export default function CheckoutModal({
       args.p_redeem_points = redemption.total;
     }
 
-    // Shop vouchers, only when one is applied (supabase-shopee-features.sql).
-    const voucherCodes = Object.keys(voucherDiscounts).map((key) => appliedVouchers[key].code);
-    if (voucherCodes.length > 0) args.p_voucher_codes = voucherCodes;
-
     const { data, error: rpcError } = await supabase.rpc('place_order', args);
 
     if (rpcError) {
@@ -680,33 +666,18 @@ export default function CheckoutModal({
     return groups;
   }, {});
 
-  // Shop vouchers: what each applied code takes off its shop's goods, by the
-  // same rule place_order() uses. A code that no longer qualifies is dropped.
-  const voucherDiscounts = {};
-  const voucherProblems = {};
-  Object.entries(appliedVouchers).forEach(([key, voucher]) => {
-    const result = voucherDiscount(voucher, subtotalsBySeller[key] || 0);
-    if (result.error) voucherProblems[key] = result.error;
-    else voucherDiscounts[key] = result.discount;
-  });
-  const voucherTotal = Object.values(voucherDiscounts).reduce((sum, value) => sum + value, 0);
-  const afterVouchers = Object.fromEntries(
-    Object.entries(subtotalsBySeller).map(([key, value]) => [key, Math.max(0, value - (voucherDiscounts[key] || 0))])
-  );
-
   // Reward points spent on this checkout: as many as the customer has, up to
-  // half of each shop's goods after its voucher (the same rule place_order()
-  // applies).
-  const redemption = allocateRedemption(afterVouchers, usePoints ? pointsBalance : 0);
-  const redeemableNow = allocateRedemption(afterVouchers, pointsBalance).total;
+  // half of each shop's goods (the same rule place_order() applies).
+  const redemption = allocateRedemption(subtotalsBySeller, usePoints ? pointsBalance : 0);
+  const redeemableNow = allocateRedemption(subtotalsBySeller, pointsBalance).total;
   const pointsDiscount = redemption.total * POINT_VALUE;
-  const amountDue = Math.max(0, summaryTotal - voucherTotal + shippingFee - pointsDiscount);
-  // Points are earned on what is actually paid for the goods: after the
-  // shop's voucher and any points spent (as place_order() records it).
+  const amountDue = Math.max(0, summaryTotal + shippingFee - pointsDiscount);
+  // Points are earned on what is actually paid for the goods: after any
+  // points spent (as place_order() records it).
   const deductionsBySeller = Object.fromEntries(
     Object.keys(subtotalsBySeller).map((key) => [
       key,
-      (Number(redemption.bySeller[key]) || 0) * POINT_VALUE + (voucherDiscounts[key] || 0),
+      (Number(redemption.bySeller[key]) || 0) * POINT_VALUE,
     ])
   );
   const summaryPoints = estimateRewardPoints(summaryItems, deductionsBySeller);
@@ -738,37 +709,10 @@ export default function CheckoutModal({
   ).map((group) => ({
     ...group,
     amount:
-      group.amount -
-      (voucherDiscounts[group.key] || 0) +
+      group.amount +
       (Number(shippingFees[group.key]) || 0) -
       (Number(redemption.bySeller[group.key]) || 0) * POINT_VALUE,
   }));
-
-  /** Apply a code to one shop's group, from a chip or the code box. */
-  const applyVoucher = (groupKey, rawCode) => {
-    const code = String(rawCode || '').trim().toUpperCase();
-    setVoucherErrors((current) => ({ ...current, [groupKey]: '' }));
-    if (!code) return;
-    const voucher = (shopVouchers[groupKey] || []).find((entry) => entry.code === code);
-    if (!voucher) {
-      setVoucherErrors((current) => ({ ...current, [groupKey]: `${code} is not a voucher of this shop, or it has ended.` }));
-      return;
-    }
-    const result = voucherDiscount(voucher, subtotalsBySeller[groupKey] || 0);
-    if (result.error) {
-      setVoucherErrors((current) => ({ ...current, [groupKey]: result.error }));
-      return;
-    }
-    setAppliedVouchers((current) => ({ ...current, [groupKey]: voucher }));
-    setVoucherInputs((current) => ({ ...current, [groupKey]: '' }));
-  };
-
-  const removeVoucher = (groupKey) =>
-    setAppliedVouchers((current) => {
-      const next = { ...current };
-      delete next[groupKey];
-      return next;
-    });
 
   /**
    * A shop that has not saved its GCash number cannot be paid by GCash, so
@@ -850,87 +794,6 @@ export default function CheckoutModal({
                 );
               })}
           </ul>
-
-          {/* This shop's vouchers */}
-          {group.sellerId && ((shopVouchers[group.key] || []).length > 0 || appliedVouchers[group.key]) && (
-            <div className="border-t border-dashed border-gray-200 bg-red-50/40 px-4 py-3">
-              {appliedVouchers[group.key] ? (
-                <div className="flex flex-wrap items-center gap-2 text-sm">
-                  <span className="rounded bg-red-600 px-2 py-0.5 font-mono text-xs font-bold text-white">
-                    {appliedVouchers[group.key].code}
-                  </span>
-                  {voucherDiscounts[group.key] !== undefined ? (
-                    <span className="font-semibold text-red-700">−₱{voucherDiscounts[group.key].toFixed(2)} shop voucher</span>
-                  ) : (
-                    <span className="text-xs text-red-700">{voucherProblems[group.key]}</span>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => removeVoucher(group.key)}
-                    className="ml-auto min-h-[32px] text-xs font-semibold text-gray-600 hover:text-gray-900"
-                  >
-                    Remove
-                  </button>
-                </div>
-              ) : (
-                <>
-                  <p className="mb-2 text-xs font-semibold text-gray-700">Shop vouchers</p>
-                  <div className="mb-2 flex flex-wrap gap-2">
-                    {(shopVouchers[group.key] || []).map((voucher) => {
-                      const text = describeVoucher(voucher);
-                      const check = voucherDiscount(voucher, subtotalsBySeller[group.key] || 0);
-                      return (
-                        <button
-                          key={voucher.id}
-                          type="button"
-                          onClick={() => applyVoucher(group.key, voucher.code)}
-                          disabled={Boolean(check.error)}
-                          title={check.error || `Use ${voucher.code}`}
-                          className="rounded-lg border border-dashed border-red-300 bg-white px-3 py-1.5 text-left text-xs transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                          <span className="block font-bold text-red-700">{text.headline}</span>
-                          <span className="block text-[11px] text-gray-600">{text.minimum}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                  <div className="flex gap-2">
-                    <input
-                      value={voucherInputs[group.key] || ''}
-                      onChange={(event) =>
-                        setVoucherInputs((current) => ({
-                          ...current,
-                          [group.key]: event.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 20),
-                        }))
-                      }
-                      onKeyDown={(event) => {
-                        if (event.key === 'Enter') {
-                          event.preventDefault();
-                          applyVoucher(group.key, voucherInputs[group.key]);
-                        }
-                      }}
-                      placeholder="Enter voucher code"
-                      aria-label={`Voucher code for ${group.name}`}
-                      className="min-h-[40px] flex-1 rounded-lg border border-gray-300 px-3 font-mono text-sm uppercase"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => applyVoucher(group.key, voucherInputs[group.key])}
-                      disabled={!voucherInputs[group.key]}
-                      className="min-h-[40px] rounded-lg bg-red-600 px-4 text-sm font-semibold text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:bg-gray-300"
-                    >
-                      Apply
-                    </button>
-                  </div>
-                  {voucherErrors[group.key] && (
-                    <p className="mt-1 text-xs text-red-600" role="alert">
-                      {voucherErrors[group.key]}
-                    </p>
-                  )}
-                </>
-              )}
-            </div>
-          )}
         </div>
       ))}
     </div>
@@ -1298,12 +1161,6 @@ export default function CheckoutModal({
                   {shippingFee === 0 ? 'FREE' : `₱${shippingFee.toFixed(2)}`}
                 </span>
               </div>
-              {voucherTotal > 0 && (
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">Shop vouchers</span>
-                  <span className="font-semibold text-red-600">−₱{voucherTotal.toFixed(2)}</span>
-                </div>
-              )}
               {pointsDiscount > 0 && (
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-600">Reward points ({redemption.total.toLocaleString()} pts)</span>

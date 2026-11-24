@@ -12,11 +12,13 @@ const SUPABASE_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.NE
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const rest = async (path, { revalidate = 300 } = {}) => {
+  // revalidate 0 = always read fresh (no cached copy).
+  const cache = revalidate === 0 ? { cache: 'no-store' } : { next: { revalidate } };
   if (!SUPABASE_URL || !SUPABASE_KEY) return null;
   try {
     const response = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
       headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
-      next: { revalidate },
+      ...cache,
     });
     if (!response.ok) return null;
     return await response.json();
@@ -60,8 +62,8 @@ export const listPublicProducts = async () => {
  */
 export const listCategoriesInUse = async () => {
   const [products, sellers] = await Promise.all([
-    rest('shop_products?available=eq.true&select=category,seller_id&limit=5000'),
-    rest('shop_sellers?is_approved=eq.true&is_active=eq.true&select=id&limit=5000'),
+    rest('shop_products?available=eq.true&select=category,seller_id&limit=5000', { revalidate: 0 }),
+    rest('shop_sellers?is_approved=eq.true&is_active=eq.true&select=id&limit=5000', { revalidate: 0 }),
   ]);
   if (!Array.isArray(products)) return null;
   const publicShops = new Set(Array.isArray(sellers) ? sellers.map((s) => s.id) : []);
@@ -74,6 +76,8 @@ export const listCategoriesInUse = async () => {
 
 /** Active categories from shop_categories (name, slug, icon), or null. */
 export const listPublicCategories = async () => {
-  const rows = await rest('shop_categories?is_active=eq.true&select=name,slug,icon,display_order&order=display_order.asc');
+  const rows = await rest('shop_categories?is_active=eq.true&select=name,slug,icon,display_order&order=display_order.asc', {
+    revalidate: 0,
+  });
   return Array.isArray(rows) ? rows : null;
 };

@@ -2542,11 +2542,6 @@ export default function ShopAdminPage() {
                       <span className="font-semibold">Cancelled:</span> {order.cancel_reason}
                     </p>
                   )}
-                  {order.tracking_number && (
-                    <p className="mt-3 text-sm text-gray-700">
-                      🚚 {order.courier || 'Courier'} · <span className="font-mono">{order.tracking_number}</span>
-                    </p>
-                  )}
 
                   <ReturnRequestPanel
                     request={returnRequests[order.id]}

@@ -23,8 +23,6 @@ import {
 import SellerPaymentSettings from '@/components/shop/SellerPaymentSettings';
 import ProductReviewsModal from '@/components/shop/ProductReviewsModal';
 import PaymentProof from '@/components/shop/PaymentProof';
-import TrackingForm from '@/components/shop/TrackingForm';
-import SellerVouchers from '@/components/shop/SellerVouchers';
 import ReturnRequestPanel from '@/components/shop/ReturnRequestPanel';
 import { fetchReturnRequests } from '@/lib/returns';
 import { fetchProfileRow, joinName, splitName } from '@/lib/profile';
@@ -299,7 +297,7 @@ export default function SellerDashboard() {
   const loadSellerOrders = async () => {
     const { data: myProducts, error: productsError } = await supabase
       .from('shop_products')
-      .select('id, available')
+      .select('*')
       .eq('seller_id', seller.id);
 
     if (productsError) throw productsError;
@@ -434,7 +432,7 @@ export default function SellerDashboard() {
       const paidEarnings = earningRows?.length ? sumByStatus('paid') : null;
 
       setStats({
-        totalProducts: myProducts.length,
+        totalProducts: myProducts.filter((product) => !product.archived_at).length,
         activeProducts: myProducts.filter((product) => product.available).length,
         totalOrders: orderRows.length,
         toFulfill: salesOrders.filter((order) => ['pending', 'confirmed', 'processing'].includes(order.status)).length,
@@ -465,7 +463,8 @@ export default function SellerDashboard() {
       console.error('Error fetching products:', error);
       return;
     }
-    setProducts(data || []);
+    // Deleted products that past orders still point to are kept, archived.
+    setProducts((data || []).filter((product) => !product.archived_at));
   };
 
   const fetchOrders = async () => {
@@ -755,28 +754,58 @@ export default function SellerDashboard() {
     if (!confirmed) return;
 
     try {
-      // A product that already appears in orders must keep its row so past
-      // orders stay intact; deactivating hides it from the shop instead.
+      // Only an order that is still in progress (not yet delivered or
+      // cancelled) stops a delete: the shop still has to fulfil it. Finished
+      // orders keep the product's name and price on their own rows.
       const { data: orderedItems, error: orderedError } = await supabase
         .from('shop_order_items')
-        .select('id')
+        .select('id, shop_orders!inner(status)')
         .eq('product_id', productId)
+        .not('shop_orders.status', 'in', '(delivered,cancelled)')
         .limit(1);
 
       if (orderedError) throw orderedError;
 
       if (orderedItems && orderedItems.length > 0) {
-        showAlert('This product is part of existing orders, so it cannot be deleted. Deactivate it instead to hide it from the shop.');
+        showAlert(
+          'This product is in an order that is still in progress. Finish or cancel that order first, or deactivate the product to hide it from the shop.'
+        );
         return;
       }
 
-      const { error } = await supabase
-        .from('shop_products')
-        .delete()
-        .eq('id', productId)
-        .eq('seller_id', seller.id);
+      const { count: pastOrders, error: pastError } = await supabase
+        .from('shop_order_items')
+        .select('id', { count: 'exact', head: true })
+        .eq('product_id', productId);
+      if (pastError) throw pastError;
 
-      if (error) throw error;
+      if (pastOrders > 0) {
+        // Finished orders (and this shop's sales history) still point to the
+        // product, so its row is archived rather than erased: it leaves the
+        // shop and this list, and past orders stay complete.
+        let { error: archiveError } = await supabase
+          .from('shop_products')
+          .update({ available: false, archived_at: new Date().toISOString() })
+          .eq('id', productId)
+          .eq('seller_id', seller.id);
+        if (archiveError && /archived_at/i.test(archiveError.message || '')) {
+          // supabase-product-archive.sql not run yet: at least hide it.
+          ({ error: archiveError } = await supabase
+            .from('shop_products')
+            .update({ available: false })
+            .eq('id', productId)
+            .eq('seller_id', seller.id));
+        }
+        if (archiveError) throw archiveError;
+      } else {
+        const { error } = await supabase
+          .from('shop_products')
+          .delete()
+          .eq('id', productId)
+          .eq('seller_id', seller.id);
+        if (error) throw error;
+      }
+
       fetchProducts();
       showToast('Product deleted successfully!', 'success');
     } catch (error) {
@@ -1177,7 +1206,16 @@ export default function SellerDashboard() {
   const orderSearchTerm = searchTerm.replace(/^#/, '');
   const searchedOrders = orderSearchTerm
     ? orders.filter((order) =>
-        [order.customer_name, order.customer_email, order.customer_phone, order.status, order.id]
+        [
+          order.customer_name,
+          order.customer_email,
+          order.customer_phone,
+          order.status,
+          order.id,
+          // The products in the order, so a seller can look an order up by
+          // what was bought, not only by who bought it.
+          ...(order.my_items || []).map((item) => item.product_name),
+        ]
           .filter(Boolean)
           .some((value) => String(value).toLowerCase().includes(orderSearchTerm))
       )
@@ -1381,20 +1419,6 @@ export default function SellerDashboard() {
             </svg>
             <span className="font-medium">Orders</span>
             <NavBadge {...tabBadges.orders} />
-          </button>
-
-          <button
-            onClick={() => setActiveTab('vouchers')}
-            className={`w-full flex items-center gap-3 px-6 py-3 text-left transition-colors ${
-              activeTab === 'vouchers'
-                ? 'bg-white/10 border-l-4 border-blue-400 font-semibold'
-                : 'hover:bg-white/5'
-            }`}
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 5v2m0 4v2m0 4v2M5 5a2 2 0 00-2 2v3a2 2 0 110 4v3a2 2 0 002 2h14a2 2 0 002-2v-3a2 2 0 110-4V7a2 2 0 00-2-2H5z" />
-            </svg>
-            <span className="font-medium">Vouchers</span>
           </button>
 
           <button
@@ -2152,15 +2176,6 @@ export default function SellerDashboard() {
                     }}
                   />
 
-                  {!isPickup(order) && order.status !== 'cancelled' && order.status !== 'pending' && (
-                    <TrackingForm
-                      order={order}
-                      onSaved={(tracking) =>
-                        setOrders((rows) => rows.map((row) => (row.id === order.id ? { ...row, ...tracking } : row)))
-                      }
-                    />
-                  )}
-
                   {/* What the customer sent, for a GCash or bank order */}
                   <div className="mt-3">
                     <PaymentProof
@@ -2180,8 +2195,6 @@ export default function SellerDashboard() {
             </div>
           </div>
         )}
-
-        {activeTab === 'vouchers' && <SellerVouchers seller={seller} />}
 
         {activeTab === 'messages' && (
           <ChatPanel

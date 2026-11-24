@@ -30,12 +30,18 @@ import {
   clearRecentlyViewed,
   fetchFollowerCounts,
   fetchMyFollows,
-  fetchShopVouchers,
   fetchSoldCounts,
   readRecentlyViewed,
   rememberViewed,
   setFollowing,
 } from '@/lib/shopFeatures';
+
+// Keep a price box to digits and at most one decimal point.
+const cleanPrice = (value) => {
+  const digits = String(value).replace(/[^\d.]/g, '');
+  const dot = digits.indexOf('.');
+  return dot === -1 ? digits : digits.slice(0, dot + 1) + digits.slice(dot + 1).replace(/\./g, '');
+};
 
 export default function ShopPage() {
   const [products, setProducts] = useState([]);
@@ -107,11 +113,10 @@ export default function ShopPage() {
   // Price range filter (empty = no limit)
   const [priceMin, setPriceMin] = useState('');
   const [priceMax, setPriceMax] = useState('');
-  // Shopee-style extras: units sold, followers, vouchers, likes, history
+  // Shopee-style extras: units sold, followers, likes, history
   const [soldCounts, setSoldCounts] = useState({});
   const [followerCounts, setFollowerCounts] = useState({});
   const [myFollows, setMyFollows] = useState(() => new Set());
-  const [vouchersBySeller, setVouchersBySeller] = useState({});
   const [likedIds, setLikedIds] = useState([]);
   const [recentIds, setRecentIds] = useState([]);
   const [freeShippingThreshold, setFreeShippingThreshold] = useState(null);
@@ -140,15 +145,14 @@ export default function ShopPage() {
     }
   }, [loginRequested, authLoading, user, role, loginNext]);
 
-  // Units sold, followers, live vouchers and the free-delivery threshold:
+  // Units sold, followers and the free-delivery threshold:
   // public figures, loaded once with the page.
   useEffect(() => {
     let cancelled = false;
-    Promise.all([fetchSoldCounts(), fetchFollowerCounts(), fetchShopVouchers()]).then(([sold, followers, vouchers]) => {
+    Promise.all([fetchSoldCounts(), fetchFollowerCounts()]).then(([sold, followers]) => {
       if (cancelled) return;
       setSoldCounts(sold);
       setFollowerCounts(followers);
-      setVouchersBySeller(vouchers);
     });
     listShippingRates()
       .then(({ rates }) => {
@@ -919,8 +923,12 @@ export default function ShopPage() {
   const reviewSummaries = ratingSummaries;
 
   const normalizedQuery = searchQuery.trim().toLowerCase();
-  const minPrice = priceMin === '' ? null : Number(priceMin);
-  const maxPrice = priceMax === '' ? null : Number(priceMax);
+  // The price boxes are plain text boxes: a number box can display text such
+  // as "0e" while handing the page an empty value, which silently switched
+  // the filter off. Now what is in the box is exactly what is filtered on,
+  // so Max 0 shows only free items (normally none).
+  const minPrice = priceMin === '' || priceMin === '.' ? null : Number(priceMin);
+  const maxPrice = priceMax === '' || priceMax === '.' ? null : Number(priceMax);
   const priceFilterOn = minPrice !== null || maxPrice !== null;
   const filteredProducts = products
     .filter((p) => {
@@ -1194,22 +1202,20 @@ export default function ShopPage() {
                 <div className="flex items-center gap-1.5 text-sm text-gray-700" role="group" aria-label="Price range">
                   <span className="sr-only sm:not-sr-only">₱</span>
                   <input
-                    type="number"
-                    inputMode="numeric"
-                    min="0"
+                    type="text"
+                    inputMode="decimal"
                     value={priceMin}
-                    onChange={(e) => setPriceMin(e.target.value.replace(/[^\d.]/g, ''))}
+                    onChange={(e) => setPriceMin(cleanPrice(e.target.value))}
                     placeholder="Min"
                     aria-label="Minimum price"
                     className="min-h-[44px] w-20 rounded-lg border-2 border-gray-200 px-2 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
                   />
                   <span aria-hidden="true">–</span>
                   <input
-                    type="number"
-                    inputMode="numeric"
-                    min="0"
+                    type="text"
+                    inputMode="decimal"
                     value={priceMax}
-                    onChange={(e) => setPriceMax(e.target.value.replace(/[^\d.]/g, ''))}
+                    onChange={(e) => setPriceMax(cleanPrice(e.target.value))}
                     placeholder="Max"
                     aria-label="Maximum price"
                     className="min-h-[44px] w-20 rounded-lg border-2 border-gray-200 px-2 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
@@ -1396,7 +1402,6 @@ export default function ShopPage() {
         soldCounts={soldCounts}
         liked={Boolean(selectedProduct && likedIds.includes(selectedProduct.id))}
         onToggleLike={toggleLike}
-        vouchers={selectedProduct?.seller_id ? vouchersBySeller[selectedProduct.seller_id] || [] : []}
         freeShippingThreshold={freeShippingThreshold}
         moreFromShop={moreFromShop}
         similarProducts={similarProducts}
@@ -1422,7 +1427,6 @@ export default function ShopPage() {
         followers={selectedSellerId ? followerCounts[selectedSellerId] || 0 : 0}
         following={Boolean(selectedSellerId && myFollows.has(selectedSellerId))}
         onToggleFollow={toggleFollow}
-        vouchers={selectedSellerId ? vouchersBySeller[selectedSellerId] || [] : []}
         onClose={() => setSelectedSellerId(null)}
         onViewProduct={(product) => {
           setSelectedSellerId(null);

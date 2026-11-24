@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import StarRating from './StarRating';
 import Img from '@/components/ui/Img';
-import { describeVoucher, formatSold, saleInfo } from '@/lib/shopFeatures';
+import { formatSold, saleInfo } from '@/lib/shopFeatures';
 
 const SORTS = [
   { value: 'popular', label: 'Popular' },
@@ -25,13 +25,11 @@ export default function ShopProfileModal({
   followers = 0,
   following = false,
   onToggleFollow,
-  vouchers = [],
   onClose,
   onViewProduct,
   onMessageShop,
   onReport,
 }) {
-  const [copiedCode, setCopiedCode] = useState('');
   const [tab, setTab] = useState('products');
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState('all');
@@ -110,16 +108,6 @@ export default function ShopProfileModal({
       );
     });
   }, [products, reviewSummaries, soldCounts, query, category, sort, priceDirection]);
-
-  const copyCode = async (code) => {
-    try {
-      await navigator.clipboard.writeText(code);
-      setCopiedCode(code);
-      setTimeout(() => setCopiedCode(''), 2000);
-    } catch (error) {
-      setCopiedCode('');
-    }
-  };
 
   if (!seller) return null;
 
@@ -370,37 +358,6 @@ export default function ShopProfileModal({
                   </span>
                 </button>
               </div>
-
-              {/* This shop's vouchers */}
-              {vouchers.length > 0 && !searching && (
-                <div className="-mx-0 flex gap-2 overflow-x-auto px-4 pt-3 sm:px-6">
-                  {vouchers.map((voucher) => {
-                    const text = describeVoucher(voucher);
-                    return (
-                      <div
-                        key={voucher.id}
-                        className="flex flex-shrink-0 items-center gap-3 rounded-lg border border-dashed border-red-300 bg-red-50 px-3 py-2"
-                      >
-                        <div>
-                          <p className="text-sm font-bold text-red-700">{text.headline}</p>
-                          <p className="text-[11px] text-red-600">
-                            {text.minimum}
-                            {text.until && ` · ${text.until}`}
-                          </p>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => copyCode(voucher.code)}
-                          title="Copy code, then enter it at checkout"
-                          className="min-h-[32px] rounded-md bg-red-600 px-2 font-mono text-xs font-bold text-white hover:bg-red-700"
-                        >
-                          {copiedCode === voucher.code ? 'Copied!' : voucher.code}
-                        </button>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
 
               {/* Categories this shop sells in */}
               {shopCategories.length > 1 && (

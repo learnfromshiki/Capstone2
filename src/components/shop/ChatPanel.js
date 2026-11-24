@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import Avatar from '@/components/ui/Avatar';
 import { useDialog } from '@/components/ui/Dialog';
 import { kindOf, uploadAttachment } from '@/lib/attachments';
@@ -14,6 +14,14 @@ import {
 import Img from '@/components/ui/Img';
 
 const POLL_MS = 6000;
+
+// Same list as before (nothing new arrived): keep the old array so React does
+// not redraw every bubble and photo on each poll.
+const sameMessages = (a, b) =>
+  a.length === b.length && a.every((message, i) => message.id === b[i].id && message.body === b[i].body);
+
+// How close to the bottom (px) still counts as reading the latest message.
+const NEAR_BOTTOM = 120;
 
 const formatTime = (value) =>
   new Date(value).toLocaleString('en-PH', { dateStyle: 'medium', timeStyle: 'short' });
@@ -37,8 +45,18 @@ export default function ChatPanel({ role, sellerId, shopNameById = {}, activeCon
   // The photo or video waiting to go with the next message
   const [pending, setPending] = useState(null); // { file, preview, type }
   const [uploading, setUploading] = useState(false);
-  const bottomRef = useRef(null);
+  const listRef = useRef(null);
   const fileRef = useRef(null);
+  // Whether the thread should follow new messages: true while the reader is
+  // at (or near) the bottom, false once they scroll up to read older ones.
+  const followRef = useRef(true);
+  // 'instant' when a thread opens, 'smooth' for a message just sent.
+  const nextScrollRef = useRef('instant');
+  // The parent may pass a new onOpened function on every render; calling it
+  // through a ref stops that from reloading the thread over and over (which
+  // made the page jump and the list stutter).
+  const onOpenedRef = useRef(onOpened);
+  onOpenedRef.current = onOpened;
   const { showAlert } = useDialog();
 
   const titleFor = useCallback(
@@ -70,7 +88,7 @@ export default function ChatPanel({ role, sellerId, shopNameById = {}, activeCon
       if (!conversationId) return;
       try {
         const rows = await listMessages(conversationId);
-        setMessages(rows);
+        setMessages((current) => (sameMessages(current, rows) ? current : rows));
         await markConversationRead(conversationId, role);
         setUnread((current) => ({ ...current, [conversationId]: 0 }));
       } catch (error) {
@@ -89,9 +107,12 @@ export default function ChatPanel({ role, sellerId, shopNameById = {}, activeCon
   }, [activeConversationId]);
 
   useEffect(() => {
+    followRef.current = true;
+    nextScrollRef.current = 'instant';
+    setMessages([]);
     loadMessages(selectedId);
-    if (selectedId && onOpened) onOpened(selectedId);
-  }, [selectedId, loadMessages, onOpened]);
+    if (selectedId && onOpenedRef.current) onOpenedRef.current(selectedId);
+  }, [selectedId, loadMessages]);
 
   // Keep the open thread and the unread badges fresh
   useEffect(() => {
@@ -103,9 +124,31 @@ export default function ChatPanel({ role, sellerId, shopNameById = {}, activeCon
     return () => clearInterval(timer);
   }, [loadConversations, loadMessages, selectedId]);
 
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ block: 'end' });
-  }, [messages]);
+  // Scroll only the message list, never the whole page, and only when the
+  // reader is already at the bottom (or just sent something). Reading older
+  // messages is no longer interrupted by every refresh.
+  const scrollToBottom = useCallback((behavior = 'instant') => {
+    const list = listRef.current;
+    if (!list) return;
+    list.scrollTo({ top: list.scrollHeight, behavior });
+  }, []);
+
+  useLayoutEffect(() => {
+    if (!followRef.current) return;
+    scrollToBottom(nextScrollRef.current);
+    nextScrollRef.current = 'smooth';
+  }, [messages, scrollToBottom]);
+
+  const handleListScroll = () => {
+    const list = listRef.current;
+    if (!list) return;
+    followRef.current = list.scrollHeight - list.scrollTop - list.clientHeight < NEAR_BOTTOM;
+  };
+
+  // A photo that finishes loading makes its bubble taller; stay at the bottom.
+  const handleMediaLoaded = () => {
+    if (followRef.current) scrollToBottom('instant');
+  };
 
   // Picking a file only previews it; it is uploaded when the message is sent,
   // so changing your mind costs nothing.
@@ -147,6 +190,8 @@ export default function ChatPanel({ role, sellerId, shopNameById = {}, activeCon
       const saved = await sendMessage(selectedId, role, text, attachment);
       setDraft('');
       clearPending();
+      followRef.current = true;
+      nextScrollRef.current = 'smooth';
       if (saved) setMessages((current) => [...current, saved]);
       loadConversations();
     } catch (error) {
@@ -228,7 +273,11 @@ export default function ChatPanel({ role, sellerId, shopNameById = {}, activeCon
               <p className="font-semibold text-gray-900">{selected ? titleFor(selected) : 'Select a conversation'}</p>
             </div>
 
-            <div className="flex-1 space-y-3 overflow-y-auto bg-gray-50 p-4">
+            <div
+              ref={listRef}
+              onScroll={handleListScroll}
+              className="flex-1 space-y-3 overflow-y-auto overscroll-contain bg-gray-50 p-4 [-webkit-overflow-scrolling:touch]"
+            >
               {messages.length === 0 ? (
                 <p className="text-center text-sm text-gray-500">
                   No messages yet. Say hello.
@@ -254,12 +303,16 @@ export default function ChatPanel({ role, sellerId, shopNameById = {}, activeCon
                               <video
                                 src={message.attachment_url}
                                 controls
+                                preload="metadata"
+                                onLoadedMetadata={handleMediaLoaded}
                                 className="max-h-56 w-full rounded-xl bg-black"
                               />
                             ) : (
                               <Img
                                 src={message.attachment_url}
                                 alt="Attachment"
+                                width={480}
+                                onLoad={handleMediaLoaded}
                                 className="max-h-56 w-full rounded-xl object-cover"
                               />
                             )}
@@ -276,7 +329,6 @@ export default function ChatPanel({ role, sellerId, shopNameById = {}, activeCon
                   );
                 })
               )}
-              <div ref={bottomRef} />
             </div>
 
             <form onSubmit={handleSend} className="border-t p-3">

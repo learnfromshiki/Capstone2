@@ -34,6 +34,7 @@ import {
   sanitizePhone,
 } from '@/lib/fieldRules';
 import Img from '@/components/ui/Img';
+import CameraButton from '@/components/ui/CameraButton';
 import CancelOrderDialog from '@/components/shop/CancelOrderDialog';
 import DeleteAccountCard from '@/components/DeleteAccountCard';
 import ReturnRequestDialog from '@/components/shop/ReturnRequestDialog';
@@ -41,9 +42,11 @@ import ReturnRequestPanel from '@/components/shop/ReturnRequestPanel';
 import { canRequestReturn, fetchReturnRequests, requestReturn } from '@/lib/returns';
 import { WISHLIST_EVENT, readWishlist, toggleWishlist } from '@/lib/wishlist';
 
-// The shop has accepted the order, so the customer can confirm it arrived.
-// Matches confirm_order_received() in supabase-points-on-delivery.sql.
-const CAN_CONFIRM_RECEIVED = ['confirmed', 'processing', 'shipped'];
+// Only once the shop has sent the parcel out (or made it ready for pickup)
+// can the customer confirm it arrived: a just-confirmed order has not left
+// the shop yet. Matches confirm_order_received() in
+// supabase-order-received-after-shipping.sql.
+const CAN_CONFIRM_RECEIVED = ['shipped'];
 
 /** 10 points per full ₱100 of goods; the delivery fee does not count. */
 const orderPoints = (order) =>
@@ -1372,28 +1375,6 @@ export default function BuyerDashboard() {
 
                           <OrderTracking status={order.status} pickup={isPickup(order)} />
 
-                          {order.tracking_number && order.status !== 'cancelled' && (
-                            <div className="mt-3 flex flex-wrap items-center gap-2 rounded-lg bg-blue-50 px-3 py-2 text-sm text-blue-900">
-                              <span aria-hidden="true">🚚</span>
-                              <span>
-                                {order.courier || 'Courier'} tracking no.{' '}
-                                <span className="font-mono font-semibold">{order.tracking_number}</span>
-                              </span>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  navigator.clipboard?.writeText(order.tracking_number).then(
-                                    () => showToast('Tracking number copied', 'success'),
-                                    () => {}
-                                  );
-                                }}
-                                className="ml-auto min-h-[32px] rounded-md border border-blue-200 bg-white px-2 text-xs font-semibold text-blue-700 hover:bg-blue-100"
-                              >
-                                Copy
-                              </button>
-                            </div>
-                          )}
-
                           {order.status === 'cancelled' && order.cancel_reason && (
                             <p className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-800">
                               Cancelled: {order.cancel_reason}
@@ -1409,14 +1390,16 @@ export default function BuyerDashboard() {
 
                           {CAN_CONFIRM_RECEIVED.includes(order.status) && (
                             <p className="mt-3 rounded-lg bg-green-50 px-3 py-2 text-xs text-green-800">
-                              {order.status === 'shipped'
-                                ? isPickup(order)
-                                  ? 'Your order is ready for pickup at the shop. '
-                                  : 'Parcel on the way. '
-                                : 'The shop accepted your order. '}
+                              {isPickup(order) ? 'Your order is ready for pickup at the shop. ' : 'Parcel on the way. '}
                               Tap <strong>Order Received</strong> once {isPickup(order) ? 'you have picked it up' : 'it arrives'} so the shop is paid
                               {orderPoints(order) > 0 ? <>, you get your <strong>{orderPoints(order)} reward points</strong>,</> : ''}
                               {' '}and you can rate what you bought.
+                            </p>
+                          )}
+                          {['confirmed', 'processing'].includes(order.status) && (
+                            <p className="mt-3 rounded-lg bg-blue-50 px-3 py-2 text-xs text-blue-800">
+                              The shop accepted your order and is preparing it. You can tap <strong>Order Received</strong>{' '}
+                              once it is {isPickup(order) ? 'ready for pickup' : 'shipped'}.
                             </p>
                           )}
                           {order.status === 'pending' && orderPoints(order) > 0 && (
@@ -1949,11 +1932,10 @@ export default function BuyerDashboard() {
 
                                 {(draft.photos || []).length < MAX_REVIEW_PHOTOS && (
                                   <>
-                                    {/* `capture` asks the phone for its camera
-                                        rather than its gallery; a laptop opens
-                                        the usual file picker instead. */}
-                                    <label
-                                      title="Take a photo"
+                                    {/* Opens the phone's camera app, or the
+                                        webcam inside the page on a laptop. */}
+                                    <CameraButton
+                                      onFiles={(files) => addReviewPhotos(item.product_id, files)}
                                       className="flex h-16 w-16 cursor-pointer flex-col items-center justify-center gap-0.5 rounded-lg border-2 border-blue-200 bg-blue-50 text-blue-600 transition-colors hover:border-blue-500 hover:bg-blue-100"
                                     >
                                       <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1961,17 +1943,7 @@ export default function BuyerDashboard() {
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
                                       </svg>
                                       <span className="text-[10px] font-semibold">Camera</span>
-                                      <input
-                                        type="file"
-                                        accept="image/*"
-                                        capture="environment"
-                                        onChange={(event) => {
-                                          addReviewPhotos(item.product_id, event.target.files);
-                                          event.target.value = '';
-                                        }}
-                                        className="hidden"
-                                      />
-                                    </label>
+                                    </CameraButton>
 
                                     <label
                                       title="Choose photos"
