@@ -34,7 +34,14 @@ const formatTime = (value) =>
  * New messages are picked up by asking every few seconds, which needs no
  * extra setup in Supabase and is plenty for a conversation.
  */
-export default function ChatPanel({ role, sellerId, shopNameById = {}, activeConversationId, onOpened }) {
+export default function ChatPanel({
+  role,
+  sellerId,
+  shopNameById = {},
+  shopAvatarById = {},
+  activeConversationId,
+  onOpened,
+}) {
   const [conversations, setConversations] = useState([]);
   const [unread, setUnread] = useState({});
   const [selectedId, setSelectedId] = useState(activeConversationId || null);
@@ -244,7 +251,7 @@ export default function ChatPanel({ role, sellerId, shopNameById = {}, activeCon
                     }`}
                   >
                     <Avatar
-                      src={role === 'seller' ? conversation.buyer_avatar_url : null}
+                      src={role === 'seller' ? conversation.buyer_avatar_url : shopAvatarById[conversation.seller_id] || null}
                       name={titleFor(conversation)}
                       size="sm"
                     />
@@ -269,7 +276,14 @@ export default function ChatPanel({ role, sellerId, shopNameById = {}, activeCon
 
           {/* Thread */}
           <div className="flex min-h-[20rem] flex-col md:h-[28rem]">
-            <div className="border-b px-4 py-3">
+            <div className="flex items-center gap-3 border-b px-4 py-3">
+              {selected && (
+                <Avatar
+                  src={role === 'seller' ? selected.buyer_avatar_url : shopAvatarById[selected.seller_id] || null}
+                  name={titleFor(selected)}
+                  size="sm"
+                />
+              )}
               <p className="font-semibold text-gray-900">{selected ? titleFor(selected) : 'Select a conversation'}</p>
             </div>
 

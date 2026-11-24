@@ -216,8 +216,10 @@ export default function SellerDashboard() {
         fetchData();
       }
     }
+    // Keyed on ids, not objects: coming back to the tab hands out new user and
+    // shop objects, which used to reload everything and reset open forms.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, seller, authLoading, router, activeTab]);
+  }, [user?.id, seller?.id, seller?.is_approved, authLoading, router, activeTab]);
 
   // Open exactly what a link points at. A notification opened in another tab,
   // or from a phone's notification shade, arrives as a URL rather than as a
@@ -239,7 +241,8 @@ export default function SellerDashboard() {
     }
   }, []);
 
-  // Seed the editable shop settings form from the seller record
+  // Seed the editable shop settings form from the seller record, once per
+  // shop (not on every refresh of the same shop, which wiped unsaved edits).
   useEffect(() => {
     if (seller) {
       setProfileForm({
@@ -250,7 +253,8 @@ export default function SellerDashboard() {
         logo_url: seller.logo_url || '',
       });
     }
-  }, [seller]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [seller?.id]);
 
   const fetchCategories = async () => {
     try {
@@ -2049,8 +2053,19 @@ export default function SellerDashboard() {
                 </div>
               )}
               {filteredOrders.map((order) => {
-                const allowedStatuses = allowedStatusesFor(order);
+                // The customer, not the shop, marks an order delivered: the last
+                // step a shop can choose is Shipped (Ready for pickup), and the
+                // customer then taps Order Received before rating or buying again.
+                const allowedStatuses = allowedStatusesFor(order).filter(
+                  (status) => status !== 'delivered' || order.status === 'delivered'
+                );
                 const isFinal = ['delivered', 'cancelled'].includes(order.status);
+                // An open cancel & refund request has to be answered before the
+                // order moves on, or the customer is left waiting on a request
+                // for an order that is already on its way.
+                const openRequest = returnRequests[order.id];
+                const awaitingRefundAnswer =
+                  openRequest?.status === 'requested' && openRequest?.kind === 'cancel_refund';
 
                 return (
                 <div key={order.id} className="bg-white rounded-xl shadow-sm p-4 sm:p-6 border border-gray-100">
@@ -2123,7 +2138,7 @@ export default function SellerDashboard() {
                       <select
                         value={order.status}
                         onChange={(e) => updateOrderStatus(order.id, e.target.value)}
-                        disabled={isFinal || updatingOrderId === order.id}
+                        disabled={isFinal || awaitingRefundAnswer || updatingOrderId === order.id}
                         aria-label={`Order status for ${order.customer_name}`}
                         className="min-h-[44px] rounded-lg border border-gray-300 px-3 py-2 disabled:cursor-not-allowed disabled:bg-gray-100"
                       >
@@ -2149,6 +2164,17 @@ export default function SellerDashboard() {
                     )}
                     {updatingOrderId === order.id && (
                       <span className="text-sm text-blue-600">Updating stock and order…</span>
+                    )}
+                    {awaitingRefundAnswer && !isFinal && (
+                      <span className="text-xs font-medium text-amber-700">
+                        Answer the customer&apos;s cancel &amp; refund request below before changing the status.
+                      </span>
+                    )}
+                    {order.status === 'shipped' && !awaitingRefundAnswer && (
+                      <span className="text-xs text-gray-500">
+                        Waiting for the customer to tap Order Received once they have{' '}
+                        {isPickup(order) ? 'picked it up' : 'received it'}.
+                      </span>
                     )}
                     {isFinal && (
                       <span className="text-xs text-gray-500">

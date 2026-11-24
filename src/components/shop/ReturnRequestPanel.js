@@ -57,9 +57,17 @@ export default function ReturnRequestPanel({ request, order, role, onChanged }) 
           ))}
         </div>
       )}
+      {role === 'buyer' && request.status === 'declined' && (
+        <p className="mt-2">
+          {request.kind === 'return'
+            ? 'The shop declined your return request, so no refund will be made for this order.'
+            : 'The shop declined your request to cancel and refund this order, so the order goes ahead and no refund will be made.'}{' '}
+          Message the shop if you have questions.
+        </p>
+      )}
       {request.response_note && (
         <p className="mt-2">
-          <span className="font-medium">{role === 'buyer' ? 'Shop' : 'Your note'}:</span> {request.response_note}
+          <span className="font-medium">{role === 'buyer' ? "Shop's reason" : 'Your note'}:</span> {request.response_note}
         </p>
       )}
       {role === 'buyer' && request.status === 'approved' && (
@@ -97,7 +105,7 @@ export default function ReturnRequestPanel({ request, order, role, onChanged }) 
             </button>
           </div>
           {request.kind === 'cancel_refund' && (
-            <p className="text-xs">Approving cancels the order: stock, points and any voucher go back automatically.</p>
+            <p className="text-xs">Approving cancels the order: stock and reward points go back automatically.</p>
           )}
         </div>
       )}

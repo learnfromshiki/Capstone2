@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabaseClient';
@@ -188,14 +188,19 @@ export default function BuyerDashboard() {
   const [confirmingOrderId, setConfirmingOrderId] = useState(null);
   const [cart, setCart] = useState([]);
   const [shopNames, setShopNames] = useState({});
+  // The picture shown for each shop in the chat: { [sellerId]: url }
+  const [shopAvatars, setShopAvatars] = useState({});
   const [orderedProducts, setOrderedProducts] = useState({});
 
-  // The chat shows shop names; shop_sellers is readable by everyone.
+  // The chat shows each shop's name and picture; shop_sellers is readable by
+  // everyone. The picture is the shop's logo, or else the owner's profile
+  // photo (read through shop_owner_avatars(), since a customer cannot read
+  // another person's profile row).
   useEffect(() => {
     let cancelled = false;
 
     (async () => {
-      const { data } = await supabase.from('shop_sellers').select('id, business_name');
+      const { data } = await supabase.from('shop_sellers').select('id, business_name, logo_url');
       if (cancelled || !data) return;
 
       setShopNames(
@@ -204,6 +209,23 @@ export default function BuyerDashboard() {
           return acc;
         }, {})
       );
+
+      const pictures = data.reduce((acc, seller) => {
+        if (seller.logo_url) acc[seller.id] = seller.logo_url;
+        return acc;
+      }, {});
+      setShopAvatars(pictures);
+
+      // Owner photos, for shops without a logo (supabase-shop-owner-avatars.sql)
+      const { data: owners, error: ownersError } = await supabase.rpc('shop_owner_avatars');
+      if (cancelled || ownersError || !Array.isArray(owners)) return;
+      setShopAvatars((current) => {
+        const next = { ...current };
+        owners.forEach((row) => {
+          if (row?.seller_id && row.avatar_url && !next[row.seller_id]) next[row.seller_id] = row.avatar_url;
+        });
+        return next;
+      });
     })();
 
     return () => {
@@ -253,11 +275,20 @@ export default function BuyerDashboard() {
     }
 
     fetchData();
+    // Keyed on the account id, not the user object: Supabase hands out a new
+    // user object when you come back to the tab, which used to reload the
+    // whole page and wipe anything half-typed (such as the reset code form).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, authLoading, router]);
+  }, [user?.id, authLoading, router]);
+
+  // Only the first load shows the full-page spinner. Later refreshes (a live
+  // order update, coming back to the tab) update the data in place, so the
+  // page never blanks out and open forms keep what was typed in them.
+  const loadedOnceRef = useRef(false);
 
   const fetchData = async () => {
-    setLoading(true);
+    const firstLoad = !loadedOnceRef.current;
+    if (firstLoad) setLoading(true);
     try {
       const [profileRes, ordersRes, productsRes, reviewsRes, rewardsRes] = await Promise.all([
         supabase.from('profiles').select('*').eq('id', user.id).maybeSingle(),
@@ -305,8 +336,10 @@ export default function BuyerDashboard() {
       setSuspended(Boolean(profileRes.data?.is_suspended));
       setProfile(profileRes.data || null);
       // Older accounts only have full_name, so split it for the two boxes.
+      // Filled on the first load only, so a background refresh never
+      // overwrites what the customer is typing in Settings.
       const storedName = splitName(profileRes.data?.full_name);
-      setProfileForm({
+      if (firstLoad) setProfileForm({
         first_name: profileRes.data?.first_name || storedName.firstName,
         last_name: profileRes.data?.last_name || storedName.lastName,
         phone: profileRes.data?.phone || '',
@@ -352,6 +385,7 @@ export default function BuyerDashboard() {
     } catch (error) {
       console.error('Error fetching data:', error);
     } finally {
+      loadedOnceRef.current = true;
       setLoading(false);
     }
   };
@@ -1618,6 +1652,7 @@ export default function BuyerDashboard() {
                 <ChatPanel
                   role="buyer"
                   shopNameById={shopNames}
+                  shopAvatarById={shopAvatars}
                   activeConversationId={openConversationId}
                 />
               </div>

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import PasswordRequirements from '@/components/PasswordRequirements';
 import { describePasswordProblem, isPasswordValid } from '@/lib/passwordPolicy';
@@ -17,6 +17,30 @@ import { describePasswordProblem, isPasswordValid } from '@/lib/passwordPolicy';
  *     link lands on the wrong address, which is what used to make this
  *     feel broken.
  */
+// A sent code stays usable for an hour. Remember (in this tab) that one was
+// sent, so leaving the page and coming back, or a reload, still shows the
+// box to type it in.
+const CODE_TTL_MS = 60 * 60 * 1000;
+const codeKey = (email) => `password_reset_code_sent:${String(email || '').toLowerCase()}`;
+
+const readCodeSent = (email) => {
+  try {
+    const sentAt = Number(sessionStorage.getItem(codeKey(email)));
+    return Boolean(sentAt) && Date.now() - sentAt < CODE_TTL_MS;
+  } catch (error) {
+    return false;
+  }
+};
+
+const writeCodeSent = (email, sent) => {
+  try {
+    if (sent) sessionStorage.setItem(codeKey(email), String(Date.now()));
+    else sessionStorage.removeItem(codeKey(email));
+  } catch (error) {
+    // Private mode without storage: the form still works for this visit.
+  }
+};
+
 export default function ChangePasswordCard({ email, title = 'Change Password', description }) {
   const [form, setForm] = useState({ current: '', next: '', confirm: '' });
   const [showPassword, setShowPassword] = useState(false);
@@ -28,6 +52,10 @@ export default function ChangePasswordCard({ email, title = 'Change Password', d
   const [sending, setSending] = useState(false);
   const [resetForm, setResetForm] = useState({ code: '', next: '', confirm: '' });
   const [resetting, setResetting] = useState(false);
+
+  useEffect(() => {
+    if (email && readCodeSent(email)) setCodeSent(true);
+  }, [email]);
 
   const inputClass =
     'w-full min-h-[44px] px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500';
@@ -81,6 +109,7 @@ export default function ChangePasswordCard({ email, title = 'Change Password', d
       if (error) throw error;
 
       setCodeSent(true);
+      writeCodeSent(email, true);
       setFeedback({
         type: 'success',
         text:
@@ -131,6 +160,7 @@ export default function ChangePasswordCard({ email, title = 'Change Password', d
 
       setResetForm({ code: '', next: '', confirm: '' });
       setCodeSent(false);
+      writeCodeSent(email, false);
       setFeedback({ type: 'success', text: 'Password updated. Use the new one next time you sign in.' });
     } catch (error) {
       setFeedback({ type: 'error', text: error.message || 'Could not change the password.' });
