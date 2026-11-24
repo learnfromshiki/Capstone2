@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import StarRating from './StarRating';
 import Img from '@/components/ui/Img';
 import { formatSold, saleInfo } from '@/lib/shopFeatures';
+import CategoryIcon from '@/components/shop/CategoryIcon';
 
 const SORTS = [
   { value: 'popular', label: 'Popular' },
@@ -316,7 +317,7 @@ export default function ShopProfileModal({
                         }}
                         className="min-h-[40px] rounded-full border border-gray-200 px-3 text-sm text-gray-700 hover:border-blue-300 hover:bg-blue-50"
                       >
-                        {entry.icon} {entry.label} <span className="text-gray-400">({entry.count})</span>
+                        <CategoryIcon icon={entry.icon} className="h-4 w-4 align-[-2px]" /> {entry.label} <span className="text-gray-400">({entry.count})</span>
                       </button>
                     ))}
                   </div>
@@ -374,7 +375,7 @@ export default function ShopProfileModal({
                           : 'border-gray-200 bg-white text-gray-700 hover:border-blue-300'
                       }`}
                     >
-                      {entry.icon} {entry.label} ({entry.count})
+                      <CategoryIcon icon={entry.icon} className="h-4 w-4 align-[-2px]" /> {entry.label} ({entry.count})
                     </button>
                   ))}
                 </div>

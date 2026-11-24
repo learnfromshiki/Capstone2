@@ -42,6 +42,7 @@ import AdminReviews from '@/components/shop/AdminReviews';
 import AdminReports from '@/components/shop/AdminReports';
 import ReturnRequestPanel from '@/components/shop/ReturnRequestPanel';
 import { fetchReturnRequests, markOrderRefunded } from '@/lib/returns';
+import CategoryIcon from '@/components/shop/CategoryIcon';
 
 // Tabs a link may open (?tab=...).
 const ADMIN_TABS = ['dashboard', 'products', 'orders', 'sellers', 'customers', 'categories', 'transactions', 'reviews', 'reports', 'reports-abuse', 'settings'];
@@ -2611,7 +2612,7 @@ export default function ShopAdminPage() {
                 <tbody className="divide-y divide-gray-200">
                   {categories.map((category) => (
                     <tr key={category.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 text-2xl">{category.icon}</td>
+                      <td className="px-6 py-4 text-2xl"><CategoryIcon icon={category.icon} className="h-8 w-8" /></td>
                       <td className="px-6 py-4 font-semibold">{category.name}</td>
                       <td className="px-6 py-4 text-sm text-gray-600">{category.slug}</td>
                       <td className="px-6 py-4 text-sm text-gray-600">{category.description || '-'}</td>

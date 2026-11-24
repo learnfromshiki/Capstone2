@@ -2,6 +2,7 @@ import Link from 'next/link';
 import Reveal from '@/components/landing/Reveal';
 import LandingNav from '@/components/landing/LandingNav';
 import { listCategoriesInUse, listPublicCategories } from '@/lib/publicData.server';
+import CategoryIcon from '@/components/shop/CategoryIcon';
 
 // Read which categories have products on every visit, so a category a
 // seller just listed in shows up here straight away (as it does in the shop).
@@ -292,7 +293,7 @@ export default async function Home() {
                   className={`group flex h-full flex-col rounded-3xl bg-gradient-to-br ${category.tint} p-6 ring-1 ring-black/5 transition-all duration-500 hover:-translate-y-2 hover:shadow-xl hover:ring-blue-200`}
                 >
                   <span className="flex h-16 w-16 items-center justify-center rounded-2xl bg-white text-4xl shadow-sm transition-transform duration-500 group-hover:-rotate-12 group-hover:scale-110">
-                    {category.icon}
+                    <CategoryIcon icon={category.icon} className="h-12 w-12 rounded-xl" />
                   </span>
                   <h3 className="mt-6 text-lg font-bold text-gray-900">{category.label}</h3>
                   <p className="mt-1 flex-1 text-sm text-gray-600">{category.text}</p>

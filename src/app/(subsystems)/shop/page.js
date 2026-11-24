@@ -35,6 +35,7 @@ import {
   rememberViewed,
   setFollowing,
 } from '@/lib/shopFeatures';
+import CategoryIcon from '@/components/shop/CategoryIcon';
 
 // Keep a price box to digits and at most one decimal point.
 const cleanPrice = (value) => {
@@ -1181,7 +1182,7 @@ export default function ShopPage() {
                 }`}
               >
                 <span aria-hidden="true" className="inline-flex w-5 justify-center text-base leading-none">
-                  {category.icon}
+                  <CategoryIcon icon={category.icon} className="h-5 w-5" />
                 </span>
                 <span className="text-sm leading-none">{category.label}</span>
               </button>

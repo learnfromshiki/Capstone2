@@ -23,6 +23,7 @@ import {
   transitionOrderStatus,
 } from '@/lib/orders';
 import OnlinePaymentStatus from '@/components/shop/OnlinePaymentStatus';
+import CategoryIcon, { categoryIconText, isImageIcon } from '@/components/shop/CategoryIcon';
 import ChangePasswordCard from '@/components/ChangePasswordCard';
 import {
   PHONE_HINT,
@@ -136,6 +137,7 @@ export default function SellerDashboard() {
   const [showNewCategory, setShowNewCategory] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState('');
   const [newCategoryIcon, setNewCategoryIcon] = useState('📦');
+  const [uploadingCategoryIcon, setUploadingCategoryIcon] = useState(false);
   // The owner's own name, kept on the profiles row (the shop name is separate)
   const [ownerName, setOwnerName] = useState({ first_name: '', last_name: '' });
   const [savingOwnerName, setSavingOwnerName] = useState(false);
@@ -558,6 +560,31 @@ export default function SellerDashboard() {
     setImagePreview(url);
   };
 
+  /** Use the seller's own photo as the new category's icon. */
+  const handleCategoryIconUpload = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+
+    setUploadingCategoryIcon(true);
+    try {
+      const { url, error } = await uploadProductImage(file);
+      if (error) throw error;
+      setNewCategoryIcon(url);
+    } catch (error) {
+      console.error('Error uploading category icon:', error);
+      showAlert('Failed to upload the icon: ' + (error.message || 'unknown error'));
+    } finally {
+      setUploadingCategoryIcon(false);
+    }
+  };
+
+  const closeNewCategory = () => {
+    setShowNewCategory(false);
+    setNewCategoryName('');
+    setNewCategoryIcon('📦');
+  };
+
   // Sellers can add a category while listing a product instead of waiting for an admin
   const handleCreateCategory = async () => {
     const name = newCategoryName.trim();
@@ -576,8 +603,7 @@ export default function SellerDashboard() {
 
     if (existing) {
       setNewProduct((prev) => ({ ...prev, category: existing.slug }));
-      setShowNewCategory(false);
-      setNewCategoryName('');
+      closeNewCategory();
       showToast(`"${existing.name}" already exists — it is selected now.`, 'success');
       return;
     }
@@ -599,8 +625,7 @@ export default function SellerDashboard() {
 
       setCategories((prev) => [...prev, data]);
       setNewProduct((prev) => ({ ...prev, category: data.slug }));
-      setShowNewCategory(false);
-      setNewCategoryName('');
+      closeNewCategory();
       showToast(`Category "${name}" created and selected.`, 'success');
     } catch (error) {
       console.error('Error creating category:', error);
@@ -2640,7 +2665,7 @@ export default function SellerDashboard() {
                 >
                   {categories.length > 0 ? (
                     categories.map((cat) => (
-                      <option key={cat.id} value={cat.slug}>{cat.icon} {cat.name}</option>
+                      <option key={cat.id} value={cat.slug}>{[categoryIconText(cat.icon), cat.name].filter(Boolean).join(' ')}</option>
                     ))
                   ) : (
                     <>
@@ -2875,7 +2900,29 @@ export default function SellerDashboard() {
                       {icon}
                     </button>
                   ))}
+                  {isImageIcon(newCategoryIcon) && (
+                    <span
+                      aria-label="Your uploaded icon (selected)"
+                      className="flex h-11 w-11 items-center justify-center overflow-hidden rounded-xl border-2 border-blue-600 bg-blue-50"
+                    >
+                      <CategoryIcon icon={newCategoryIcon} className="h-full w-full rounded-lg" />
+                    </span>
+                  )}
+                  <label
+                    className={`flex h-11 cursor-pointer items-center justify-center gap-1 rounded-xl border-2 border-dashed border-gray-300 px-3 text-sm font-semibold text-gray-600 transition-colors hover:border-blue-400 hover:text-blue-600 ${
+                      uploadingCategoryIcon ? 'pointer-events-none opacity-60' : ''
+                    }`}
+                  >
+                    <input
+                      type="file"
+                      accept="image/jpeg,image/png,image/gif,image/webp"
+                      onChange={handleCategoryIconUpload}
+                      className="sr-only"
+                    />
+                    {uploadingCategoryIcon ? 'Uploading...' : isImageIcon(newCategoryIcon) ? 'Change photo' : '+ Upload photo'}
+                  </label>
                 </div>
+                <p className="mt-2 text-xs text-gray-500">Pick an emoji or upload your own picture (a square image looks best).</p>
               </div>
             </div>
 
@@ -2883,17 +2930,14 @@ export default function SellerDashboard() {
               <button
                 type="button"
                 onClick={handleCreateCategory}
-                disabled={savingCategory || !newCategoryName.trim()}
+                disabled={savingCategory || uploadingCategoryIcon || !newCategoryName.trim()}
                 className="min-h-[44px] flex-1 rounded-xl bg-blue-600 font-bold text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {savingCategory ? 'Adding...' : 'Add Category'}
               </button>
               <button
                 type="button"
-                onClick={() => {
-                  setShowNewCategory(false);
-                  setNewCategoryName('');
-                }}
+                onClick={closeNewCategory}
                 className="min-h-[44px] rounded-xl border-2 border-gray-300 px-6 font-semibold text-gray-700 transition-colors hover:bg-gray-50"
               >
                 Cancel
