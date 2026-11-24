@@ -5,7 +5,17 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabaseClient';
 import Link from 'next/link';
-import { cancelMyOrder, confirmOrderReceived, formatOrderNumber, isPickup, paymentLabel, statusLabel } from '@/lib/orders';
+import {
+  autoConfirmDate,
+  cancelMyOrder,
+  confirmOrderReceived,
+  formatOrderNumber,
+  formatShortDate,
+  isPickup,
+  paymentLabel,
+  runAutoConfirm,
+  statusLabel,
+} from '@/lib/orders';
 import { returnPagePath, startOnlinePayment } from '@/lib/xendit';
 import OnlinePaymentStatus from '@/components/shop/OnlinePaymentStatus';
 import ChangePasswordCard from '@/components/ChangePasswordCard';
@@ -216,7 +226,7 @@ export default function BuyerDashboard() {
       }, {});
       setShopAvatars(pictures);
 
-      // Owner photos, for shops without a logo (supabase-shop-owner-avatars.sql)
+      // Owner photos, for shops without a logo (supabase-refund-notices-and-delivery.sql)
       const { data: owners, error: ownersError } = await supabase.rpc('shop_owner_avatars');
       if (cancelled || ownersError || !Array.isArray(owners)) return;
       setShopAvatars((current) => {
@@ -290,6 +300,8 @@ export default function BuyerDashboard() {
     const firstLoad = !loadedOnceRef.current;
     if (firstLoad) setLoading(true);
     try {
+      // Orders shipped long enough ago count as received (see AUTO_CONFIRM_DAYS).
+      if (firstLoad) await runAutoConfirm();
       const [profileRes, ordersRes, productsRes, reviewsRes, rewardsRes] = await Promise.all([
         supabase.from('profiles').select('*').eq('id', user.id).maybeSingle(),
         supabase
@@ -1414,6 +1426,12 @@ export default function BuyerDashboard() {
                               Tap <strong>Order Received</strong> once {isPickup(order) ? 'you have picked it up' : 'it arrives'} so the shop is paid
                               {orderPoints(order) > 0 ? <>, you get your <strong>{orderPoints(order)} reward points</strong>,</> : ''}
                               {' '}and you can rate what you bought.
+                              {autoConfirmDate(order) && (
+                                <>
+                                  {' '}If you do not, it is marked received automatically on{' '}
+                                  <strong>{formatShortDate(autoConfirmDate(order))}</strong>.
+                                </>
+                              )}
                             </p>
                           )}
                           {['confirmed', 'processing'].includes(order.status) && (

@@ -8,7 +8,20 @@ import { goToShop, showSigningOut } from '@/lib/signOutScreen';
 import NavBadge from '@/components/ui/NavBadge';
 import useLiveBadges from '@/lib/useLiveBadges';
 import { uploadProductImage } from '@/lib/imageUpload';
-import { allowedStatusesFor, formatOrderNumber, isCountedSale, isPickup, paymentLabel, statusLabel, STATUS_LABELS, transitionOrderStatus, formatPeso } from '@/lib/orders';
+import {
+  allowedStatusesFor,
+  autoConfirmDate,
+  formatOrderNumber,
+  formatPeso,
+  formatShortDate,
+  isCountedSale,
+  isPickup,
+  paymentLabel,
+  runAutoConfirm,
+  statusLabel,
+  STATUS_LABELS,
+  transitionOrderStatus,
+} from '@/lib/orders';
 import OnlinePaymentStatus from '@/components/shop/OnlinePaymentStatus';
 import ChangePasswordCard from '@/components/ChangePasswordCard';
 import {
@@ -34,6 +47,7 @@ import Avatar from '@/components/ui/Avatar';
 import AvatarUpload from '@/components/ui/AvatarUpload';
 import Img from '@/components/ui/Img';
 import { signInPathFor } from '@/lib/roles';
+import { IN_PROGRESS_MESSAGE, deleteOrArchiveProduct, isArchived } from '@/lib/productDelete';
 
 // Orders grouped the way a shop works through them: what has just come in,
 // what is being packed, what is already on the way, and what is finished.
@@ -298,6 +312,9 @@ export default function SellerDashboard() {
 
   // shop_order_items has no seller_id column: scope orders through the seller's products
   const loadSellerOrders = async () => {
+    // Orders shipped long enough ago count as received (see AUTO_CONFIRM_DAYS).
+    await runAutoConfirm();
+
     const { data: myProducts, error: productsError } = await supabase
       .from('shop_products')
       .select('*')
@@ -337,9 +354,13 @@ export default function SellerDashboard() {
     // Pickup and points arrive with supabase-cart-pickup-redemption.sql.
     const PAYMENT_COLUMNS = 'payment_proof_url, payment_reference, payment_proof_at, payment_status, paid_at';
     // Vouchers, cancel reasons and tracking arrive with supabase-shopee-features.sql.
-    let { data: orderRows, error: ordersError } = await readOrders(
-      `${ORDER_COLUMNS}, ${PAYMENT_COLUMNS}, fulfillment_method, points_redeemed, points_discount, voucher_code, voucher_discount, cancel_reason, courier, tracking_number`
-    );
+    const FULL_COLUMNS = `${ORDER_COLUMNS}, ${PAYMENT_COLUMNS}, fulfillment_method, points_redeemed, points_discount, voucher_code, voucher_discount, cancel_reason, courier, tracking_number`;
+    // shipped_at arrives with supabase-audit-fixes.sql.
+    let { data: orderRows, error: ordersError } = await readOrders(`${FULL_COLUMNS}, shipped_at`);
+
+    if (ordersError && /shipped_at/i.test(ordersError.message || '')) {
+      ({ data: orderRows, error: ordersError } = await readOrders(FULL_COLUMNS));
+    }
 
     if (ordersError && /column/i.test(ordersError.message || '')) {
       ({ data: orderRows, error: ordersError } = await readOrders(
@@ -435,7 +456,7 @@ export default function SellerDashboard() {
       const paidEarnings = earningRows?.length ? sumByStatus('paid') : null;
 
       setStats({
-        totalProducts: myProducts.filter((product) => !product.archived_at).length,
+        totalProducts: myProducts.filter((product) => !isArchived(product)).length,
         activeProducts: myProducts.filter((product) => product.available).length,
         totalOrders: orderRows.length,
         toFulfill: salesOrders.filter((order) => ['pending', 'confirmed', 'processing'].includes(order.status)).length,
@@ -467,7 +488,7 @@ export default function SellerDashboard() {
       return;
     }
     // Deleted products that past orders still point to are kept, archived.
-    setProducts((data || []).filter((product) => !product.archived_at));
+    setProducts((data || []).filter((product) => !isArchived(product)));
   };
 
   const fetchOrders = async () => {
@@ -757,58 +778,15 @@ export default function SellerDashboard() {
     if (!confirmed) return;
 
     try {
-      // Only an order that is still in progress (not yet delivered or
-      // cancelled) stops a delete: the shop still has to fulfil it. Finished
-      // orders keep the product's name and price on their own rows.
-      const { data: orderedItems, error: orderedError } = await supabase
-        .from('shop_order_items')
-        .select('id, shop_orders!inner(status)')
-        .eq('product_id', productId)
-        .not('shop_orders.status', 'in', '(delivered,cancelled)')
-        .limit(1);
-
-      if (orderedError) throw orderedError;
-
-      if (orderedItems && orderedItems.length > 0) {
-        showAlert(
-          'This product is in an order that is still in progress. Finish or cancel that order first, or deactivate the product to hide it from the shop.'
-        );
+      const result = await deleteOrArchiveProduct(productId, { sellerId: seller.id });
+      if (result === 'in_progress') {
+        showAlert(IN_PROGRESS_MESSAGE);
         return;
       }
-
-      const { count: pastOrders, error: pastError } = await supabase
-        .from('shop_order_items')
-        .select('id', { count: 'exact', head: true })
-        .eq('product_id', productId);
-      if (pastError) throw pastError;
-
-      if (pastOrders > 0) {
-        // Finished orders (and this shop's sales history) still point to the
-        // product, so its row is archived rather than erased: it leaves the
-        // shop and this list, and past orders stay complete.
-        let { error: archiveError } = await supabase
-          .from('shop_products')
-          .update({ available: false, archived_at: new Date().toISOString() })
-          .eq('id', productId)
-          .eq('seller_id', seller.id);
-        if (archiveError && /archived_at/i.test(archiveError.message || '')) {
-          // supabase-product-archive.sql not run yet: at least hide it.
-          ({ error: archiveError } = await supabase
-            .from('shop_products')
-            .update({ available: false })
-            .eq('id', productId)
-            .eq('seller_id', seller.id));
-        }
-        if (archiveError) throw archiveError;
-      } else {
-        const { error } = await supabase
-          .from('shop_products')
-          .delete()
-          .eq('id', productId)
-          .eq('seller_id', seller.id);
-        if (error) throw error;
+      if (result === 'blocked') {
+        showAlert('Could not delete this product. Please try again.');
+        return;
       }
-
       fetchProducts();
       showToast('Product deleted successfully!', 'success');
     } catch (error) {
@@ -2173,7 +2151,11 @@ export default function SellerDashboard() {
                     {order.status === 'shipped' && !awaitingRefundAnswer && (
                       <span className="text-xs text-gray-500">
                         Waiting for the customer to tap Order Received once they have{' '}
-                        {isPickup(order) ? 'picked it up' : 'received it'}.
+                        {isPickup(order) ? 'picked it up' : 'received it'}
+                        {autoConfirmDate(order)
+                          ? `, or automatically on ${formatShortDate(autoConfirmDate(order))}`
+                          : ''}
+                        .
                       </span>
                     )}
                     {isFinal && (

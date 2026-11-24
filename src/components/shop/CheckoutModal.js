@@ -58,6 +58,8 @@ export default function CheckoutModal({
   const [shopNames, setShopNames] = useState({});
   // Online payment through Xendit (GCash, Maya, cards, QR Ph, GrabPay...)
   const [onlineEnabled, setOnlineEnabled] = useState(false);
+  // True once the customer picks a payment method themselves.
+  const paymentChosenRef = useRef(false);
   const [placedCheckoutId, setPlacedCheckoutId] = useState(null);
   const [paymentStartError, setPaymentStartError] = useState('');
   const [startingPayment, setStartingPayment] = useState(false);
@@ -188,7 +190,10 @@ export default function CheckoutModal({
       if (cancelled) return;
       setOnlineEnabled(enabled);
       if (enabled) {
-        setFormData((prev) => (prev.paymentMethod === 'cod' ? { ...prev, paymentMethod: 'xendit' } : prev));
+        // ...unless the customer already picked cash themselves.
+        setFormData((prev) =>
+          prev.paymentMethod === 'cod' && !paymentChosenRef.current ? { ...prev, paymentMethod: 'xendit' } : prev
+        );
       }
     });
     return () => {
@@ -261,6 +266,7 @@ export default function CheckoutModal({
     const cleaned =
       name === 'fullName' ? sanitizeName(value) : name === 'phone' ? sanitizePhone(value) : value;
 
+    if (name === 'paymentMethod') paymentChosenRef.current = true;
     setFormData((prev) => ({ ...prev, [name]: cleaned }));
   };
 

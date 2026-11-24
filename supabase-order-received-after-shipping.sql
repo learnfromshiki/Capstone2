@@ -1,8 +1,8 @@
 -- ============================================================================
 -- "Order Received" only after the shop has shipped the order (or made a pickup
 -- order ready). A confirmed or processing order has not left the shop yet, so
--- the customer cannot mark it as received. Applied to the live database
--- 2026-11-24.
+-- the customer cannot mark it as received. (2026-11-24; included in
+-- supabase-run-all-2026-11-24.sql.)
 -- ============================================================================
 create or replace function public.confirm_order_received(p_order_id uuid)
 returns jsonb

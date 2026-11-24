@@ -130,8 +130,10 @@ begin
   if new.status is not distinct from old.status then
     return new;
   end if;
-  -- Server jobs (no signed-in user) and admins are not limited here.
-  if v_uid is null or public.is_admin() then
+  -- Server jobs (no signed-in user), the automatic Order Received after
+  -- shipping (auto_confirm_shipped_orders) and admins are not limited here.
+  if v_uid is null or public.is_admin()
+     or current_setting('app.auto_confirm', true) = 'true' then
     return new;
   end if;
 
@@ -140,7 +142,7 @@ begin
       using errcode = 'P0001';
   end if;
 
-  if new.status in ('processing', 'shipped', 'delivered')
+  if new.status in ('confirmed', 'processing', 'shipped', 'delivered')
      and exists (select 1 from shop_return_requests r
                  where r.order_id = new.id and r.kind = 'cancel_refund' and r.status = 'requested') then
     raise exception 'The customer asked to cancel and refund this order. Approve or decline that request first.'

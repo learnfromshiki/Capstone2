@@ -22,6 +22,10 @@ export default function CameraButton({ onFiles, disabled = false, className = ''
   const inputRef = useRef(null);
   const videoRef = useRef(null);
   const streamRef = useRef(null);
+  // Bumped every time the camera window opens or closes. A camera that only
+  // starts after its window was closed (the permission prompt was still up)
+  // sees a stale number and is switched straight off again.
+  const sessionRef = useRef(0);
   const [open, setOpen] = useState(false);
   const [error, setError] = useState('');
   const [starting, setStarting] = useState(false);
@@ -32,13 +36,20 @@ export default function CameraButton({ onFiles, disabled = false, className = ''
   }, []);
 
   const close = useCallback(() => {
+    sessionRef.current += 1;
     stopStream();
     setOpen(false);
     setError('');
   }, [stopStream]);
 
   // Always release the camera when the button goes away.
-  useEffect(() => stopStream, [stopStream]);
+  useEffect(
+    () => () => {
+      sessionRef.current += 1;
+      stopStream();
+    },
+    [stopStream]
+  );
 
   useEffect(() => {
     if (!open) return undefined;
@@ -56,6 +67,7 @@ export default function CameraButton({ onFiles, disabled = false, className = ''
       return;
     }
 
+    const session = ++sessionRef.current;
     setOpen(true);
     setError('');
     setStarting(true);
@@ -64,19 +76,25 @@ export default function CameraButton({ onFiles, disabled = false, className = ''
         video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 960 } },
         audio: false,
       });
+      if (session !== sessionRef.current) {
+        // Closed while the camera was starting: turn it off again.
+        stream.getTracks().forEach((track) => track.stop());
+        return;
+      }
       streamRef.current = stream;
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
         await videoRef.current.play().catch(() => {});
       }
     } catch (err) {
+      if (session !== sessionRef.current) return;
       setError(
         err?.name === 'NotAllowedError'
           ? 'Camera access was blocked. Allow the camera in your browser (the icon in the address bar), or choose a photo instead.'
           : 'No camera was found on this device. You can choose a photo instead.'
       );
     } finally {
-      setStarting(false);
+      if (session === sessionRef.current) setStarting(false);
     }
   };
 

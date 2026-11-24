@@ -294,6 +294,43 @@ export const isCountedSale = (order) =>
 export const formatPeso = (amount) =>
   (Number(amount) || 0).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
+/**
+ * A shipped (or ready-for-pickup) order the customer has not confirmed is
+ * marked received automatically after this many days, so the shop gets paid
+ * and the customer gets their points. Must match auto_confirm_shipped_orders()
+ * in supabase-audit-fixes.sql.
+ */
+export const AUTO_CONFIRM_DAYS = 7;
+
+/** When a shipped order will be marked received on its own, or null. */
+export const autoConfirmDate = (order) => {
+  if (order?.status !== 'shipped' || !order?.shipped_at) return null;
+  const date = new Date(new Date(order.shipped_at).getTime() + AUTO_CONFIRM_DAYS * 24 * 60 * 60 * 1000);
+  return Number.isNaN(date.getTime()) ? null : date;
+};
+
+/** "Nov 30" for the auto-confirm notes. */
+export const formatShortDate = (date) =>
+  date ? date.toLocaleDateString('en-PH', { month: 'short', day: 'numeric' }) : '';
+
+/**
+ * Complete any shipped orders whose time to confirm has run out. Safe to call
+ * from any dashboard: the database only ever touches orders that are due.
+ * Never throws; a database without supabase-audit-fixes.sql just skips it.
+ */
+export const runAutoConfirm = async () => {
+  try {
+    const { data, error } = await supabase.rpc('auto_confirm_shipped_orders');
+    if (error) {
+      if (!isMissingFunction(error)) console.warn('Automatic Order Received skipped:', error.message);
+      return 0;
+    }
+    return Number(data) || 0;
+  } catch (error) {
+    return 0;
+  }
+};
+
 /** Short, readable order number shown to buyers, sellers and admins. */
 export const formatOrderNumber = (orderId) =>
   orderId ? `#${String(orderId).slice(0, 8).toUpperCase()}` : '';

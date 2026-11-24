@@ -6,7 +6,19 @@ import { useState, useEffect, useCallback } from 'react';
 import { supabase, clearStoredSession, startAdminSession } from '@/lib/supabaseClient';
 import { goToShop, showSigningOut } from '@/lib/signOutScreen';
 import { getAccountRole } from '@/lib/roles';
-import { allowedStatusesFor, formatOrderNumber, isCountedSale, isMissingFunction, isPickup, paymentLabel, statusLabel, STATUS_LABELS, transitionOrderStatus, formatPeso } from '@/lib/orders';
+import {
+  allowedStatusesFor,
+  formatOrderNumber,
+  formatPeso,
+  isCountedSale,
+  isMissingFunction,
+  isPickup,
+  paymentLabel,
+  runAutoConfirm,
+  statusLabel,
+  STATUS_LABELS,
+  transitionOrderStatus,
+} from '@/lib/orders';
 import OnlinePaymentStatus from '@/components/shop/OnlinePaymentStatus';
 import { DEFAULT_SHOP_SETTINGS, fetchShopSettings } from '@/lib/shopSettings';
 import PasswordRequirements from '@/components/PasswordRequirements';
@@ -22,6 +34,7 @@ import NavBadge from '@/components/ui/NavBadge';
 import useLiveBadges from '@/lib/useLiveBadges';
 import { requestBadgeRefresh } from '@/lib/badges';
 import PaymentProof from '@/components/shop/PaymentProof';
+import { IN_PROGRESS_MESSAGE, deleteOrArchiveProduct, isArchived } from '@/lib/productDelete';
 import { describeSelection } from '@/lib/productOptions';
 import { describeArea, listShippingRates } from '@/lib/shipping';
 import Img from '@/components/ui/Img';
@@ -600,7 +613,9 @@ export default function ShopAdminPage() {
           .order('created_at', { ascending: false });
 
         if (error) throw error;
-        setProducts(data || []);
+        // Products a seller deleted but past orders still point to are kept,
+        // archived; they are not part of the catalogue any more.
+        setProducts((data || []).filter((product) => !isArchived(product)));
       } else if (activeTab === 'categories') {
         const { data, error } = await supabase
           .from('shop_categories')
@@ -610,6 +625,8 @@ export default function ShopAdminPage() {
         if (error) throw error;
         setCategories(data || []);
       } else {
+        // Orders shipped long enough ago count as received (see AUTO_CONFIRM_DAYS).
+        await runAutoConfirm();
         const { data, error } = await supabase
           .from('shop_orders')
           .select('*, shop_order_items(*)')
@@ -657,32 +674,16 @@ export default function ShopAdminPage() {
     if (!confirmed) return;
     
     try {
-      // A product referenced by orders must keep its row so order history stays
-      // intact; deactivating hides it from the shop without breaking past orders.
-      const { data: orderedItems, error: orderedError } = await supabase
-        .from('shop_order_items')
-        .select('id')
-        .eq('product_id', productId)
-        .limit(1);
-
-      if (orderedError) throw orderedError;
-
-      if (orderedItems && orderedItems.length > 0) {
-        showAlert('This product is part of existing orders, so it cannot be deleted. Deactivate it instead to hide it from the shop.');
+      const result = await deleteOrArchiveProduct(productId);
+      if (result === 'in_progress') {
+        showAlert(IN_PROGRESS_MESSAGE);
         return;
       }
-
-      const { data, error } = await supabase
-        .from('shop_products')
-        .delete()
-        .eq('id', productId)
-        .select('id');
-
-      if (error) throw error;
-      if (!data || data.length === 0) {
+      if (result === 'blocked') {
         showAlert('Could not delete this product. The database blocked the change — run supabase-final-fixes.sql to allow admin writes.');
         return;
       }
+      showToast(result === 'archived' ? 'Product removed. It stays in past order records.' : 'Product deleted.', 'success');
       fetchData();
     } catch (error) {
       console.error('Error deleting product:', error);
