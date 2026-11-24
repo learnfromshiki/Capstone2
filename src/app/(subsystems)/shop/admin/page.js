@@ -730,7 +730,10 @@ export default function ShopAdminPage() {
       const { count, error: countError } = await supabase
         .from('shop_products')
         .select('id', { count: 'exact', head: true })
-        .eq('category', category.slug);
+        .eq('category', category.slug)
+        // Deleted products kept only for past orders (archived) don't count:
+        // they are not in the catalogue, so they no longer need the tab.
+        .is('archived_at', null);
 
       if (countError) throw countError;
 
