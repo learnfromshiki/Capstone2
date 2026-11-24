@@ -361,7 +361,7 @@ export default function ShopProfileModal({
               </div>
 
               {/* Categories this shop sells in */}
-              {shopCategories.length > 1 && (
+              {shopCategories.length > 0 && (
                 <div className="flex gap-2 overflow-x-auto px-4 pt-3 sm:px-6">
                   {[{ value: 'all', label: 'All', icon: '🏪', count: products.length }, ...shopCategories].map((entry) => (
                     <button
